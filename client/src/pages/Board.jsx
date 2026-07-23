@@ -13,6 +13,7 @@ function Board() {
   const [recentCommits, setRecentCommits] = useState([]);
   const [contributors, setContributors] = useState({});
 const [timeline, setTimeline] = useState({});
+const [selectedCommit, setSelectedCommit] = useState(null);
   useEffect(() => {
     console.log("Calling backend...");
 
@@ -57,6 +58,28 @@ const [timeline, setTimeline] = useState({});
   alert(message);
 }
   };
+ const fetchCommitDetails = async (hash) => {
+  try {
+    console.log("Fetching commit:", hash);
+
+    const res = await API.get(`/repository/commit/${hash}`);
+
+    console.log("Full Response:", res);
+    console.log("Response Data:", res.data);
+    console.log("Commit Details:", res.data.data);
+
+    setSelectedCommit(res.data.data);
+  } catch (err) {
+    console.error("Commit Fetch Error:", err);
+
+    if (err.response) {
+      console.error("Status:", err.response.status);
+      console.error("Data:", err.response.data);
+    }
+
+    alert("Failed to load commit details.");
+  }
+};
 
   return (
     <div className="p-10 bg-gray-100 min-h-screen">
@@ -102,28 +125,87 @@ const [timeline, setTimeline] = useState({});
 
       {/* Recent Commits */}
       <div className="mt-10 bg-white rounded-lg shadow p-6">
-        <h2 className="text-2xl font-bold mb-4">
-          Recent Commits
-        </h2>
+  <h2 className="text-2xl font-bold mb-4">
+    Recent Commits
+  </h2>
 
-        {recentCommits.length === 0 ? (
-          <p>No commits found.</p>
-        ) : (
-          recentCommits.map((commit, index) => (
-            <div key={index} className="border-b py-3">
-              <p className="font-semibold">{commit.message}</p>
+  {recentCommits.length === 0 ? (
+    <p>No commits found.</p>
+  ) : (
+    recentCommits.map((commit, index) => (
+      <div
+        key={index}
+        className="border-b py-3 cursor-pointer hover:bg-gray-100 rounded px-2"
+     onClick={() => {
+  console.log(commit);
+  fetchCommitDetails(commit.hash);
+}}
+      >
+        <p className="font-semibold">{commit.message}</p>
 
-              <p className="text-gray-600">
-                {commit.author_name}
-              </p>
+        <p className="text-gray-600">
+          {commit.author_name}
+        </p>
 
-              <p className="text-gray-500 text-sm">
-                {new Date(commit.date).toLocaleString()}
-              </p>
-            </div>
-          ))
-        )}
+        <p className="text-gray-500 text-sm">
+          {new Date(commit.date).toLocaleString()}
+        </p>
       </div>
+    ))
+  )}
+</div>
+{/* Commit Details */}
+{/* Commit Details */}
+
+{/* Commit Details */}
+{selectedCommit && (
+  <div className="mt-10 bg-white rounded-lg shadow p-6">
+    <h2 className="text-2xl font-bold mb-6">
+      Commit Details
+    </h2>
+
+    <div className="space-y-4">
+
+      <div>
+        <p className="font-semibold">Commit Hash</p>
+        <p className="text-gray-600 break-all">
+          {selectedCommit.hash}
+        </p>
+      </div>
+
+      <div>
+        <p className="font-semibold">Author</p>
+        <p>{selectedCommit.author}</p>
+      </div>
+
+      <div>
+        <p className="font-semibold">Commit Date</p>
+        <p>{selectedCommit.date}</p>
+      </div>
+
+      <div>
+        <p className="font-semibold">Message</p>
+        <p>{selectedCommit.message}</p>
+      </div>
+
+      <div>
+        <p className="font-semibold">Files Changed</p>
+
+        <ul className="list-disc ml-6">
+          {selectedCommit.files.map((file, index) => (
+            <li key={index}>{file}</li>
+          ))}
+        </ul>
+      </div>
+
+      <div>
+        <p className="font-semibold">Changes</p>
+        <p>{selectedCommit.summary}</p>
+      </div>
+
+    </div>
+  </div>
+)}
 
       {/* Contributors List */}
       <div className="mt-10 bg-white rounded-lg shadow p-6">
@@ -151,6 +233,8 @@ const [timeline, setTimeline] = useState({});
 
       {/* Timeline Chart */}
       <TimelineChart timeline={timeline} />
+
+
     </div>
   );
 }

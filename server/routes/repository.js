@@ -6,12 +6,13 @@ const {
   getCommits,
   getContributors,
   getCommitStats,
+   getCommitDetails,
 } = require("../services/gitService");
 
 const { createTimeline } = require("../services/analyticsService");
 const { getFileChanges } = require("../services/fileAnalyticsService");
 const { calculateHotspots } = require("../services/hotspotService");
-
+let currentRepoPath = "";
 // Test Route
 router.get("/info", (req, res) => {
   res.json({
@@ -29,7 +30,7 @@ router.post("/analytics", async (req, res) => {
 
     console.log("1️⃣ Cloning repository...");
     const repoPath = await cloneRepository(url);
-
+    currentRepoPath = repoPath;
     console.log("2️⃣ Getting commits...");
     const commits = await getCommits(repoPath);
 
@@ -69,4 +70,31 @@ router.post("/analytics", async (req, res) => {
   }
 });
 
+router.get("/commit/:hash", async (req, res) => {
+  console.log("Commit API Called");
+
+  try {
+    const { hash } = req.params;
+
+    console.log("Hash:", hash);
+    console.log("Repo Path:", currentRepoPath);
+
+    const commit = await getCommitDetails(currentRepoPath, hash);
+
+    console.log("Commit fetched successfully");
+
+    res.json({
+      success: true,
+      data: commit,
+    });
+  } catch (error) {
+    console.log("ERROR OCCURRED");
+    console.log(error);
+
+    res.status(500).json({
+      success: false,
+      message: error.message,
+    });
+  }
+});
 module.exports = router;

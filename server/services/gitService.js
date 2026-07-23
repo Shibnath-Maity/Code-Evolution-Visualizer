@@ -2,6 +2,7 @@ const simpleGit = require("simple-git");
 const path = require("path");
 const fs = require("fs");
 
+// Clone Repository
 async function cloneRepository(repoUrl) {
   if (!repoUrl) {
     throw new Error("Repository URL is required.");
@@ -32,15 +33,16 @@ async function cloneRepository(repoUrl) {
   }
 
   try {
-  console.log("Cloning repository...");
-  await git.clone(repoUrl, repoPath);
-} catch (error) {
-  throw new Error("Invalid or inaccessible GitHub repository.");
+    console.log("Cloning repository...");
+    await git.clone(repoUrl, repoPath);
+  } catch (error) {
+    throw new Error("Invalid or inaccessible GitHub repository.");
+  }
+
+  return repoPath;
 }
 
-return repoPath;
-}
-
+// Get All Commits
 async function getCommits(repoPath) {
   const git = simpleGit(repoPath);
 
@@ -49,6 +51,7 @@ async function getCommits(repoPath) {
   return log.all;
 }
 
+// Get Contributors
 async function getContributors(repoPath) {
   const git = simpleGit(repoPath);
 
@@ -65,6 +68,7 @@ async function getContributors(repoPath) {
   return contributors;
 }
 
+// Commit Statistics
 async function getCommitStats(repoPath) {
   const git = simpleGit(repoPath);
 
@@ -79,9 +83,70 @@ async function getCommitStats(repoPath) {
   };
 }
 
+// Commit Details (Day 11)
+async function getCommitDetails(repoPath, hash) {
+  console.log("Inside getCommitDetails");
+
+  const git = simpleGit(repoPath);
+
+  console.log("Running git show...");
+
+ const result = await git.show([
+  hash,
+  "--stat",
+  "--format=fuller",
+]);
+
+const lines = result.split("\n");
+
+const details = {
+  hash: "",
+  author: "",
+  date: "",
+  message: "",
+  files: [],
+  summary: "",
+};
+
+let messageFound = false;
+
+for (const line of lines) {
+  if (line.startsWith("commit ")) {
+    details.hash = line.replace("commit ", "");
+  } else if (line.startsWith("Author:")) {
+    details.author = line.replace("Author:", "").trim();
+  } else if (line.startsWith("CommitDate:")) {
+    details.date = line.replace("CommitDate:", "").trim();
+  } else if (
+    !messageFound &&
+    line.startsWith("    ")
+  ) {
+    details.message = line.trim();
+    messageFound = true;
+  } else if (
+    line.includes("|") &&
+    !line.includes("file changed")
+  ) {
+    details.files.push(line.trim());
+  } else if (
+    line.includes("file changed") ||
+    line.includes("files changed")
+  ) {
+    details.summary = line.trim();
+  }
+}
+
+return details;
+
+  console.log("Git show completed");
+
+  return result;
+}
+
 module.exports = {
   cloneRepository,
   getCommits,
   getContributors,
   getCommitStats,
+  getCommitDetails,
 };
