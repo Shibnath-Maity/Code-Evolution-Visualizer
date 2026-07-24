@@ -3,6 +3,7 @@ import API from "../services/api";
 import TimelineChart from "../components/TimelineChart";
 import RepositoryOverview from "../components/RepositoryOverview";
 import Navbar from "../components/Navbar";
+import RepositoryInput from "../components/RepositoryInput";
 function Board() {
   const [repoUrl, setRepoUrl] = useState("");
 
@@ -21,6 +22,7 @@ const [loadingDiff, setLoadingDiff] = useState(false);
 const [searchTerm, setSearchTerm] = useState("");
 const [allCommits, setAllCommits] = useState([]);
 const [repoInfo, setRepoInfo] = useState(null);
+const [loading, setLoading] = useState(false);
 const copyDiff = () => {
   navigator.clipboard.writeText(commitDiff);
   alert("Diff copied!");
@@ -156,25 +158,13 @@ console.log("Commits:", recentCommits);
   <div className="bg-gray-100 min-h-screen">
     <Navbar />
 
-    <div className="p-10">
+   <div className="max-w-7xl mx-auto px-8 py-8">
       {/* Repository Input */}
-      <div className="flex gap-4 mb-10">
-        <input
-          type="text"
-          placeholder="GitHub Repository URL"
-          className="border p-3 rounded w-[500px]"
-          value={repoUrl}
-          onChange={(e) => setRepoUrl(e.target.value)}
-        />
-
-        <button
-          onClick={analyzeRepository}
-          className="bg-blue-600 text-white px-6 rounded hover:bg-blue-700"
-        >
-          Analyze
-        </button>
-            </div>
-
+   <RepositoryInput
+  repoUrl={repoUrl}
+  setRepoUrl={setRepoUrl}
+  analyzeRepository={analyzeRepository}
+/>
 
       {/* Repository Overview */}
       {repoInfo && (
