@@ -1,0 +1,97 @@
+.repo-card {
+  background: #1e293b;
+  color: #f1f5f9;
+  border: 1px solid #334155;
+  border-radius: 15px;
+  padding: 24px;
+  margin: 20px 0;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  transition: box-shadow 0.2s ease, transform 0.2s ease;
+}
+
+.repo-card:hover {
+  box-shadow: 0 14px 36px rgba(0, 0, 0, 0.3);
+  transform: translateY(-2px);
+}
+
+.repo-header {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+}
+
+.repo-avatar {
+  width: 70px;
+  height: 70px;
+  border-radius: 50%;
+  border: 2px solid #334155;
+  object-fit: cover;
+  flex-shrink: 0;
+}
+
+.repo-header h2 {
+  margin: 0;
+  font-size: 1.25rem;
+  font-weight: 600;
+  color: #f8fafc;
+  line-height: 1.3;
+}
+
+.repo-owner {
+  margin: 2px 0 0;
+  font-size: 0.85rem;
+  color: #94a3b8;
+}
+
+.repo-description {
+  margin: 16px 0 0;
+  font-size: 0.9rem;
+  line-height: 1.6;
+  color: #cbd5e1;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.repo-stats,
+.repo-footer {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 20px;
+  margin-top: 15px;
+}
+
+.repo-stats {
+  padding-top: 15px;
+  border-top: 1px solid #334155;
+}
+
+.repo-stats span,
+.repo-footer span {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.85rem;
+  color: #e2e8f0;
+}
+
+.repo-footer {
+  font-size: 0.8rem;
+  color: #94a3b8;
+}
+
+/* Responsive: stack header on small screens */
+@media (max-width: 480px) {
+  .repo-header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 12px;
+  }
+
+  .repo-stats,
+  .repo-footer {
+    gap: 12px;
+  }
+}

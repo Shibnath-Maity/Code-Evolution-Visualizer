@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import API from "../services/api";
 import TimelineChart from "../components/TimelineChart";
+import RepositoryOverview from "../components/RepositoryOverview";
 function Board() {
   const [repoUrl, setRepoUrl] = useState("");
 
@@ -18,6 +19,7 @@ const [commitDiff, setCommitDiff] = useState("");
 const [loadingDiff, setLoadingDiff] = useState(false);
 const [searchTerm, setSearchTerm] = useState("");
 const [allCommits, setAllCommits] = useState([]);
+const [repoInfo, setRepoInfo] = useState(null);
 const copyDiff = () => {
   navigator.clipboard.writeText(commitDiff);
   alert("Diff copied!");
@@ -62,6 +64,13 @@ console.log("All:", res.data.allCommits.length);
       console.log("Loaded commits:", res.data.recentCommits);
       setContributors(res.data.contributors);
       setTimeline(res.data.timeline);
+      const repoRes = await API.get("/api/repo-info", {
+  params: {
+    url: repoUrl,
+  },
+});
+
+setRepoInfo(repoRes.data);
     } catch (err) {
   console.error(err);
 
@@ -164,7 +173,12 @@ console.log("Commits:", recentCommits);
         >
           Analyze
         </button>
-      </div>
+            </div>
+
+      {/* Repository Overview */}
+      {repoInfo && (
+        <RepositoryOverview repo={repoInfo} />
+      )}
 
       {/* Stats Cards */}
       <div className="grid grid-cols-3 gap-6">
