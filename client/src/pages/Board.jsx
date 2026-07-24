@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import API from "../services/api";
 import TimelineChart from "../components/TimelineChart";
 import RepositoryOverview from "../components/RepositoryOverview";
+import Navbar from "../components/Navbar";
 function Board() {
   const [repoUrl, setRepoUrl] = useState("");
 
@@ -152,11 +153,10 @@ const downloadDiff = () => {
 console.log("Search:", searchTerm);
 console.log("Commits:", recentCommits);
   return (
-    <div className="p-10 bg-gray-100 min-h-screen">
-      <h1 className="text-4xl font-bold mb-8">
-        Code Evolution Visualizer
-      </h1>
+  <div className="bg-gray-100 min-h-screen">
+    <Navbar />
 
+    <div className="p-10">
       {/* Repository Input */}
       <div className="flex gap-4 mb-10">
         <input
@@ -174,6 +174,7 @@ console.log("Commits:", recentCommits);
           Analyze
         </button>
             </div>
+
 
       {/* Repository Overview */}
       {repoInfo && (
@@ -198,7 +199,7 @@ console.log("Commits:", recentCommits);
         </div>
       </div>
       {/* search box */}
-      <div className="mb-4">
+      {/* <div className="mb-4">
   <input
     type="text"
     placeholder="Search commits..."
@@ -206,7 +207,50 @@ console.log("Commits:", recentCommits);
     onChange={(e) => setSearchTerm(e.target.value)}
     className="border p-2 rounded w-full"
   />
+</div> */}
+<div className="mb-6 relative max-w-xs">
+  <label htmlFor="commit-search" className="sr-only">
+    Search commits
+  </label>
+
+  <svg
+    className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400"
+    fill="none"
+    viewBox="0 0 24 24"
+    stroke="currentColor"
+    strokeWidth={2}
+    aria-hidden="true"
+  >
+    <path
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      d="M21 21l-4.35-4.35M17 10a7 7 0 11-14 0 7 7 0 0114 0z"
+    />
+  </svg>
+
+  <input
+    id="commit-search"
+    type="text"
+    placeholder="Search commits..."
+    value={searchTerm}
+    onChange={(e) => setSearchTerm(e.target.value)}
+    className="w-full rounded-full border border-gray-200 bg-gray-50 py-2 pl-9 pr-8 text-sm text-gray-700 placeholder-gray-400 shadow-sm transition-all duration-200 focus:border-blue-400 focus:bg-white focus:outline-none focus:ring-4 focus:ring-blue-100"
+  />
+
+  {searchTerm && (
+    <button
+      type="button"
+      onClick={() => setSearchTerm("")}
+      aria-label="Clear search"
+      className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 transition-colors"
+    >
+      <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+        <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+      </svg>
+    </button>
+  )}
 </div>
+ 
 
       {/* Recent Commits */}
       <div className="mt-10 bg-white rounded-lg shadow p-6">
@@ -373,7 +417,7 @@ console.log("Commits:", recentCommits);
 
       {/* Timeline Chart */}
       <TimelineChart timeline={timeline} />
-
+ </div>
 
     </div>
   );
