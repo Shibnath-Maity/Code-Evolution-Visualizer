@@ -6,6 +6,7 @@ const {
   getCommits,
   getContributors,
   getCommitStats,
+      getCommitDiff,
    getCommitDetails,
 } = require("../services/gitService");
 
@@ -57,7 +58,8 @@ router.post("/analytics", async (req, res) => {
       timeline,
       fileChanges,
       hotspots,
-      recentCommits: commits.slice(0, 5),
+ recentCommits: commits.slice(0, 5),
+   allCommits: commits
     });
   } catch (error) {
     console.error("❌ Backend Error:");
@@ -90,6 +92,30 @@ router.get("/commit/:hash", async (req, res) => {
   } catch (error) {
     console.log("ERROR OCCURRED");
     console.log(error);
+
+    res.status(500).json({
+      success: false,
+      message: error.message,
+    });
+  }
+});
+router.get("/commit/:hash/diff", async (req, res) => {
+  try {
+    const { hash } = req.params;
+
+    console.log("Diff API Called");
+    console.log("Hash:", hash);
+    console.log("Repo Path:", currentRepoPath);
+
+    const diff = await getCommitDiff(currentRepoPath, hash);
+
+    res.json({
+      success: true,
+      data: diff,
+    });
+
+  } catch (error) {
+    console.error(error);
 
     res.status(500).json({
       success: false,

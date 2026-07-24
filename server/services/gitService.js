@@ -138,9 +138,20 @@ for (const line of lines) {
 
 return details;
 
-  console.log("Git show completed");
 
-  return result;
+}
+async function getCommitDiff(repoPath, hash) {
+  const git = simpleGit(repoPath);
+
+  console.log("Getting diff for:", hash);
+
+  const diff = await git.show([
+    hash,
+    "--patch",
+    "--stat"
+  ]);
+
+  return diff;
 }
 
 module.exports = {
@@ -149,4 +160,5 @@ module.exports = {
   getContributors,
   getCommitStats,
   getCommitDetails,
+    getCommitDiff,
 };

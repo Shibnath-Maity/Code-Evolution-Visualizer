@@ -14,6 +14,15 @@ function Board() {
   const [contributors, setContributors] = useState({});
 const [timeline, setTimeline] = useState({});
 const [selectedCommit, setSelectedCommit] = useState(null);
+const [commitDiff, setCommitDiff] = useState("");
+const [loadingDiff, setLoadingDiff] = useState(false);
+const [searchTerm, setSearchTerm] = useState("");
+const [allCommits, setAllCommits] = useState([]);
+const copyDiff = () => {
+  navigator.clipboard.writeText(commitDiff);
+  alert("Diff copied!");
+};
+
   useEffect(() => {
     console.log("Calling backend...");
 
@@ -37,6 +46,8 @@ const [selectedCommit, setSelectedCommit] = useState(null);
       const res = await API.post("/repository/analytics", {
         url: repoUrl,
       });
+      console.log("Recent:", res.data.recentCommits.length);
+console.log("All:", res.data.allCommits.length);
 
       console.log(res.data);
 
@@ -47,6 +58,8 @@ const [selectedCommit, setSelectedCommit] = useState(null);
       });
 
       setRecentCommits(res.data.recentCommits);
+      setAllCommits(res.data.allCommits)
+      console.log("Loaded commits:", res.data.recentCommits);
       setContributors(res.data.contributors);
       setTimeline(res.data.timeline);
     } catch (err) {
@@ -80,7 +93,55 @@ const [selectedCommit, setSelectedCommit] = useState(null);
     alert("Failed to load commit details.");
   }
 };
+const fetchCommitDiff = async (hash) => {
+  try {
+    setLoadingDiff(true);
 
+    const res = await API.get(`/repository/commit/${hash}/diff`);
+
+    setCommitDiff(res.data.data);
+  } catch (err) {
+    console.error("Diff Fetch Error:", err);
+    alert("Failed to load commit diff.");
+  } finally {
+    setLoadingDiff(false);
+  }
+};
+const displayedCommits =
+  searchTerm.trim() === ""
+    ? recentCommits
+    : allCommits.filter((commit) => {
+        const search = searchTerm.toLowerCase();
+
+        return (
+          (commit.message || "")
+            .toLowerCase()
+            .includes(search) ||
+
+          (commit.author_name || "")
+            .toLowerCase()
+            .includes(search) ||
+
+          (commit.hash || "")
+            .toLowerCase()
+            .includes(search)
+        );
+      });
+const downloadDiff = () => {
+  const blob = new Blob([commitDiff], { type: "text/plain" });
+
+  const url = window.URL.createObjectURL(blob);
+
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = "commit.patch";
+
+  a.click();
+
+  window.URL.revokeObjectURL(url);
+};
+console.log("Search:", searchTerm);
+console.log("Commits:", recentCommits);
   return (
     <div className="p-10 bg-gray-100 min-h-screen">
       <h1 className="text-4xl font-bold mb-8">
@@ -122,6 +183,16 @@ const [selectedCommit, setSelectedCommit] = useState(null);
           <p className="text-4xl font-bold mt-3">{stats.hotspots}</p>
         </div>
       </div>
+      {/* search box */}
+      <div className="mb-4">
+  <input
+    type="text"
+    placeholder="Search commits..."
+    value={searchTerm}
+    onChange={(e) => setSearchTerm(e.target.value)}
+    className="border p-2 rounded w-full"
+  />
+</div>
 
       {/* Recent Commits */}
       <div className="mt-10 bg-white rounded-lg shadow p-6">
@@ -129,30 +200,33 @@ const [selectedCommit, setSelectedCommit] = useState(null);
     Recent Commits
   </h2>
 
-  {recentCommits.length === 0 ? (
-    <p>No commits found.</p>
-  ) : (
-    recentCommits.map((commit, index) => (
-      <div
-        key={index}
-        className="border-b py-3 cursor-pointer hover:bg-gray-100 rounded px-2"
-     onClick={() => {
-  console.log(commit);
-  fetchCommitDetails(commit.hash);
-}}
-      >
-        <p className="font-semibold">{commit.message}</p>
+  {displayedCommits.length === 0 ? (
+  <p>No commits found.</p>
+) : (
+  displayedCommits.map((commit, index) => (
+    <div
+      key={index}
+      className="border-b py-3 cursor-pointer hover:bg-gray-100 rounded px-2"
+      onClick={() => {
+        console.log(commit);
+        fetchCommitDetails(commit.hash);
+        fetchCommitDiff(commit.hash);
+      }}
+    >
+      <p className="font-semibold">{commit.message}</p>
 
-        <p className="text-gray-600">
-          {commit.author_name}
-        </p>
+      <p className="text-gray-600">
+        {commit.author_name}
+      </p>
 
-        <p className="text-gray-500 text-sm">
-          {new Date(commit.date).toLocaleString()}
-        </p>
-      </div>
-    ))
-  )}
+      <p className="text-gray-500 text-sm">
+        {new Date(commit.date).toLocaleString()}
+      </p>
+    </div>
+  ))
+)}
+      
+       
 </div>
 {/* Commit Details */}
 {/* Commit Details */}
@@ -202,7 +276,59 @@ const [selectedCommit, setSelectedCommit] = useState(null);
         <p className="font-semibold">Changes</p>
         <p>{selectedCommit.summary}</p>
       </div>
+<div className="mt-6">
+ <div className="flex justify-between items-center mb-3">
+  <p className="font-semibold text-lg">
+    Commit Diff
+  </p>
 
+  <button
+    onClick={copyDiff}
+    className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700"
+  >
+    Copy Diff
+  </button>
+  <button
+  onClick={downloadDiff}
+  className="bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700"
+>
+  Download Patch
+</button>
+</div>
+
+  {loadingDiff ? (
+    <p>Loading diff...</p>
+  ) : (
+  <pre className="bg-gray-900 rounded-lg p-4 overflow-x-auto text-sm">
+  {commitDiff.split("\n").map((line, index) => {
+    let color = "text-gray-200";
+
+    if (line.startsWith("+")) {
+      color = "bg-green-900 text-green-300";
+    } else if (line.startsWith("-")) {
+      color = "bg-red-900 text-red-300";
+    } else if (line.startsWith("@@")) {
+      color = "text-blue-300";
+    }
+    //download diff
+
+   
+    return (
+      <div
+  key={index}
+  className={`${color} px-2 flex`}
+>
+  <span className="w-12 text-gray-500 select-none">
+    {index + 1}
+  </span>
+
+  <span>{line}</span>
+</div>
+    );
+  })}
+</pre>
+  )}
+</div>
     </div>
   </div>
 )}
