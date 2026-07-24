@@ -4,6 +4,7 @@ import TimelineChart from "../components/TimelineChart";
 import RepositoryOverview from "../components/RepositoryOverview";
 import Navbar from "../components/Navbar";
 import RepositoryInput from "../components/RepositoryInput";
+import StatCard from "../components/StatCard";
 function Board() {
   const [repoUrl, setRepoUrl] = useState("");
 
@@ -172,22 +173,29 @@ console.log("Commits:", recentCommits);
       )}
 
       {/* Stats Cards */}
-      <div className="grid grid-cols-3 gap-6">
-        <div className="bg-blue-500 text-white p-6 rounded-lg shadow">
-          <h2 className="text-lg">Total Commits</h2>
-          <p className="text-4xl font-bold mt-3">{stats.commits}</p>
-        </div>
-
-        <div className="bg-green-500 text-white p-6 rounded-lg shadow">
-          <h2 className="text-lg">Contributors</h2>
-          <p className="text-4xl font-bold mt-3">{stats.contributors}</p>
-        </div>
-
-        <div className="bg-red-500 text-white p-6 rounded-lg shadow">
-          <h2 className="text-lg">Hotspots</h2>
-          <p className="text-4xl font-bold mt-3">{stats.hotspots}</p>
-        </div>
-      </div>
+   <div className="grid grid-cols-1 sm:grid-cols-3 gap-6 mb-8">
+  <StatCard
+    title="Total Commits"
+    value={stats.commits}
+    type="commits"
+    color="bg-gradient-to-br from-blue-500 to-blue-700"
+    trend="from last analysis"
+  />
+  <StatCard
+    title="Contributors"
+    value={stats.contributors}
+    type="contributors"
+    color="bg-gradient-to-br from-emerald-500 to-emerald-700"
+    trend="from last analysis"
+  />
+  <StatCard
+    title="Hotspots"
+    value={stats.hotspots}
+    type="hotspots"
+    color="bg-gradient-to-br from-orange-500 to-orange-700"
+    trend="from last analysis"
+  />
+</div>
       {/* search box */}
       {/* <div className="mb-4">
   <input
