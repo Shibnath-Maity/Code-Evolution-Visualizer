@@ -2,9 +2,10 @@ import { useEffect, useState } from "react";
 import API from "../services/api";
 import TimelineChart from "../components/TimelineChart";
 import RepositoryOverview from "../components/RepositoryOverview";
-import Navbar from "../components/Navbar";
+
 import RepositoryInput from "../components/RepositoryInput";
 import StatCard from "../components/StatCard";
+import Navbar from "../components/Navbar";
 function Board() {
   const [repoUrl, setRepoUrl] = useState("");
 
@@ -157,7 +158,7 @@ console.log("Search:", searchTerm);
 console.log("Commits:", recentCommits);
   return (
   <div className="bg-gray-100 min-h-screen">
-    <Navbar />
+  
 
    <div className="max-w-7xl mx-auto px-8 py-8">
       {/* Repository Input */}
