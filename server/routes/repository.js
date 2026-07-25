@@ -13,6 +13,7 @@ const {
 const { createTimeline } = require("../services/analyticsService");
 const { getFileChanges } = require("../services/fileAnalyticsService");
 const { calculateHotspots } = require("../services/hotspotService");
+const { getRepositoryInfo } = require("../services/githubService");
 let currentRepoPath = "";
 // Test Route
 router.get("/info", (req, res) => {
@@ -23,7 +24,21 @@ router.get("/info", (req, res) => {
     stars: 100,
   });
 });
+//Add repo
+router.get("/repo-info", async (req, res) => {
+  try {
+    const { url } = req.query;
 
+    const repo = await getRepositoryInfo(url);
+
+    res.json(repo);
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: error.message,
+    });
+  }
+});
 // Analyze Repository
 router.post("/analytics", async (req, res) => {
   try {

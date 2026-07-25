@@ -21,7 +21,7 @@ useEffect(() => {
 
       console.log("Analyzing:", repoUrl);
 
-      const response = await API.post("/api/analytics", {
+      const response = await API.post("/repository/analytics", {
         url: repoUrl,
       });
 
@@ -151,7 +151,7 @@ setRepoInfo(repoRes.data);
   };
 const fetchCommitDetails = async (hash) => {
   try {
-    const response = await API.get(`/api/commit/${hash}`);
+    const response = await API.get(`/repository/commit/${hash}`);
 
     console.log("Commit details:", response.data);
 
@@ -169,7 +169,7 @@ const fetchCommitDiff = async (hash) => {
   try {
     setLoadingDiff(true);
 
-    const response = await API.get(`/api/commit/${hash}/diff`);
+    const response = await API.get(`/repository/commit/${hash}/diff`); 
 
     console.log("Diff:", response.data);
 

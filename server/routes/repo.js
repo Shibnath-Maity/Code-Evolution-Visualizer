@@ -23,6 +23,7 @@ router.get("/repo-info", async (req, res) => {
     const data = response.data;
 
     res.json({
+        id: data.id,   
       ownerAvatar: data.owner.avatar_url,
       owner: data.owner.login,
       name: data.name,
