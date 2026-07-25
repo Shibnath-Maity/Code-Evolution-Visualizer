@@ -3,11 +3,73 @@ import API from "../services/api";
 import TimelineChart from "../components/TimelineChart";
 import RepositoryOverview from "../components/RepositoryOverview";
 
-import RepositoryInput from "../components/RepositoryInput";
+// import RepositoryInput from "../components/RepositoryInput";
 import StatCard from "../components/StatCard";
-import Navbar from "../components/Navbar";
+// import Navbar from "../components/Navbar";
+import { useLocation } from "react-router-dom";
 function Board() {
-  const [repoUrl, setRepoUrl] = useState("");
+  const location = useLocation();
+
+const repoUrl = location.state?.repoUrl;
+  // const [repoUrl, setRepoUrl] = useState("");
+useEffect(() => {
+  if (!repoUrl) return;
+
+  const fetchRepositoryData = async () => {
+    try {
+      setLoading(true);
+
+      console.log("Analyzing:", repoUrl);
+
+      const response = await API.post("/api/analytics", {
+        url: repoUrl,
+      });
+
+      console.log("✅ Backend response:", response.data);
+
+//       const data = response.data;
+
+// console.log("STATS:", data.stats);
+// console.log("CONTRIBUTORS:", data.contributors);
+// console.log("HOTSPOTS:", data.hotspots);
+//       // Update dashboard
+//       setStats(data.stats || {
+//         commits: 0,
+//         contributors: 0,
+//         hotspots: 0,
+//       });
+
+//       setContributors(data.contributors || {});
+//       setTimeline(data.timeline || {});
+//       setFileChanges(data.fileChanges || []);
+//       setHotspots(data.hotspots || []);
+
+//       setRecentCommits(data.recentCommits || []);
+//       setAllCommits(data.allCommits || []);
+const data = response.data;
+
+console.log("FULL DATA:", data);
+console.log("STATS:", data.stats);
+console.log("CONTRIBUTORS:", data.contributors);
+console.log("HOTSPOTS:", data.hotspots);
+
+setStats(data.stats);
+setContributors(data.contributors);
+setTimeline(data.timeline);
+setFileChanges(data.fileChanges);
+setHotspots(data.hotspots);
+setRecentCommits(data.recentCommits);
+setAllCommits(data.allCommits);
+    } catch (error) {
+      console.error("❌ Repository analysis failed:", error);
+      console.error("Backend:", error.response?.data);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  fetchRepositoryData();
+}, [repoUrl]);
 
   const [stats, setStats] = useState({
     commits: 0,
@@ -21,6 +83,8 @@ const [timeline, setTimeline] = useState({});
 const [selectedCommit, setSelectedCommit] = useState(null);
 const [commitDiff, setCommitDiff] = useState("");
 const [loadingDiff, setLoadingDiff] = useState(false);
+const [fileChanges, setFileChanges] = useState([]);
+const [hotspots, setHotspots] = useState([]);
 const [searchTerm, setSearchTerm] = useState("");
 const [allCommits, setAllCommits] = useState([]);
 const [repoInfo, setRepoInfo] = useState(null);
@@ -85,42 +149,38 @@ setRepoInfo(repoRes.data);
   alert(message);
 }
   };
- const fetchCommitDetails = async (hash) => {
+const fetchCommitDetails = async (hash) => {
   try {
-    console.log("Fetching commit:", hash);
+    const response = await API.get(`/api/commit/${hash}`);
 
-    const res = await API.get(`/repository/commit/${hash}`);
+    console.log("Commit details:", response.data);
 
-    console.log("Full Response:", res);
-    console.log("Response Data:", res.data);
-    console.log("Commit Details:", res.data.data);
-
-    setSelectedCommit(res.data.data);
-  } catch (err) {
-    console.error("Commit Fetch Error:", err);
-
-    if (err.response) {
-      console.error("Status:", err.response.status);
-      console.error("Data:", err.response.data);
-    }
+    setSelectedCommit(response.data.data);
+  } catch (error) {
+    console.error("Commit Fetch Error:", error);
+    console.error("Status:", error.response?.status);
+    console.error("Data:", error.response?.data);
 
     alert("Failed to load commit details.");
   }
 };
+/* fetch diff */
 const fetchCommitDiff = async (hash) => {
   try {
     setLoadingDiff(true);
 
-    const res = await API.get(`/repository/commit/${hash}/diff`);
+    const response = await API.get(`/api/commit/${hash}/diff`);
 
-    setCommitDiff(res.data.data);
-  } catch (err) {
-    console.error("Diff Fetch Error:", err);
-    alert("Failed to load commit diff.");
+    console.log("Diff:", response.data);
+
+    setCommitDiff(response.data.data);
+  } catch (error) {
+    console.error("Diff Fetch Error:", error);
   } finally {
     setLoadingDiff(false);
   }
 };
+
 const displayedCommits =
   searchTerm.trim() === ""
     ? recentCommits
@@ -158,15 +218,23 @@ console.log("Search:", searchTerm);
 console.log("Commits:", recentCommits);
   return (
   <div className="bg-gray-100 min-h-screen">
-  
 
-   <div className="max-w-7xl mx-auto px-8 py-8">
-      {/* Repository Input */}
-   <RepositoryInput
-  repoUrl={repoUrl}
-  setRepoUrl={setRepoUrl}
-  analyzeRepository={analyzeRepository}
-/>
+  <div className="max-w-7xl mx-auto px-8 py-8">
+
+    {/* Repository Header */}
+    <div className="mb-8">
+      <h1 className="text-3xl font-bold text-slate-900">
+        Repository Dashboard
+      </h1>
+
+      {repoUrl && (
+        <p className="mt-2 text-sm text-slate-500 break-all">
+          Repository: {repoUrl}
+        </p>
+      )}
+    </div>
+
+    {/* Your existing dashboard cards start here */}
 
       {/* Repository Overview */}
       {repoInfo && (
@@ -175,27 +243,29 @@ console.log("Commits:", recentCommits);
 
       {/* Stats Cards */}
    <div className="grid grid-cols-1 sm:grid-cols-3 gap-6 mb-8">
-  <StatCard
-    title="Total Commits"
-    value={stats.commits}
-    type="commits"
-    color="bg-gradient-to-br from-blue-500 to-blue-700"
-    trend="from last analysis"
-  />
-  <StatCard
-    title="Contributors"
-    value={stats.contributors}
-    type="contributors"
-    color="bg-gradient-to-br from-emerald-500 to-emerald-700"
-    trend="from last analysis"
-  />
-  <StatCard
-    title="Hotspots"
-    value={stats.hotspots}
-    type="hotspots"
-    color="bg-gradient-to-br from-orange-500 to-orange-700"
-    trend="from last analysis"
-  />
+ <StatCard
+  title="Total Commits"
+  value={stats?.totalCommits || 0}
+  type="commits"
+  color="bg-gradient-to-br from-blue-500 to-blue-700"
+  trend="from last analysis"
+/>
+
+<StatCard
+  title="Contributors"
+  value={Object.keys(contributors || {}).length}
+  type="contributors"
+  color="bg-gradient-to-br from-emerald-500 to-emerald-700"
+  trend="from last analysis"
+/>
+
+<StatCard
+  title="Hotspots"
+  value={hotspots?.length || 0}
+  type="hotspots"
+  color="bg-gradient-to-br from-orange-500 to-orange-700"
+  trend="from last analysis"
+/>
 </div>
       {/* search box */}
       {/* <div className="mb-4">

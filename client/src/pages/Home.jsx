@@ -83,10 +83,20 @@ function Home() {
   const [repoUrl, setRepoUrl] = useState("");
   const navigate = useNavigate();
 
-  const handleAnalyze = (e) => {
-    e.preventDefault();
-    navigate(repoUrl.trim() ? `/dashboard?repo=${encodeURIComponent(repoUrl.trim())}` : "/dashboard");
-  };
+ const handleAnalyze = (e) => {
+  e.preventDefault();
+
+  if (!repoUrl.trim()) {
+    alert("Please enter a GitHub repository URL");
+    return;
+  }
+
+  navigate("/dashboard", {
+    state: {
+      repoUrl: repoUrl.trim(),
+    },
+  });
+};
 
   return (
     <div className="min-h-screen bg-slate-950 text-white">

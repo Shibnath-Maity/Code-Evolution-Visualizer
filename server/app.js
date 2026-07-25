@@ -9,8 +9,8 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
-app.use("/repository", repositoryRoutes);
-app.use("/api", repoRoutes); 
+app.use("/api", repositoryRoutes);
+app.use("/api", repoRoutes);
 app.get("/", (req, res) => {
     res.json({ message: "API Running" });
 });
