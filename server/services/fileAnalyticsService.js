@@ -3,33 +3,56 @@ const simpleGit = require("simple-git");
 async function getFileChanges(repoPath) {
   const git = simpleGit(repoPath);
 
-  const logs = await git.log({
-    "--stat": null,
-  });
+  // Get all commits
+  const log = await git.log();
 
-  const files = {};
+  const fileMap = {};
 
-  logs.all.forEach((commit) => {
-    if (commit.diff && commit.diff.files) {
-      commit.diff.files.forEach((file) => {
-        const fileName = file.file;
+  for (const commit of log.all) {
+    // Get files changed in this commit
+    const summary = await git.show([
+      commit.hash,
+      "--numstat",
+      "--format=",
+    ]);
 
-        if (files[fileName]) {
-          files[fileName]++;
-        } else {
-          files[fileName] = 1;
-        }
-      });
+    const lines = summary.split("\n");
+
+    for (const line of lines) {
+      if (!line.trim()) continue;
+
+      const parts = line.split("\t");
+
+      if (parts.length !== 3) continue;
+
+      const additions = parseInt(parts[0]) || 0;
+      const deletions = parseInt(parts[1]) || 0;
+      const file = parts[2];
+
+      if (!fileMap[file]) {
+        fileMap[file] = {
+          file,
+          changes: 0,
+          additions: 0,
+          deletions: 0,
+        };
+      }
+
+      fileMap[file].changes++;
+      fileMap[file].additions += additions;
+      fileMap[file].deletions += deletions;
     }
-  });
+  }
 
-  return Object.entries(files)
-    .sort((a, b) => b[1] - a[1])
-    .slice(0, 10)
-    .map((item) => ({
-      file: item[0],
-      changes: item[1],
-    }));
+  const files = Object.values(fileMap);
+
+  files.sort((a, b) => b.changes - a.changes);
+
+  return {
+    totalFiles: files.length,
+    mostChangedFiles: files.slice(0, 10),
+    allFiles: files,
+  };
 }
 
 module.exports = {

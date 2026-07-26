@@ -55,13 +55,22 @@ router.post("/analytics", async (req, res) => {
     console.log("8️⃣ Sending response...");
 
     res.json({
-      stats: result.stats,
-      contributors: result.contributors,
-      timeline: result.timeline,
-      fileChanges: result.fileChanges,
-      hotspots: result.hotspots,
-      recentCommits: result.recentCommits,
-      allCommits: result.allCommits,
+    stats: result.stats,
+  contributors: result.contributors,
+  timeline: result.timeline,
+
+  fileAnalysis: result.fileAnalysis,
+
+  languageAnalysis: result.languageAnalysis,
+
+  codeEvolution: result.codeEvolution,
+
+  hotspots: result.hotspots,
+
+  branches: result.branches,
+
+  recentCommits: result.recentCommits,
+  allCommits: result.allCommits,
     });
 
   } catch (error) {

@@ -5,10 +5,12 @@ const {
   getCommitStats,
 } = require("./gitService");
 
+const { getBranches } = require("./branchService");
 const { createTimeline } = require("./analyticsService");
 const { getFileChanges } = require("./fileAnalyticsService");
 const { calculateHotspots } = require("./hotspotService");
-
+const { analyzeLanguages } = require("./languageService");
+const { getCodeChurn } = require("./churnService");
 async function analyzeRepository(url) {
   console.log("1️⃣ Cloning repository...");
 
@@ -27,23 +29,51 @@ async function analyzeRepository(url) {
   const timeline = createTimeline(commits);
 
   console.log("6️⃣ Getting file changes...");
-  const fileChanges = await getFileChanges(repoPath);
+  const fileAnalysis = await getFileChanges(repoPath);
 
-  console.log("7️⃣ Calculating hotspots...");
+
+  console.log("7️⃣ Analyzing languages...");
+const languageAnalysis = analyzeLanguages(fileAnalysis);
+console.log("8️⃣ Calculating code evolution...");
+const codeEvolution = await getCodeChurn(repoPath);
+
+
+
+  console.log("9 Calculating hotspots...");
   const hotspots = calculateHotspots(
-    fileChanges,
+    fileAnalysis,
     contributors
   );
 
+  console.log("10 Getting branches...");
+  const branchData = await getBranches(repoPath);
+
+  console.log("11 Analysis completed!");
+
   return {
-    repoPath,
-    stats,
-    contributors,
-    timeline,
-    fileChanges,
-    hotspots,
-    recentCommits: commits.slice(0, 5),
-    allCommits: commits,
+   repoPath,
+
+  stats,
+  contributors,
+  timeline,
+
+  // File analysis
+  fileAnalysis,
+
+  // Language analysis
+  languageAnalysis,
+
+   codeEvolution,
+
+  // Hotspots
+  hotspots,
+
+  // Branch analysis
+  branches: branchData,
+
+  // Commits
+  recentCommits: commits.slice(0, 5),
+  allCommits: commits,
   };
 }
 

@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import API from "../services/api";
 import TimelineChart from "../components/TimelineChart";
+import FileAnalysis from "../components/FileAnalysis";
 import RepositoryOverview from "../components/RepositoryOverview";
 
 // import RepositoryInput from "../components/RepositoryInput";
@@ -52,11 +53,15 @@ console.log("FULL DATA:", data);
 console.log("STATS:", data.stats);
 console.log("CONTRIBUTORS:", data.contributors);
 console.log("HOTSPOTS:", data.hotspots);
-
 setStats(data.stats);
 setContributors(data.contributors);
 setTimeline(data.timeline);
-setFileChanges(data.fileChanges);
+
+setFileAnalysis(data.fileAnalysis);
+setLanguageAnalysis(data.languageAnalysis);
+setCodeEvolution(data.codeEvolution);
+setBranches(data.branches);
+
 setHotspots(data.hotspots);
 setRecentCommits(data.recentCommits);
 setAllCommits(data.allCommits);
@@ -80,10 +85,29 @@ setAllCommits(data.allCommits);
   const [recentCommits, setRecentCommits] = useState([]);
   const [contributors, setContributors] = useState({});
 const [timeline, setTimeline] = useState({});
+// const [fileAnalysis, setFileAnalysis] = useState({
+//   totalFiles: 0,
+//   mostChangedFiles: [],
+//   allFiles: [],
+// });
+
+const [languageAnalysis, setLanguageAnalysis] = useState({
+  totalFiles: 0,
+  languages: [],
+});
+
+const [codeEvolution, setCodeEvolution] = useState([]);
+const [branches, setBranches] = useState(null);
+
 const [selectedCommit, setSelectedCommit] = useState(null);
 const [commitDiff, setCommitDiff] = useState("");
 const [loadingDiff, setLoadingDiff] = useState(false);
-const [fileChanges, setFileChanges] = useState([]);
+// const [fileChanges, setFileChanges] = useState([]);
+const [fileAnalysis, setFileAnalysis] = useState({
+  totalFiles: 0,
+  mostChangedFiles: [],
+  allFiles: [],
+});
 const [hotspots, setHotspots] = useState([]);
 const [searchTerm, setSearchTerm] = useState("");
 const [allCommits, setAllCommits] = useState([]);
@@ -242,30 +266,40 @@ console.log("Commits:", recentCommits);
       )}
 
       {/* Stats Cards */}
-   <div className="grid grid-cols-1 sm:grid-cols-3 gap-6 mb-8">
- <StatCard
-  title="Total Commits"
-  value={stats?.totalCommits || 0}
-  type="commits"
-  color="bg-gradient-to-br from-blue-500 to-blue-700"
-  trend="from last analysis"
-/>
+  <div className="grid grid-cols-1 sm:grid-cols-4 gap-6 mb-8">
 
-<StatCard
-  title="Contributors"
-  value={Object.keys(contributors || {}).length}
-  type="contributors"
-  color="bg-gradient-to-br from-emerald-500 to-emerald-700"
-  trend="from last analysis"
-/>
+  <StatCard
+    title="Total Commits"
+    value={stats?.totalCommits || 0}
+    type="commits"
+    color="bg-gradient-to-br from-blue-500 to-blue-700"
+    trend="from last analysis"
+  />
 
-<StatCard
-  title="Hotspots"
-  value={hotspots?.length || 0}
-  type="hotspots"
-  color="bg-gradient-to-br from-orange-500 to-orange-700"
-  trend="from last analysis"
-/>
+  <StatCard
+    title="Contributors"
+    value={Object.keys(contributors || {}).length}
+    type="contributors"
+    color="bg-gradient-to-br from-emerald-500 to-emerald-700"
+    trend="from last analysis"
+  />
+
+  <StatCard
+    title="Files"
+    value={fileAnalysis?.totalFiles || 0}
+    type="files"
+    color="bg-gradient-to-br from-purple-500 to-purple-700"
+    trend="from last analysis"
+  />
+
+  <StatCard
+    title="Hotspots"
+    value={hotspots?.length || 0}
+    type="hotspots"
+    color="bg-gradient-to-br from-orange-500 to-orange-700"
+    trend="from last analysis"
+  />
+
 </div>
       {/* search box */}
       {/* <div className="mb-4">
@@ -352,9 +386,12 @@ console.log("Commits:", recentCommits);
     </div>
   ))
 )}
-      
+
        
 </div>
+
+    {/* File Analysis */}
+      <FileAnalysis fileAnalysis={fileAnalysis} />  
 {/* Commit Details */}
 {/* Commit Details */}
 
