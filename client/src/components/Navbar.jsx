@@ -2,6 +2,7 @@ import { NavLink } from "react-router-dom";
 import logo from "../assets/logo.png";
 
 import {
+    Home,
   LayoutDashboard,
   FolderGit2,
   GitCommit,
@@ -13,7 +14,8 @@ import {
 } from "lucide-react";
 
 const NAV_ITEMS = [
-  { label: "Dashboard", icon: LayoutDashboard, path: "/" },
+    { label: "Home", icon: Home, path: "/" },
+  { label: "Dashboard", icon: LayoutDashboard, path: "/dashboard" },
   { label: "Repositories", icon: FolderGit2, path: "/repositories" },
   { label: "Commits", icon: GitCommit, path: "/commits" },
   { label: "Contributors", icon: Users, path: "/contributors" },

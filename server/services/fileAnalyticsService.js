@@ -3,20 +3,23 @@ const simpleGit = require("simple-git");
 async function getFileChanges(repoPath) {
   const git = simpleGit(repoPath);
 
-  // Get all commits
+  console.log("📂 Getting file changes...");
+
+  // Get commits only
   const log = await git.log();
 
   const fileMap = {};
 
   for (const commit of log.all) {
-    // Get files changed in this commit
-    const summary = await git.show([
+    console.log(`Processing commit ${log.all.indexOf(commit) + 1}/${log.all.length}`);
+
+    const result = await git.show([
       commit.hash,
       "--numstat",
-      "--format=",
+      "--format="
     ]);
 
-    const lines = summary.split("\n");
+    const lines = result.split("\n");
 
     for (const line of lines) {
       if (!line.trim()) continue;
@@ -47,6 +50,8 @@ async function getFileChanges(repoPath) {
   const files = Object.values(fileMap);
 
   files.sort((a, b) => b.changes - a.changes);
+
+  console.log("✅ File analysis completed");
 
   return {
     totalFiles: files.length,
