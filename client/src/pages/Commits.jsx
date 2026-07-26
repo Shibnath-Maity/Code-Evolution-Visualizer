@@ -1,3 +1,5 @@
+import Pagination from "../components/Pagination";
+import CommitTypeChart from "../components/CommitTypeChart";
 import { useEffect, useState } from "react";
 import CommitDetails from "../components/CommitDetails";
 import API from "../services/api";
@@ -21,6 +23,9 @@ function Commits() {
 const [commitDiff, setCommitDiff] = useState("");
 const [loadingDetails, setLoadingDetails] = useState(false);
 const [loadingDiff, setLoadingDiff] = useState(false);
+const [currentPage, setCurrentPage] = useState(1);
+
+const COMMITS_PER_PAGE = 10;
 
   useEffect(() => {
     if (!repoUrl) return;
@@ -54,6 +59,17 @@ const [loadingDiff, setLoadingDiff] = useState(false);
       (commit.hash || "").toLowerCase().includes(search)
     );
   });
+const totalPages = Math.ceil(
+  filteredCommits.length / COMMITS_PER_PAGE
+);
+
+const startIndex = (currentPage - 1) * COMMITS_PER_PAGE;
+
+const paginatedCommits = filteredCommits.slice(
+  startIndex,
+  startIndex + COMMITS_PER_PAGE
+);
+
 
   const handleCommitClick = async (hash) => {
   try {
@@ -113,7 +129,10 @@ const [loadingDiff, setLoadingDiff] = useState(false);
             type="text"
             placeholder="Search commits, authors or hash..."
             value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
+           onChange={(e) => {
+  setSearchTerm(e.target.value);
+  setCurrentPage(1);
+}}
             className="
               w-full
               border
@@ -131,10 +150,15 @@ const [loadingDiff, setLoadingDiff] = useState(false);
         </div>
 
       </div>
+{/* Commit Type Chart */}
+<CommitTypeChart commits={commits} />
+
 
       {/* Commit count */}
       <div className="mb-4 text-sm text-gray-500">
-        Showing {filteredCommits.length} commits
+        Showing {startIndex + 1}-
+{Math.min(startIndex + COMMITS_PER_PAGE, filteredCommits.length)}
+of {filteredCommits.length} commits
       </div>
 
       {/* Loading */}
@@ -155,7 +179,7 @@ const [loadingDiff, setLoadingDiff] = useState(false);
       {!loading && filteredCommits.length > 0 && (
         <div className="space-y-4">
 
-          {filteredCommits.map((commit, index) => (
+         {paginatedCommits.map((commit, index) => (
 <div
   key={commit.hash || index}
   onClick={() => handleCommitClick(commit.hash)}
@@ -246,6 +270,13 @@ const [loadingDiff, setLoadingDiff] = useState(false);
 
         </div>
       )}
+
+<Pagination
+  currentPage={currentPage}
+  totalPages={totalPages}
+  onPageChange={setCurrentPage}
+/>
+
 <CommitDetails
   selectedCommit={selectedCommit}
   loadingDetails={loadingDetails}
@@ -256,6 +287,8 @@ const [loadingDiff, setLoadingDiff] = useState(false);
     setCommitDiff("");
   }}
 />
+
+
     </div>
   );
 }
