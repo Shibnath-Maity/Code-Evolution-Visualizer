@@ -11,22 +11,32 @@ import { useLocation } from "react-router-dom";
 function Board() {
   const location = useLocation();
 
-const repoUrl = location.state?.repoUrl;
-  // const [repoUrl, setRepoUrl] = useState("");
-useEffect(() => {
-  if (!repoUrl) return;
+  const repoUrl =
+    location.state?.repoUrl ||
+    localStorage.getItem("repoUrl");
 
-  const fetchRepositoryData = async () => {
-    try {
-      setLoading(true);
+  useEffect(() => {
+    if (repoUrl) {
+      localStorage.setItem("repoUrl", repoUrl);
+    }
+  }, [repoUrl]);
 
-      console.log("Analyzing:", repoUrl);
+  useEffect(() => {
+    if (!repoUrl) return;
 
-      const response = await API.post("/repository/analytics", {
-        url: repoUrl,
-      });
+    const fetchRepositoryData = async () => {
+      try {
+        setLoading(true);
 
-      console.log("✅ Backend response:", response.data);
+        console.log("Analyzing:", repoUrl);
+
+        const response = await API.post("/repository/analytics", {
+          url: repoUrl,
+        });
+
+        console.log("✅ Backend response:", response.data);
+
+        // your existing setState code...
 
 //       const data = response.data;
 
