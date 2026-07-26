@@ -65,7 +65,7 @@ console.log("CONTRIBUTORS:", data.contributors);
 console.log("HOTSPOTS:", data.hotspots);
 setStats(data.stats);
 setContributors(data.contributors);
-setTimeline(data.timeline);
+// setTimeline(data.timeline);
 
 setFileAnalysis(data.fileAnalysis);
 setLanguageAnalysis(data.languageAnalysis);
@@ -94,7 +94,7 @@ setAllCommits(data.allCommits);
 
   const [recentCommits, setRecentCommits] = useState([]);
   const [contributors, setContributors] = useState({});
-const [timeline, setTimeline] = useState({});
+// const [timeline, setTimeline] = useState({});
 // const [fileAnalysis, setFileAnalysis] = useState({
 //   totalFiles: 0,
 //   mostChangedFiles: [],
@@ -166,7 +166,7 @@ console.log("All:", res.data.allCommits.length);
       setAllCommits(res.data.allCommits)
       console.log("Loaded commits:", res.data.recentCommits);
       setContributors(res.data.contributors);
-      setTimeline(res.data.timeline);
+      // setTimeline(res.data.timeline);
       const repoRes = await API.get("/api/repo-info", {
   params: {
     url: repoUrl,
@@ -532,7 +532,7 @@ console.log("Commits:", recentCommits);
       </div>
 
       {/* Timeline Chart */}
-      <TimelineChart timeline={timeline} />
+      {/* <TimelineChart timeline={timeline} /> */}
  </div>
 
     </div>

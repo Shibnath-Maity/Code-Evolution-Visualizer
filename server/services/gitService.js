@@ -180,6 +180,33 @@ async function getCommitDiff(repoPath, hash) {
 
   return diff;
 }
+//Time line
+// Get Timeline
+async function getTimeline(repoPath) {
+  const git = simpleGit(repoPath);
+
+  const log = await git.log();
+
+  return log.all.map((commit) => ({
+    hash: commit.hash,
+    message: commit.message,
+    author: commit.author_name,
+    date: commit.date,
+    type: getCommitType(commit.message),
+  }));
+}
+
+// Detect commit type
+function getCommitType(message = "") {
+  const msg = message.toLowerCase().trim();
+
+  if (msg.startsWith("feat")) return "feat";
+  if (msg.startsWith("fix")) return "fix";
+  if (msg.startsWith("docs")) return "docs";
+  if (msg.startsWith("refactor")) return "refactor";
+
+  return "other";
+}
 
 module.exports = {
   cloneRepository,
@@ -187,5 +214,5 @@ module.exports = {
   getContributors,
   getCommitStats,
   getCommitDetails,
-    getCommitDiff,
+  getCommitDiff,
 };

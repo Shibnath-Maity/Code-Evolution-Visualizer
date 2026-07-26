@@ -1,29 +1,25 @@
-function createTimeline(commits){
 
-    const timeline={};
+function getCommitType(message = "") {
+  const msg = message.toLowerCase().trim();
 
+  if (msg.startsWith("feat")) return "feat";
+  if (msg.startsWith("fix")) return "fix";
+  if (msg.startsWith("docs")) return "docs";
+  if (msg.startsWith("refactor")) return "refactor";
 
-    commits.forEach(commit=>{
-
-        const date =
-        commit.date.substring(0,10);
-
-
-        if(timeline[date]){
-            timeline[date]++;
-        }
-        else{
-            timeline[date]=1;
-        }
-
-    });
-
-
-    return timeline;
-
+  return "other";
 }
 
+function createTimeline(commits = []) {
+  return commits.map((commit) => ({
+    hash: commit.hash,
+    message: commit.message,
+    author: commit.author_name,
+    date: commit.date,
+    type: getCommitType(commit.message),
+  }));
+}
 
-module.exports={
-    createTimeline
+module.exports = {
+  createTimeline,
 };
