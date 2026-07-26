@@ -9,6 +9,7 @@ const {
       getCommitDiff,
    getCommitDetails,
 } = require("../services/gitService");
+const { analyzeRepository } = require("../services/analysisService");
 
 const { createTimeline } = require("../services/analyticsService");
 const { getFileChanges } = require("../services/fileAnalyticsService");
@@ -44,38 +45,25 @@ router.post("/analytics", async (req, res) => {
   try {
     const { url } = req.body;
 
-    console.log("1️⃣ Cloning repository...");
-    const repoPath = await cloneRepository(url);
-    currentRepoPath = repoPath;
-    console.log("2️⃣ Getting commits...");
-    const commits = await getCommits(repoPath);
+    console.log("🚀 Starting repository analysis...");
 
-    console.log("3️⃣ Getting contributors...");
-    const contributors = await getContributors(repoPath);
+    const result = await analyzeRepository(url);
 
-    console.log("4️⃣ Getting commit stats...");
-    const stats = await getCommitStats(repoPath);
-
-    console.log("5️⃣ Creating timeline...");
-    const timeline = createTimeline(commits);
-
-    console.log("6️⃣ Getting file changes...");
-    const fileChanges = await getFileChanges(repoPath);
-
-    console.log("7️⃣ Calculating hotspots...");
-    const hotspots = calculateHotspots(fileChanges, contributors);
+    // Keep repo path available for commit details and diff
+    currentRepoPath = result.repoPath;
 
     console.log("8️⃣ Sending response...");
 
     res.json({
-      stats,
-      contributors,
-      timeline,
-      fileChanges,
-      hotspots,
- recentCommits: commits.slice(0, 5),
-   allCommits: commits
+      stats: result.stats,
+      contributors: result.contributors,
+      timeline: result.timeline,
+      fileChanges: result.fileChanges,
+      hotspots: result.hotspots,
+      recentCommits: result.recentCommits,
+      allCommits: result.allCommits,
     });
+
   } catch (error) {
     console.error("❌ Backend Error:");
     console.error(error);

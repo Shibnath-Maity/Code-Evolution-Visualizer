@@ -14,8 +14,6 @@ async function cloneRepository(repoUrl) {
     throw new Error("Please enter a valid GitHub repository URL.");
   }
 
-  const git = simpleGit();
-
   const repoName = repoUrl
     .split("/")
     .pop()
@@ -27,21 +25,50 @@ async function cloneRepository(repoUrl) {
     repoName
   );
 
+  // If repository already exists, verify that it is a valid Git repo
   if (fs.existsSync(repoPath)) {
-    console.log("Repository already exists. Using existing copy...");
-    return repoPath;
+    console.log("📁 Repository already exists. Checking Git...");
+
+    try {
+      const existingGit = simpleGit(repoPath);
+
+      await existingGit.status();
+
+      console.log("✅ Existing repository is valid.");
+
+      return repoPath;
+
+    } catch (error) {
+      console.log("⚠️ Existing repository is corrupted.");
+      console.log("🗑️ Removing corrupted repository...");
+
+      fs.rmSync(repoPath, {
+        recursive: true,
+        force: true,
+      });
+    }
   }
 
   try {
-    console.log("Cloning repository...");
+    console.log("📥 Cloning repository...");
+
+    const git = simpleGit();
+
     await git.clone(repoUrl, repoPath);
+
+    console.log("✅ Repository cloned successfully.");
+
   } catch (error) {
-    throw new Error("Invalid or inaccessible GitHub repository.");
+    console.error("❌ Git clone failed:");
+    console.error(error);
+
+    throw new Error(
+      "Unable to clone repository. Please check the GitHub URL and repository access."
+    );
   }
 
   return repoPath;
 }
-
 // Get All Commits
 async function getCommits(repoPath) {
   const git = simpleGit(repoPath);
