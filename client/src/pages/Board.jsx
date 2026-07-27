@@ -9,8 +9,9 @@ import StatCard from "../components/StatCard";
 // import Navbar from "../components/Navbar";
 import { useLocation } from "react-router-dom";
 function Board() {
-  const location = useLocation();
 
+  const location = useLocation();
+// console.log("HOTSPOT SAMPLE:", hotspots?.[0]);
   const repoUrl =
     location.state?.repoUrl ||
     localStorage.getItem("repoUrl");
@@ -508,28 +509,33 @@ console.log("Commits:", recentCommits);
 )}
 
       {/* Contributors List */}
-      <div className="mt-10 bg-white rounded-lg shadow p-6">
-        <h2 className="text-2xl font-bold mb-4">
-          Contributors
-        </h2>
+    {/* Contributors List */}
+<div className="mt-10 bg-white rounded-lg shadow p-6">
+  <h2 className="text-2xl font-bold mb-4">
+    Contributors
+  </h2>
 
-        {Object.keys(contributors).length === 0 ? (
-          <p>No contributors found.</p>
-        ) : (
-          Object.entries(contributors).map(([name, commits]) => (
-            <div
-              key={name}
-              className="flex justify-between border-b py-3"
-            >
-              <span className="font-medium">{name}</span>
+  {Object.keys(contributors).length === 0 ? (
+    <p>No contributors found.</p>
+  ) : (
+  Object.entries(contributors).map(([name, contributor]) => (
+      <div
+        key={name}
+        className="flex justify-between items-center border-b py-3"
+      >
+        {/* Contributor name */}
+        <span className="font-medium">
+          {contributor.name || name}
+        </span>
 
-              <span className="text-blue-600 font-semibold">
-                {commits} commits
-              </span>
-            </div>
-          ))
-        )}
+        {/* Commit count */}
+        <span className="text-blue-600 font-semibold">
+          {contributor.commits || 0} commits
+        </span>
       </div>
+    ))
+  )}
+</div>
 
       {/* Timeline Chart */}
       {/* <TimelineChart timeline={timeline} /> */}

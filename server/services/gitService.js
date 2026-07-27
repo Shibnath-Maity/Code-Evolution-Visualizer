@@ -79,6 +79,21 @@ async function getCommits(repoPath) {
 }
 
 // Get Contributors
+// async function getContributors(repoPath) {
+//   const git = simpleGit(repoPath);
+
+//   const log = await git.log();
+
+//   const contributors = {};
+
+//   log.all.forEach((commit) => {
+//     const author = commit.author_name;
+
+//     contributors[author] = (contributors[author] || 0) + 1;
+//   });
+
+//   return contributors;
+// }
 async function getContributors(repoPath) {
   const git = simpleGit(repoPath);
 
@@ -86,10 +101,69 @@ async function getContributors(repoPath) {
 
   const contributors = {};
 
-  log.all.forEach((commit) => {
+  for (const commit of log.all) {
     const author = commit.author_name;
 
-    contributors[author] = (contributors[author] || 0) + 1;
+    if (!contributors[author]) {
+      contributors[author] = {
+        name: author,
+        commits: 0,
+        linesAdded: 0,
+        linesRemoved: 0,
+        filesChanged: new Set(),
+        lastContribution: commit.date,
+      };
+    }
+
+    // Commit count
+    contributors[author].commits++;
+
+    // Last contribution
+    if (
+      new Date(commit.date) >
+      new Date(contributors[author].lastContribution)
+    ) {
+      contributors[author].lastContribution = commit.date;
+    }
+
+    // Get statistics for this commit
+    const commitDetails = await git.show([
+      "--stat",
+      "--format=",
+      commit.hash,
+    ]);
+
+    const lines = commitDetails.split("\n");
+
+    lines.forEach((line) => {
+      // Example:
+      // src/App.jsx | 10 +++++-----
+      const match = line.match(
+        /^\s*(.+?)\s+\|\s+(\d+)\s+([+-]+)/
+      );
+
+      if (match) {
+        const file = match[1];
+        const changes = match[2];
+        const symbols = match[3];
+
+        const added = (symbols.match(/\+/g) || []).length;
+        const removed = (symbols.match(/-/g) || []).length;
+
+        contributors[author].linesAdded +=
+          Math.round((Number(changes) * added) / (added + removed || 1));
+
+        contributors[author].linesRemoved +=
+          Math.round((Number(changes) * removed) / (added + removed || 1));
+
+        contributors[author].filesChanged.add(file);
+      }
+    });
+  }
+
+  // Convert Set → number
+  Object.values(contributors).forEach((contributor) => {
+    contributor.filesChanged = contributor.filesChanged.size;
   });
 
   return contributors;
