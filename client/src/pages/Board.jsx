@@ -7,10 +7,11 @@ import RepositoryOverview from "../components/RepositoryOverview";
 // import RepositoryInput from "../components/RepositoryInput";
 import StatCard from "../components/StatCard";
 // import Navbar from "../components/Navbar";
-import { useLocation } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 function Board() {
 
   const location = useLocation();
+  const navigate = useNavigate();
 // console.log("HOTSPOT SAMPLE:", hotspots?.[0]);
   const repoUrl =
     location.state?.repoUrl ||
@@ -64,18 +65,35 @@ console.log("FULL DATA:", data);
 console.log("STATS:", data.stats);
 console.log("CONTRIBUTORS:", data.contributors);
 console.log("HOTSPOTS:", data.hotspots);
-setStats(data.stats);
-setContributors(data.contributors);
-// setTimeline(data.timeline);
+console.log("FILE ANALYSIS:", data.fileAnalysis);
 
-setFileAnalysis(data.fileAnalysis);
-setLanguageAnalysis(data.languageAnalysis);
-setCodeEvolution(data.codeEvolution);
-setBranches(data.branches);
+// Save complete analysis for AI Insights
+localStorage.setItem(
+  "repositoryAnalysis",
+  JSON.stringify(data)
+);
 
-setHotspots(data.hotspots);
-setRecentCommits(data.recentCommits);
-setAllCommits(data.allCommits);
+// Update Dashboard
+setStats(data.stats || {});
+setContributors(data.contributors || {});
+
+setFileAnalysis(data.fileAnalysis || {
+  totalFiles: 0,
+  mostChangedFiles: [],
+  allFiles: [],
+});
+
+setLanguageAnalysis(data.languageAnalysis || {
+  totalFiles: 0,
+  languages: [],
+});
+
+setCodeEvolution(data.codeEvolution || []);
+setBranches(data.branches || null);
+
+setHotspots(data.hotspots || []);
+setRecentCommits(data.recentCommits || []);
+setAllCommits(data.allCommits || []);
     } catch (error) {
       console.error("❌ Repository analysis failed:", error);
       console.error("Backend:", error.response?.data);
@@ -147,36 +165,37 @@ const copyDiff = () => {
     alert("Please enter a GitHub repository URL.");
     return;
   }
-
-    try {
-      const res = await API.post("/repository/analytics", {
-        url: repoUrl,
-      });
-      console.log("Recent:", res.data.recentCommits.length);
-console.log("All:", res.data.allCommits.length);
-
-      console.log(res.data);
-
-      setStats({
-        commits: res.data.stats.totalCommits,
-        contributors: Object.keys(res.data.contributors).length,
-        hotspots: res.data.hotspots.length,
-      });
-
-      setRecentCommits(res.data.recentCommits);
-      setAllCommits(res.data.allCommits)
-      console.log("Loaded commits:", res.data.recentCommits);
-      setContributors(res.data.contributors);
-      // setTimeline(res.data.timeline);
-      const repoRes = await API.get("/api/repo-info", {
-  params: {
+try {
+  const res = await API.post("/repository/analytics", {
     url: repoUrl,
-  },
-});
+  });
 
-setRepoInfo(repoRes.data);
-    } catch (err) {
-  console.error(err);
+  const data = res.data;
+
+  console.log("FULL ANALYSIS:", data);
+  console.log("Recent:", data.recentCommits?.length);
+  console.log("All:", data.allCommits?.length);
+
+  // Update dashboard data
+  setStats(data.stats);
+  setContributors(data.contributors);
+  setFileAnalysis(data.fileAnalysis);
+  setLanguageAnalysis(data.languageAnalysis);
+  setCodeEvolution(data.codeEvolution);
+  setBranches(data.branches);
+  setHotspots(data.hotspots);
+  setRecentCommits(data.recentCommits);
+  setAllCommits(data.allCommits);
+
+  // Send analysis data to AI Insights
+  navigate("/ai-insights", {
+    state: {
+      analysis: data,
+    },
+  });
+
+} catch (err) {
+  console.error("Analysis failed:", err);
 
   const message =
     err.response?.data?.message || "Analysis failed";
