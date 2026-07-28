@@ -4,6 +4,7 @@ const cors = require("cors");
 const repositoryRoutes = require("./routes/repository");
 const repoRoutes = require("./routes/repo");
 const aiRoutes = require("./routes/ai");
+const assistantRoutes = require("./routes/assistant");
 const app = express();
 
 // Middleware
@@ -14,6 +15,7 @@ app.use(express.json());
 app.use("/repository", repositoryRoutes);
 app.use("/api", repoRoutes);
 app.use("/ai", aiRoutes);
+app.use("/assistant", assistantRoutes);
 // Test Route
 app.get("/", (req, res) => {
   res.json({

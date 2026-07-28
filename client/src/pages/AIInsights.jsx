@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { useLocation } from "react-router-dom";
 import API from "../services/api";
+import RepositoryChatbot from "../components/RepositoryChatbot";
 import axios from "axios";
 import {
   Sparkles,
@@ -555,6 +556,8 @@ Do not invent information that is not present in the repository data.
               </div>
             </div>
           </div>
+          <RepositoryChatbot repositoryData={repositoryData} />
+
         </>
       )}
     </div>
