@@ -15,6 +15,7 @@ const { createTimeline } = require("../services/analyticsService");
 const { getFileChanges } = require("../services/fileAnalyticsService");
 const { calculateHotspots } = require("../services/hotspotService");
 const { getRepositoryInfo } = require("../services/githubService");
+const { indexRepository } = require("../services/vectorService");
 let currentRepoPath = "";
 // Test Route
 router.get("/info", (req, res) => {
@@ -43,15 +44,27 @@ router.get("/repo-info", async (req, res) => {
 // Analyze Repository
 router.post("/analytics", async (req, res) => {
   try {
-    const { url } = req.body;
+    
+const { url, repositoryId = "test-repository" } = req.body;
 
-    console.log("🚀 Starting repository analysis...");
+console.log("🚀 Starting repository analysis...");
 
-    const result = await analyzeRepository(url);
+const result = await analyzeRepository(url);
 
-    // Keep repo path available for commit details and diff
-    currentRepoPath = result.repoPath;
+currentRepoPath = result.repoPath;
 
+// ==========================================
+// Index repository into ChromaDB
+// ==========================================
+
+console.log("\n🧠 Starting RAG indexing...");
+
+await indexRepository(
+  result.repoPath,
+  repositoryId
+);
+
+console.log("✅ RAG indexing completed");
     console.log("8️⃣ Sending response...");
 
     res.json({

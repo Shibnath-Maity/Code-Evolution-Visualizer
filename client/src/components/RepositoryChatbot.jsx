@@ -1,22 +1,31 @@
+
 import { useEffect, useRef, useState } from "react";
 import axios from "axios";
-import { Bot, Send, Loader2, User, Trash2, FolderGit2 } from "lucide-react";
+import {
+  Bot,
+  Send,
+  Loader2,
+  User,
+  Trash2,
+  FolderGit2,
+} from "lucide-react";
 
 const API_URL = "http://localhost:5000";
 
 const SUGGESTED_QUESTIONS = [
-  "Which file changed the most?",
-  "Who contributed the most?",
-  "What are the biggest risks?",
-  "Explain the repository health",
+  "How does the move zeroes solution work?",
+  "Which algorithm is used in move zeroes?",
+  "Explain the duplicate number solution.",
+  "Which files use two pointer algorithms?",
 ];
 
-// Renders **bold** and "* bullet" lines as real elements instead of raw
-// markdown characters. Hand-rolled rather than dangerouslySetInnerHTML,
-// since this is model-generated text and shouldn't be treated as trusted
-// HTML.
+// ==========================================
+// Render basic markdown
+// ==========================================
+
 function renderInlineMarkdown(line, keyPrefix) {
   const parts = line.split(/(\*\*[^*]+\*\*)/g).filter(Boolean);
+
   return parts.map((part, i) =>
     part.startsWith("**") && part.endsWith("**") ? (
       <strong key={`${keyPrefix}-${i}`} className="font-semibold">
@@ -28,50 +37,78 @@ function renderInlineMarkdown(line, keyPrefix) {
   );
 }
 
+// ==========================================
+// Format AI response
+// ==========================================
+
 function FormattedMessage({ text }) {
   const lines = text.split("\n");
+
   const blocks = [];
   let currentList = [];
 
   const flushList = () => {
-    if (currentList.length) {
-      blocks.push({ type: "list", items: currentList });
+    if (currentList.length > 0) {
+      blocks.push({
+        type: "list",
+        items: currentList,
+      });
+
       currentList = [];
     }
   };
 
   lines.forEach((rawLine) => {
     const line = rawLine.trim();
+
     if (!line) {
       flushList();
       return;
     }
+
     const bulletMatch = line.match(/^[*-]\s+(.*)/);
+
     if (bulletMatch) {
       currentList.push(bulletMatch[1]);
     } else {
       flushList();
-      blocks.push({ type: "para", text: line });
+
+      blocks.push({
+        type: "para",
+        text: line,
+      });
     }
   });
+
   flushList();
 
   return (
     <div className="space-y-2">
       {blocks.map((block, i) =>
         block.type === "list" ? (
-          <ul key={i} className="list-disc list-outside pl-4 space-y-1">
+          <ul
+            key={i}
+            className="list-disc list-outside pl-4 space-y-1"
+          >
             {block.items.map((item, j) => (
-              <li key={j}>{renderInlineMarkdown(item, `${i}-${j}`)}</li>
+              <li key={j}>
+                {renderInlineMarkdown(item, `${i}-${j}`)}
+              </li>
             ))}
           </ul>
         ) : (
-          <p key={i}>{renderInlineMarkdown(block.text, `${i}`)}</p>
+          <p key={i}>
+            {renderInlineMarkdown(block.text, `${i}`)}
+          </p>
         )
       )}
     </div>
   );
 }
+
+// ==========================================
+// Typing indicator
+// ==========================================
 
 function TypingIndicator() {
   return (
@@ -80,12 +117,18 @@ function TypingIndicator() {
         <span
           key={i}
           className="h-1.5 w-1.5 rounded-full bg-indigo-400 animate-bounce"
-          style={{ animationDelay: `${i * 0.15}s` }}
+          style={{
+            animationDelay: `${i * 0.15}s`,
+          }}
         />
       ))}
     </div>
   );
 }
+
+// ==========================================
+// Repository Chatbot
+// ==========================================
 
 function RepositoryChatbot({ repositoryData }) {
   const [question, setQuestion] = useState("");
@@ -96,76 +139,156 @@ function RepositoryChatbot({ repositoryData }) {
   const scrollRef = useRef(null);
   const textareaRef = useRef(null);
 
+  // ==========================================
+  // Auto-scroll to latest message
+  // ==========================================
+
   useEffect(() => {
     if (scrollRef.current) {
-      scrollRef.current.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" });
+      scrollRef.current.scrollTo({
+        top: scrollRef.current.scrollHeight,
+        behavior: "smooth",
+      });
     }
   }, [messages, loading]);
 
+  // ==========================================
+  // Send question to backend
+  // ==========================================
+
   async function sendQuestion(text) {
     const userQuestion = text.trim();
-    if (!userQuestion || loading || !repositoryData) return;
 
-    setMessages((prev) => [...prev, { role: "user", content: userQuestion }]);
+    if (!userQuestion || loading) {
+      return;
+    }
+
+    // Add user message immediately
+    setMessages((prev) => [
+      ...prev,
+      {
+        role: "user",
+        content: userQuestion,
+      },
+    ]);
+
     setQuestion("");
     setError("");
     setLoading(true);
 
     try {
-      const response = await axios.post(`${API_URL}/assistant/chat`, {
-        question: userQuestion,
-        repositoryData,
-      });
+      // IMPORTANT:
+      // Backend route is /assistant/ask
+      const response = await axios.post(
+        `${API_URL}/assistant/ask`,
+        {
+          question: userQuestion,
+        }
+      );
 
-      setMessages((prev) => [...prev, { role: "assistant", content: response.data.answer }]);
-    } catch (err) {
-      console.error("Assistant error:", err);
+      console.log("Assistant response:", response.data);
+
+      // Add AI response
       setMessages((prev) => [
         ...prev,
-        { role: "assistant", content: "Sorry, I couldn't answer that question.", isError: true },
+        {
+          role: "assistant",
+          content:
+            response.data.answer ||
+            "I couldn't generate an answer.",
+        },
       ]);
-      setError("The assistant didn't respond. You can try asking again.");
+    } catch (err) {
+      console.error("Assistant error:", err);
+
+      setMessages((prev) => [
+        ...prev,
+        {
+          role: "assistant",
+          content:
+            "Sorry, I couldn't answer that question.",
+          isError: true,
+        },
+      ]);
+
+      setError(
+        "The assistant didn't respond. Please try again."
+      );
     } finally {
       setLoading(false);
-      textareaRef.current?.focus();
+
+      setTimeout(() => {
+        textareaRef.current?.focus();
+      }, 100);
     }
   }
+
+  // ==========================================
+  // Enter key handling
+  // ==========================================
 
   function handleKeyDown(e) {
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
+
       sendQuestion(question);
     }
   }
 
+  // ==========================================
+  // Textarea resizing
+  // ==========================================
+
   function handleTextareaChange(e) {
     setQuestion(e.target.value);
+
     const el = e.target;
+
     el.style.height = "auto";
-    el.style.height = `${Math.min(el.scrollHeight, 160)}px`;
+
+    el.style.height = `${Math.min(
+      el.scrollHeight,
+      160
+    )}px`;
   }
+
+  // ==========================================
+  // Clear conversation
+  // ==========================================
 
   function clearChat() {
     setMessages([]);
     setError("");
   }
 
-  const disabled = !repositoryData;
-
   return (
     <div className="bg-white rounded-2xl p-6 shadow-sm border border-slate-100 mt-6">
-      {/* Header */}
+
+      {/* ======================================
+          Header
+      ======================================= */}
+
       <div className="flex items-center justify-between gap-3 mb-5">
+
         <div className="flex items-center gap-3 min-w-0">
+
           <div className="h-10 w-10 rounded-xl bg-indigo-50 flex items-center justify-center shrink-0">
             <Bot className="h-5 w-5 text-indigo-600" />
           </div>
+
           <div className="min-w-0">
-            <h2 className="font-semibold text-slate-900">Ask AI About This Repository</h2>
+
+            <h2 className="font-semibold text-slate-900">
+              Ask AI About This Repository
+            </h2>
+
             <p className="text-xs text-slate-500">
-              Ask questions about commits, files, contributors, hotspots and repository health.
+              Ask questions about the code, files,
+              algorithms and repository.
             </p>
+
           </div>
+
         </div>
 
         {messages.length > 0 && (
@@ -178,60 +301,120 @@ function RepositoryChatbot({ repositoryData }) {
             Clear
           </button>
         )}
+
       </div>
 
-      {/* No repository connected */}
-      {disabled ? (
+      {/* ======================================
+          Repository status
+      ======================================= */}
+
+      {!repositoryData ? (
         <div className="bg-slate-50 rounded-xl p-6 flex flex-col items-center text-center">
+
           <FolderGit2 className="h-6 w-6 text-slate-400 mb-2" />
-          <p className="text-sm text-slate-500">Analyze a repository first to chat about it.</p>
+
+          <p className="text-sm text-slate-500">
+            Analyze a repository first to chat about it.
+          </p>
+
         </div>
       ) : (
         <>
-          {/* Chat messages */}
-          <div ref={scrollRef} className="min-h-[180px] max-h-[420px] overflow-y-auto space-y-4 mb-5 pr-1">
+
+          {/* ==================================
+              Chat messages
+          =================================== */}
+
+          <div
+            ref={scrollRef}
+            className="min-h-[180px] max-h-[420px] overflow-y-auto space-y-4 mb-5 pr-1"
+          >
+
+            {/* Empty state */}
+
             {messages.length === 0 && (
               <div className="bg-slate-50 rounded-xl p-5">
+
                 <div className="flex items-start gap-3">
+
                   <Bot className="h-5 w-5 text-indigo-600 mt-0.5 shrink-0" />
 
                   <div>
-                    <p className="text-sm font-medium text-slate-800">Hello! 👋</p>
-                    <p className="text-sm text-slate-500 mt-1">
-                      I've analyzed this repository. Ask me anything about its development history and analysis.
+
+                    <p className="text-sm font-medium text-slate-800">
+                      Hello! 👋
                     </p>
 
+                    <p className="text-sm text-slate-500 mt-1">
+                      I've analyzed this repository.
+                      Ask me anything about the code
+                      and its development.
+                    </p>
+
+                    {/* Suggested questions */}
+
                     <div className="flex flex-wrap gap-2 mt-4">
-                      {SUGGESTED_QUESTIONS.map((item) => (
-                        <button
-                          key={item}
-                          onClick={() => sendQuestion(item)}
-                          disabled={loading}
-                          className="text-xs px-3 py-2 rounded-lg bg-white border border-slate-200 text-slate-600 hover:border-indigo-300 hover:text-indigo-600 disabled:opacity-50 disabled:cursor-not-allowed transition"
-                        >
-                          {item}
-                        </button>
-                      ))}
+
+                      {SUGGESTED_QUESTIONS.map(
+                        (item) => (
+                          <button
+                            key={item}
+                            onClick={() =>
+                              sendQuestion(item)
+                            }
+                            disabled={loading}
+                            className="text-xs px-3 py-2 rounded-lg bg-white border border-slate-200 text-slate-600 hover:border-indigo-300 hover:text-indigo-600 disabled:opacity-50 disabled:cursor-not-allowed transition"
+                          >
+                            {item}
+                          </button>
+                        )
+                      )}
+
                     </div>
+
                   </div>
+
                 </div>
+
               </div>
             )}
 
+            {/* ==================================
+                Messages
+            =================================== */}
+
             {messages.map((message, index) => (
+
               <div
                 key={index}
-                className={`flex gap-3 ${message.role === "user" ? "justify-end" : "justify-start"}`}
+                className={`flex gap-3 ${
+                  message.role === "user"
+                    ? "justify-end"
+                    : "justify-start"
+                }`}
               >
+
+                {/* AI icon */}
+
                 {message.role === "assistant" && (
                   <div
                     className={`h-8 w-8 rounded-lg flex items-center justify-center shrink-0 ${
-                      message.isError ? "bg-red-50" : "bg-indigo-50"
+                      message.isError
+                        ? "bg-red-50"
+                        : "bg-indigo-50"
                     }`}
                   >
-                    <Bot className={`h-4 w-4 ${message.isError ? "text-red-500" : "text-indigo-600"}`} />
+                    <Bot
+                      className={`h-4 w-4 ${
+                        message.isError
+                          ? "text-red-500"
+                          : "text-indigo-600"
+                      }`}
+                    />
                   </div>
                 )}
+
+                {/* Message bubble */}
 
                 <div
                   className={`max-w-[80%] rounded-xl px-4 py-3 text-sm leading-6 ${
@@ -242,37 +425,66 @@ function RepositoryChatbot({ repositoryData }) {
                       : "bg-slate-50 text-slate-700"
                   }`}
                 >
-                  {message.role === "assistant" && !message.isError ? (
-                    <FormattedMessage text={message.content} />
+
+                  {message.role === "assistant" &&
+                  !message.isError ? (
+                    <FormattedMessage
+                      text={message.content}
+                    />
                   ) : (
-                    <span className="whitespace-pre-wrap">{message.content}</span>
+                    <span className="whitespace-pre-wrap">
+                      {message.content}
+                    </span>
                   )}
+
                 </div>
+
+                {/* User icon */}
 
                 {message.role === "user" && (
                   <div className="h-8 w-8 rounded-lg bg-slate-100 flex items-center justify-center shrink-0">
                     <User className="h-4 w-4 text-slate-600" />
                   </div>
                 )}
+
               </div>
+
             ))}
+
+            {/* ==================================
+                Loading indicator
+            =================================== */}
 
             {loading && (
               <div className="flex items-center gap-3">
+
                 <div className="h-8 w-8 rounded-lg bg-indigo-50 flex items-center justify-center shrink-0">
                   <Bot className="h-4 w-4 text-indigo-600" />
                 </div>
+
                 <div className="bg-slate-50 rounded-xl px-4 py-3">
                   <TypingIndicator />
                 </div>
+
               </div>
             )}
+
           </div>
 
-          {error && <p className="text-xs text-red-500 mb-2">{error}</p>}
+          {/* Error */}
 
-          {/* Input */}
+          {error && (
+            <p className="text-xs text-red-500 mb-2">
+              {error}
+            </p>
+          )}
+
+          {/* ==================================
+              Input area
+          =================================== */}
+
           <div className="flex items-end gap-3">
+
             <textarea
               ref={textareaRef}
               value={question}
@@ -285,16 +497,28 @@ function RepositoryChatbot({ repositoryData }) {
 
             <button
               onClick={() => sendQuestion(question)}
-              disabled={!question.trim() || loading}
+              disabled={
+                !question.trim() || loading
+              }
               className="h-11 w-11 rounded-xl bg-indigo-600 text-white flex items-center justify-center hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed transition shrink-0"
             >
-              {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
+              {loading ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <Send className="h-4 w-4" />
+              )}
             </button>
+
           </div>
 
-          <p className="text-[11px] text-slate-400 mt-2">Press Enter to send • Shift + Enter for a new line</p>
+          <p className="text-[11px] text-slate-400 mt-2">
+            Press Enter to send • Shift + Enter
+            for a new line
+          </p>
+
         </>
       )}
+
     </div>
   );
 }

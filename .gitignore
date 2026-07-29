@@ -1,7 +1,15 @@
-
+# Dependencies
+node_modules/
 client/node_modules/
 server/node_modules/
 
+# Local cloned repositories
 server/repositories/
 
-.env
+# Environment variables
+server/.env
+
+# ChromaDB local data
+chroma_data/
+
+server/test*.js
