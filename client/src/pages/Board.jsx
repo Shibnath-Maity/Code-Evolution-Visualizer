@@ -32,9 +32,14 @@ function Board() {
 
         console.log("Analyzing:", repoUrl);
 
-        const response = await API.post("/repository/analytics", {
-          url: repoUrl,
-        });
+       const repositoryId = repoUrl
+  .replace("https://github.com/", "")
+  .replace(/\//g, "-");
+
+const response = await API.post("/repository/analytics", {
+  url: repoUrl,
+  repositoryId,
+});
 
         console.log("✅ Backend response:", response.data);
 
@@ -61,6 +66,15 @@ function Board() {
 //       setAllCommits(data.allCommits || []);
 const data = response.data;
 
+localStorage.setItem(
+  "repositoryId",
+  data.repositoryId
+);
+
+console.log(
+  "Repository ID:",
+  data.repositoryId
+);
 console.log("FULL DATA:", data);
 console.log("STATS:", data.stats);
 console.log("CONTRIBUTORS:", data.contributors);
@@ -166,9 +180,25 @@ const copyDiff = () => {
     return;
   }
 try {
+   const repositoryId = repoUrl
+    .replace("https://github.com/", "")
+    .replace(/\//g, "-");
+
   const res = await API.post("/repository/analytics", {
     url: repoUrl,
+      repositoryId,
   });
+
+localStorage.setItem(
+      "repositoryAnalysis",
+      JSON.stringify(res.data)
+    );
+localStorage.setItem("repositoryId", repositoryId);
+    // Save the repository URL
+    localStorage.setItem("repoUrl", repoUrl);
+
+    // If you have state, keep this too
+    setRepositoryData(res.data);
 
   const data = res.data;
 

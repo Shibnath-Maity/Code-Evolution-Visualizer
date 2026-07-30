@@ -556,8 +556,10 @@ Do not invent information that is not present in the repository data.
               </div>
             </div>
           </div>
-          <RepositoryChatbot repositoryData={repositoryData} />
-
+       
+<RepositoryChatbot
+    repositoryId={repositoryData?.repositoryId}
+/>
         </>
       )}
     </div>

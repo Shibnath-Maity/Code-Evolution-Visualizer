@@ -13,10 +13,10 @@ import {
 const API_URL = "http://localhost:5000";
 
 const SUGGESTED_QUESTIONS = [
-  "How does the move zeroes solution work?",
-  "Which algorithm is used in move zeroes?",
-  "Explain the duplicate number solution.",
-  "Which files use two pointer algorithms?",
+  "Give me a repository overview.",
+  "What technologies are used in this project?",
+  "Explain the project architecture.",
+  "Suggest improvements for this repository.",
 ];
 
 // ==========================================
@@ -129,8 +129,8 @@ function TypingIndicator() {
 // ==========================================
 // Repository Chatbot
 // ==========================================
+function RepositoryChatbot() {
 
-function RepositoryChatbot({ repositoryData }) {
   const [question, setQuestion] = useState("");
   const [messages, setMessages] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -138,7 +138,7 @@ function RepositoryChatbot({ repositoryData }) {
 
   const scrollRef = useRef(null);
   const textareaRef = useRef(null);
-
+const repositoryId = localStorage.getItem("repositoryId");
   // ==========================================
   // Auto-scroll to latest message
   // ==========================================
@@ -179,12 +179,15 @@ function RepositoryChatbot({ repositoryData }) {
     try {
       // IMPORTANT:
       // Backend route is /assistant/ask
-      const response = await axios.post(
-        `${API_URL}/assistant/ask`,
-        {
-          question: userQuestion,
-        }
-      );
+      const repositoryId = localStorage.getItem("repositoryId");
+
+const response = await axios.post(
+  `${API_URL}/assistant/ask`,
+  {
+    question: userQuestion,
+    repositoryId,
+  }
+);
 
       console.log("Assistant response:", response.data);
 
@@ -308,17 +311,17 @@ function RepositoryChatbot({ repositoryData }) {
           Repository status
       ======================================= */}
 
-      {!repositoryData ? (
-        <div className="bg-slate-50 rounded-xl p-6 flex flex-col items-center text-center">
+    {!repositoryId ? (
+  <div className="bg-slate-50 rounded-xl p-6 flex flex-col items-center text-center">
 
-          <FolderGit2 className="h-6 w-6 text-slate-400 mb-2" />
+    <FolderGit2 className="h-6 w-6 text-slate-400 mb-2" />
 
-          <p className="text-sm text-slate-500">
-            Analyze a repository first to chat about it.
-          </p>
+    <p className="text-sm text-slate-500">
+      Analyze a repository first to chat about it.
+    </p>
 
-        </div>
-      ) : (
+  </div>
+) : (
         <>
 
           {/* ==================================
