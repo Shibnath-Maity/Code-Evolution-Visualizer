@@ -1,6 +1,6 @@
 const express = require("express");
 const router = express.Router();
-
+const crypto = require("crypto");
 const {
   cloneRepository,
   getCommits,
@@ -41,50 +41,56 @@ router.get("/repo-info", async (req, res) => {
     });
   }
 });
+
 // Analyze Repository
 router.post("/analytics", async (req, res) => {
   try {
-    
-const { url, repositoryId = "test-repository" } = req.body;
+const { url, repositoryId } = req.body;
+  //  const repositoryId = crypto.randomUUID();
+console.log("Repository ID from frontend:", repositoryId);
+    console.log("🚀 Starting repository analysis...");
 
-console.log("🚀 Starting repository analysis...");
+    // Normal repository analysis
+    const result = await analyzeRepository(url, repositoryId);
 
-const result = await analyzeRepository(url);
+    currentRepoPath = result.repoPath;
 
-currentRepoPath = result.repoPath;
+    console.log("8️⃣ Sending dashboard response...");
 
-// ==========================================
-// Index repository into ChromaDB
-// ==========================================
-
-console.log("\n🧠 Starting RAG indexing...");
-
-await indexRepository(
-  result.repoPath,
-  repositoryId
-);
-
-console.log("✅ RAG indexing completed");
-    console.log("8️⃣ Sending response...");
-
+    // Send dashboard immediately
     res.json({
-    stats: result.stats,
-  contributors: result.contributors,
-  timeline: result.timeline,
-
-  fileAnalysis: result.fileAnalysis,
-
-  languageAnalysis: result.languageAnalysis,
-
-  codeEvolution: result.codeEvolution,
-
-  hotspots: result.hotspots,
-
-  branches: result.branches,
-
-  recentCommits: result.recentCommits,
-  allCommits: result.allCommits,
+        repositoryId,
+      stats: result.stats,
+      contributors: result.contributors,
+      timeline: result.timeline,
+      fileAnalysis: result.fileAnalysis,
+      languageAnalysis: result.languageAnalysis,
+      codeEvolution: result.codeEvolution,
+      hotspots: result.hotspots,
+      branches: result.branches,
+      recentCommits: result.recentCommits,
+      allCommits: result.allCommits,
     });
+
+    // ==========================================
+    // Background RAG Indexing (does NOT block UI)
+    // ==========================================
+//     setImmediate(() => {
+//       console.log("\n🧠 Starting background RAG indexing...");
+//  console.log("Repository ID:", repositoryId);
+//   console.log("Repository Path:", result.repoPath);
+//       indexRepository(result.repoPath, repositoryId)
+      
+//         .then(() => {
+//           console.log("✅ Background RAG indexing completed!");
+//         })
+//         .catch((err) => {
+//           console.error(
+//             "❌ Background RAG indexing failed:",
+//             err.message
+//           );
+//         });
+//     });
 
   } catch (error) {
     console.error("❌ Backend Error:");
@@ -97,55 +103,4 @@ console.log("✅ RAG indexing completed");
   }
 });
 
-router.get("/commit/:hash", async (req, res) => {
-  console.log("Commit API Called");
-
-  try {
-    const { hash } = req.params;
-
-    console.log("Hash:", hash);
-    console.log("Repo Path:", currentRepoPath);
-
-    const commit = await getCommitDetails(currentRepoPath, hash);
-
-    console.log("Commit fetched successfully");
-
-    res.json({
-      success: true,
-      data: commit,
-    });
-  } catch (error) {
-    console.log("ERROR OCCURRED");
-    console.log(error);
-
-    res.status(500).json({
-      success: false,
-      message: error.message,
-    });
-  }
-});
-router.get("/commit/:hash/diff", async (req, res) => {
-  try {
-    const { hash } = req.params;
-
-    console.log("Diff API Called");
-    console.log("Hash:", hash);
-    console.log("Repo Path:", currentRepoPath);
-
-    const diff = await getCommitDiff(currentRepoPath, hash);
-
-    res.json({
-      success: true,
-      data: diff,
-    });
-
-  } catch (error) {
-    console.error(error);
-
-    res.status(500).json({
-      success: false,
-      message: error.message,
-    });
-  }
-});
 module.exports = router;

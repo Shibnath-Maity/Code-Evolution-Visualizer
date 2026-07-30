@@ -1,4 +1,3 @@
-
 const express = require("express");
 
 const {
@@ -10,10 +9,12 @@ const router = express.Router();
 // ==========================================
 // Ask AI Repository Assistant
 // ==========================================
-
 router.post("/ask", async (req, res) => {
   try {
-    const { question } = req.body;
+    const {
+      question,
+      repositoryId,
+    } = req.body;
 
     if (!question || !question.trim()) {
       return res.status(400).json({
@@ -22,7 +23,10 @@ router.post("/ask", async (req, res) => {
     }
 
     const result =
-      await askRepositoryAssistant(question);
+      await askRepositoryAssistant(
+        question,
+        repositoryId
+      );
 
     res.json({
       success: true,
@@ -38,9 +42,9 @@ router.post("/ask", async (req, res) => {
 
     res.status(500).json({
       success: false,
-      error: "Failed to process assistant request.",
+      error:
+        "Failed to process assistant request.",
     });
   }
 });
-
 module.exports = router;

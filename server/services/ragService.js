@@ -2,6 +2,7 @@ const axios = require("axios");
 const { ChromaClient } = require("chromadb");
 
 const OLLAMA_URL = "http://localhost:11434";
+const COLLECTION_NAME = "repository_knowledge";
 
 // ==========================================
 // Connect to ChromaDB
@@ -14,27 +15,90 @@ const chroma = new ChromaClient({
 });
 
 // ==========================================
+// Config: manifest files & scoring weights
+// (single source of truth, was duplicated
+// 3x in the original)
+// ==========================================
+
+const MANIFEST_FILES = new Set([
+  "package.json",
+  "pom.xml",
+  "build.gradle",
+  "build.gradle.kts",
+  "requirements.txt",
+  "pyproject.toml",
+  "cargo.toml",
+  "go.mod",
+]);
+
+const CODE_EXTENSIONS = new Set([
+  ".js",
+  ".jsx",
+  ".ts",
+  ".tsx",
+  ".java",
+  ".py",
+]);
+
+const CONFIG_EXTENSIONS = new Set([
+  ".json",
+  ".xml",
+  ".yaml",
+  ".yml",
+]);
+
+const WEIGHTS = {
+  semantic: 5,
+  keywordInText: 1,
+  keywordInFile: 4,
+  keywordInFileName: 5,
+  keywordInDirectory: 3,
+  exactFileNameMatch: 100,
+  fileEndsWithName: 80,
+  exactPathMentioned: 80,
+  fileNameMentioned: 50,
+  summaryOverview: 40,
+  summaryTechnology: 35,
+  summaryFileQuestion: 30,
+  summaryArchitecture: 30,
+  summaryGeneric: 5,
+  readmeCore: 15,
+  readmeDependency: 8,
+  techSummaryBoost: 25,
+  techManifestBoost: 30,
+  techConfigExtBoost: 5,
+  dependencyManifestBoost: 50,
+  dependencyReadmeBoost: 10,
+  apiPathMatch: 15,
+  apiFileNameMatch: 15,
+  apiExtensionMatch: 5,
+  architectureSummary: 30,
+  architectureCorePath: 10,
+  architectureReadme: 15,
+  fileQuestionSummary: 30,
+  fileQuestionHasFileName: 3,
+  sourceCodeGeneric: 3,
+  codeReviewSource: 30,
+  codeReviewExtension: 20,
+  codeReviewSummaryPenalty: -10,
+};
+
+const DEFAULT_CANDIDATE_POOL = 30;
+
+// ==========================================
 // Create Embedding using Ollama
 // ==========================================
 
 async function createEmbedding(text) {
   try {
-    const response = await axios.post(
-      `${OLLAMA_URL}/api/embed`,
-      {
-        model: "nomic-embed-text",
-        input: text,
-      }
-    );
+    const response = await axios.post(`${OLLAMA_URL}/api/embed`, {
+      model: "nomic-embed-text",
+      input: text,
+    });
 
     return response.data.embeddings[0];
-
   } catch (error) {
-    console.error(
-      "Embedding Error:",
-      error.response?.data || error.message
-    );
-
+    console.error("Embedding Error:", error.response?.data || error.message);
     throw error;
   }
 }
@@ -44,31 +108,22 @@ async function createEmbedding(text) {
 // ==========================================
 
 async function getCollection() {
-  const collection =
-    await chroma.getOrCreateCollection({
-      name: "repository_knowledge",
-      embeddingFunction: null,
-    });
-
-  return collection;
+  return chroma.getOrCreateCollection({
+    name: COLLECTION_NAME,
+    embeddingFunction: null,
+  });
 }
 
 // ==========================================
 // Add Document to ChromaDB
 // ==========================================
 
-async function addDocument(
-  id,
-  text,
-  metadata = {}
-) {
+async function addDocument(id, text, metadata = {}) {
   try {
     const collection = await getCollection();
-
     const embedding = await createEmbedding(text);
 
-    console.log("📦 Metadata being stored:");
-    console.log(metadata);
+    console.log("📦 Metadata being stored:", metadata);
 
     await collection.add({
       ids: [id],
@@ -77,616 +132,363 @@ async function addDocument(
       metadatas: [metadata],
     });
 
-    console.log(
-      `Document added to ChromaDB: ${id}`
-    );
-
+    console.log(`Document added to ChromaDB: ${id}`);
   } catch (error) {
-    console.error(
-      "ChromaDB Add Error:",
-      error.message
-    );
-
+    console.error("ChromaDB Add Error:", error.message);
     throw error;
   }
+}
+
+// ==========================================
+// Query classification helpers
+// ==========================================
+
+function normalizeQuery(query) {
+  return query.toLowerCase().replace(/\\/g, "/").trim();
+}
+
+function includesAny(text, phrases) {
+  return phrases.some((phrase) => text.includes(phrase));
+}
+
+function classifyQuestion(q) {
+  const isOverview = includesAny(q, [
+    "overview",
+    "repository overview",
+    "project overview",
+    "repository structure",
+    "project structure",
+    "main components",
+    "main parts",
+    "what does this repo contain",
+    "what does this repository contain",
+    "what does this project contain",
+    "how is this repository organized",
+    "how is this project organized",
+  ]);
+
+  const isTechnology = includesAny(q, [
+    "technology",
+    "technologies",
+    "framework",
+    "frameworks",
+    "library",
+    "libraries",
+    "database",
+    "databases",
+    "language",
+    "languages",
+    "tech stack",
+    "stack",
+  ]);
+
+  const isDependency = includesAny(q, [
+    "dependency",
+    "dependencies",
+    "package",
+    "packages",
+    "external library",
+    "external libraries",
+  ]);
+
+  const isApi = includesAny(q, [
+    "api",
+    "endpoint",
+    "endpoints",
+    "route",
+    "routes",
+    "controller",
+    "controllers",
+  ]);
+
+  const isArchitecture = includesAny(q, [
+    "architecture",
+    "flow",
+    "components interact",
+    "how does the project work",
+    "how does this project work",
+    "how do the components interact",
+  ]);
+
+  const isFileQuestion = includesAny(q, [
+    "file",
+    "files",
+    "folder",
+    "directory",
+    "directories",
+  ]);
+
+  const isCodeReview = includesAny(q, [
+    "improvement",
+  "improve",
+  "refactor",
+  "review",
+  "code quality",
+  "best practice",
+  "bug",
+  "optimize",
+  "suggest",
+  "issue",
+  "issues",
+  "problem",
+  "problems",
+  "security",
+  "performance",
+  "maintainability",
+  "readability",
+  "clean code",
+  ]);
+
+  return {
+    isOverview,
+    isTechnology,
+    isDependency,
+    isApi,
+    isArchitecture,
+    isFileQuestion,
+    isCodeReview,
+  };
+}
+
+function extractQueryWords(q) {
+  return q.split(/[^a-zA-Z0-9_.-]+/).filter((word) => word.length > 2);
+}
+
+const FILE_EXTENSION_PATTERN =
+  /\.(js|jsx|ts|tsx|java|py|c|cpp|h|hpp|html|css|scss|json|md|xml|yml|yaml|sql)$/;
+
+function findMentionedFileName(queryWords) {
+  return queryWords.find((word) => FILE_EXTENSION_PATTERN.test(word));
+}
+
+// ==========================================
+// Scoring
+// ==========================================
+
+function scoreCandidate({ document, metadata, distance, queryWords, q, signals, possibleFileName }) {
+  const text = document.toLowerCase();
+  const file = (metadata.file || "").toLowerCase().replace(/\\/g, "/");
+  const fileName = (metadata.fileName || "").toLowerCase();
+  const directory = (metadata.directory || "").toLowerCase().replace(/\\/g, "/");
+  const extension = (metadata.extension || "").toLowerCase();
+  const type = (metadata.type || "").toLowerCase();
+
+  const {
+    isOverview,
+    isTechnology,
+    isDependency,
+    isApi,
+    isArchitecture,
+    isFileQuestion,
+    isCodeReview,
+    isSpecificFileQuestion,
+  } = signals;
+
+  let score = 0;
+
+  // Semantic similarity
+  score += (1 - distance) * WEIGHTS.semantic;
+
+  // Keyword matching
+  for (const word of queryWords) {
+    if (text.includes(word)) score += WEIGHTS.keywordInText;
+    if (file.includes(word)) score += WEIGHTS.keywordInFile;
+    if (fileName.includes(word)) score += WEIGHTS.keywordInFileName;
+    if (directory.includes(word)) score += WEIGHTS.keywordInDirectory;
+  }
+
+  // Exact file targeting (single boost path — the original applied this
+  // twice: once for isSpecificFileQuestion, once again unconditionally)
+  if (possibleFileName && fileName === possibleFileName) {
+    score += isSpecificFileQuestion
+      ? WEIGHTS.exactFileNameMatch
+      : WEIGHTS.exactFileNameMatch * 0.6;
+  } else if (isSpecificFileQuestion && possibleFileName && file.endsWith("/" + possibleFileName)) {
+    score += WEIGHTS.fileEndsWithName;
+  }
+
+  if (file && q.includes(file)) score += WEIGHTS.exactPathMentioned;
+  if (fileName && q.includes(fileName)) score += WEIGHTS.fileNameMentioned;
+
+  // Repository summary
+  if (type === "repository_summary") {
+    if (isOverview) score += WEIGHTS.summaryOverview;
+    if (isTechnology) score += WEIGHTS.summaryTechnology;
+    if (isFileQuestion) score += WEIGHTS.summaryFileQuestion;
+    if (isArchitecture) score += WEIGHTS.summaryArchitecture;
+
+    if (!isOverview && !isTechnology && !isFileQuestion && !isArchitecture) {
+      score += WEIGHTS.summaryGeneric;
+    }
+  }
+
+  // README boost
+  if (fileName === "readme.md") {
+    if (isOverview || isTechnology || isArchitecture) score += WEIGHTS.readmeCore;
+    if (isDependency) score += WEIGHTS.readmeDependency;
+  }
+
+  // Technology question
+  if (isTechnology) {
+    if (type === "repository_summary") score += WEIGHTS.techSummaryBoost;
+    if (MANIFEST_FILES.has(fileName)) score += WEIGHTS.techManifestBoost;
+    if (CONFIG_EXTENSIONS.has(extension)) score += WEIGHTS.techConfigExtBoost;
+  }
+
+  // Dependency question
+  if (isDependency) {
+    if (MANIFEST_FILES.has(fileName)) score += WEIGHTS.dependencyManifestBoost;
+    if (fileName === "readme.md") score += WEIGHTS.dependencyReadmeBoost;
+  }
+
+  // API question
+  if (isApi) {
+    const pathHints = ["route", "routes", "controller", "controllers", "api", "server", "app"];
+    if (pathHints.some((hint) => file.includes(hint))) score += WEIGHTS.apiPathMatch;
+
+    const nameHints = ["route", "controller", "server", "app"];
+    if (nameHints.some((hint) => fileName.includes(hint))) score += WEIGHTS.apiFileNameMatch;
+
+    if (CODE_EXTENSIONS.has(extension)) score += WEIGHTS.apiExtensionMatch;
+  }
+
+  // Architecture question
+  if (isArchitecture) {
+    if (type === "repository_summary") score += WEIGHTS.architectureSummary;
+
+    const corePaths = ["server", "app", "src", "controller", "controllers", "service", "services", "route", "routes"];
+    if (corePaths.some((hint) => file.includes(hint))) score += WEIGHTS.architectureCorePath;
+
+    if (fileName === "readme.md") score += WEIGHTS.architectureReadme;
+  }
+
+  // File / directory question
+  if (isFileQuestion) {
+    if (type === "repository_summary") score += WEIGHTS.fileQuestionSummary;
+    if (fileName) score += WEIGHTS.fileQuestionHasFileName;
+  }
+
+  // Plain source code, no special intent detected
+  if (
+    type === "source" &&
+    !isOverview &&
+    !isTechnology &&
+    !isDependency &&
+    !isArchitecture &&
+    !isFileQuestion
+  ) {
+    score += WEIGHTS.sourceCodeGeneric;
+  }
+
+  // Code review question
+  if (isCodeReview) {
+    if (type === "source") score += WEIGHTS.codeReviewSource;
+    if (CODE_EXTENSIONS.has(extension)) score += WEIGHTS.codeReviewExtension;
+    if (type === "repository_summary") score += WEIGHTS.codeReviewSummaryPenalty;
+  }
+
+  return score;
+}
+
+function logRanking(finalResults) {
+  console.log("\n🎯 Ranked Results:");
+
+  finalResults.forEach((item, index) => {
+    const displayName =
+      item.metadata?.type === "repository_summary"
+        ? "REPOSITORY_SUMMARY"
+        : item.metadata?.file || "unknown";
+
+    console.log(`${index + 1}. ${displayName}`);
+    console.log(`   Type: ${item.metadata?.type || "unknown"}`);
+    console.log(`   Score: ${item.score.toFixed(3)}`);
+    console.log(`   Distance: ${item.distance}`);
+  });
 }
 
 // ==========================================
 // Search Repository Knowledge
 // ==========================================
 
-async function searchDocuments(
-  query,
-  repositoryId,
-  limit = 8
-) {
+async function searchDocuments(query, repositoryId, limit = 8) {
   try {
     const collection = await getCollection();
-
-    // ==========================================
-    // 1. Create embedding for user question
-    // ==========================================
-
-    const queryEmbedding =
-      await createEmbedding(query);
-
-    // ==========================================
-    // 2. Retrieve many candidates
-    // ==========================================
+    const queryEmbedding = await createEmbedding(query);
 
     const results = await collection.query({
       queryEmbeddings: [queryEmbedding],
-      nResults: 30,
-      where: {
-        repositoryId: repositoryId,
-      },
+      nResults: DEFAULT_CANDIDATE_POOL,
+      where: { repositoryId },
     });
 
-    const documents =
-      results.documents?.[0] || [];
+    const documents = results.documents?.[0] || [];
+    const metadatas = results.metadatas?.[0] || [];
+    const distances = results.distances?.[0] || [];
 
-    const metadatas =
-      results.metadatas?.[0] || [];
-
-    const distances =
-      results.distances?.[0] || [];
-
-    console.log(
-      `📚 Chroma retrieved ${documents.length} candidates`
-    );
-
-    // ==========================================
-    // No results
-    // ==========================================
+    console.log(`📚 Chroma retrieved ${documents.length} candidates`);
 
     if (documents.length === 0) {
-      return {
-        documents: [[]],
-        metadatas: [[]],
-        distances: [[]],
-      };
+      return { documents: [[]], metadatas: [[]], distances: [[]] };
     }
 
-    // ==========================================
-    // 3. Normalize query
-    // ==========================================
-
-    const q = query
-      .toLowerCase()
-      .replace(/\\/g, "/")
-      .trim();
-
-    // ==========================================
-    // 4. Detect question type
-    // ==========================================
-
-const isOverview =
-  q.includes("overview") ||
-  q.includes("repository overview") ||
-  q.includes("project overview") ||
-  q.includes("repository structure") ||
-  q.includes("project structure") ||
-  q.includes("main components") ||
-  q.includes("main parts") ||
-  q.includes("what does this repo contain") ||
-  q.includes("what does this repository contain") ||
-  q.includes("what does this project contain") ||
-  q.includes("how is this repository organized") ||
-  q.includes("how is this project organized");   
-
-    const isTechnology =
-      q.includes("technology") ||
-      q.includes("technologies") ||
-      q.includes("framework") ||
-      q.includes("frameworks") ||
-      q.includes("library") ||
-      q.includes("libraries") ||
-      q.includes("database") ||
-      q.includes("databases") ||
-      q.includes("language") ||
-      q.includes("languages") ||
-      q.includes("tech stack") ||
-      q.includes("stack");
-
-    const isDependency =
-      q.includes("dependency") ||
-      q.includes("dependencies") ||
-      q.includes("package") ||
-      q.includes("packages") ||
-      q.includes("external library") ||
-      q.includes("external libraries");
-
-    const isApi =
-      q.includes("api") ||
-      q.includes("endpoint") ||
-      q.includes("endpoints") ||
-      q.includes("route") ||
-      q.includes("routes") ||
-      q.includes("controller") ||
-      q.includes("controllers");
-
-    const isArchitecture =
-      q.includes("architecture") ||
-      q.includes("flow") ||
-      q.includes("components interact") ||
-      q.includes("how does the project work") ||
-      q.includes("how does this project work") ||
-      q.includes("how do the components interact");
-
-    const isFileQuestion =
-      q.includes("file") ||
-      q.includes("files") ||
-      q.includes("folder") ||
-      q.includes("directory") ||
-      q.includes("directories");
-
-    // ==========================================
-    // 5. Extract query words
-    // ==========================================
-
-    const queryWords = q
-      .split(/[^a-zA-Z0-9_.-]+/)
-      .filter(word => word.length > 2);
-
-    // ==========================================
-    // 6. Try to detect an exact filename
-    // ==========================================
-
-    const possibleFileName =
-      queryWords.find(word =>
-        /\.(js|jsx|ts|tsx|java|py|c|cpp|h|hpp|html|css|scss|json|md|xml|yml|yaml|sql)$/
-          .test(word)
-      );
-// ==========================================
-// Detect whether this is a specific-file question
-// ==========================================
-
-const isSpecificFileQuestion =
-  !!possibleFileName ||
-  q.includes("implementation of") ||
-  q.includes("code in") ||
-  q.includes("explain the code") ||
-  q.includes("explain this file");
-    // ==========================================
-    // 7. Rank candidates
-    // ==========================================
-
-    const ranked = documents.map(
-      (document, index) => {
-
-        const metadata =
-          metadatas[index] || {};
-
-        const distance =
-          distances[index] ?? 1;
-
-        const text =
-          document.toLowerCase();
-
-        const file =
-          (metadata.file || "")
-            .toLowerCase()
-            .replace(/\\/g, "/");
-
-        const fileName =
-          (metadata.fileName || "")
-            .toLowerCase();
-
-        const directory =
-          (metadata.directory || "")
-            .toLowerCase()
-            .replace(/\\/g, "/");
-
-        const extension =
-          (metadata.extension || "")
-            .toLowerCase();
-
-        const type =
-          (metadata.type || "")
-            .toLowerCase();
-
-        const language =
-          (metadata.language || "")
-            .toLowerCase();
-
-        let score = 0;
-// ========================================
-// Exact file retrieval boost
-// ========================================
-
-if (isSpecificFileQuestion && possibleFileName) {
-  if (fileName === possibleFileName) {
-    score += 100;
-  }
-
-  if (file.endsWith("/" + possibleFileName)) {
-    score += 80;
-  }
-}
-        // ========================================
-        // A. Semantic similarity
-        // ========================================
-
-        score += (1 - distance) * 5;
-
-        // ========================================
-        // B. Keyword matching
-        // ========================================
-
-        for (const word of queryWords) {
-
-          if (text.includes(word)) {
-            score += 1;
-          }
-
-          if (file.includes(word)) {
-            score += 4;
-          }
-
-          if (fileName.includes(word)) {
-            score += 5;
-          }
-
-          if (directory.includes(word)) {
-            score += 3;
-          }
-        }
-
-        // ========================================
-        // C. Exact filename match
-        // ========================================
-
-        if (
-          possibleFileName &&
-          fileName === possibleFileName
-        ) {
-          score += 60;
-        }
-
-        // ========================================
-        // D. Exact path match
-        // ========================================
-
-        if (
-          file &&
-          q.includes(file)
-        ) {
-          score += 80;
-        }
-
-        // ========================================
-        // E. Exact filename mentioned anywhere
-        // ========================================
-
-        if (
-          fileName &&
-          q.includes(fileName)
-        ) {
-          score += 50;
-        }
-
-        // ========================================
-        // F. Repository Summary
-        // ========================================
-
-        if (
-          type === "repository_summary"
-        ) {
-
-          if (isOverview) {
-            score += 40;
-          }
-
-          if (isTechnology) {
-            score += 35;
-          }
-
-          if (isFileQuestion) {
-            score += 30;
-          }
-
-          if (isArchitecture) {
-            score += 30;
-          }
-
-          // Don't give summary too much
-          // priority for specific code questions
-          if (
-            !isOverview &&
-            !isTechnology &&
-            !isFileQuestion &&
-            !isArchitecture
-          ) {
-            score += 5;
-          }
-        }
-
-        // ========================================
-        // G. README boost
-        // ========================================
-
-        if (
-          fileName === "readme.md"
-        ) {
-
-          if (
-            isOverview ||
-            isTechnology ||
-            isArchitecture
-          ) {
-            score += 15;
-          }
-
-          if (isDependency) {
-            score += 8;
-          }
-        }
-
-        // ========================================
-        // H. Technology question
-        // ========================================
-
-        if (isTechnology) {
-
-          if (
-            type === "repository_summary"
-          ) {
-            score += 25;
-          }
-
-          if (
-            fileName === "package.json" ||
-            fileName === "pom.xml" ||
-            fileName === "build.gradle" ||
-            fileName === "build.gradle.kts" ||
-            fileName === "requirements.txt" ||
-            fileName === "pyproject.toml" ||
-            fileName === "cargo.toml" ||
-            fileName === "go.mod"
-          ) {
-            score += 30;
-          }
-
-          if (
-            extension === ".json" ||
-            extension === ".xml" ||
-            extension === ".yaml" ||
-            extension === ".yml"
-          ) {
-            score += 5;
-          }
-        }
-
-        // ========================================
-        // I. Dependency question
-        // ========================================
-
-        if (isDependency) {
-
-          if (
-            fileName === "package.json" ||
-            fileName === "pom.xml" ||
-            fileName === "build.gradle" ||
-            fileName === "build.gradle.kts" ||
-            fileName === "requirements.txt" ||
-            fileName === "pyproject.toml" ||
-            fileName === "cargo.toml" ||
-            fileName === "go.mod"
-          ) {
-            score += 50;
-          }
-
-          if (
-            fileName === "readme.md"
-          ) {
-            score += 10;
-          }
-        }
-
-        // ========================================
-        // J. API question
-        // ========================================
-
-        if (isApi) {
-
-          if (
-            file.includes("route") ||
-            file.includes("routes") ||
-            file.includes("controller") ||
-            file.includes("controllers") ||
-            file.includes("api") ||
-            file.includes("server") ||
-            file.includes("app")
-          ) {
-            score += 15;
-          }
-
-          if (
-            fileName.includes("route") ||
-            fileName.includes("controller") ||
-            fileName.includes("server") ||
-            fileName.includes("app")
-          ) {
-            score += 15;
-          }
-
-          if (
-            extension === ".js" ||
-            extension === ".jsx" ||
-            extension === ".ts" ||
-            extension === ".tsx" ||
-            extension === ".java" ||
-            extension === ".py"
-          ) {
-            score += 5;
-          }
-        }
-
-        // ========================================
-        // K. Architecture question
-        // ========================================
-
-        if (isArchitecture) {
-
-          if (
-            type === "repository_summary"
-          ) {
-            score += 30;
-          }
-
-          if (
-            file.includes("server") ||
-            file.includes("app") ||
-            file.includes("src") ||
-            file.includes("controller") ||
-            file.includes("controllers") ||
-            file.includes("service") ||
-            file.includes("services") ||
-            file.includes("route") ||
-            file.includes("routes")
-          ) {
-            score += 10;
-          }
-
-          if (
-            fileName === "readme.md"
-          ) {
-            score += 15;
-          }
-        }
-
-        // ========================================
-        // L. File / directory question
-        // ========================================
-
-        if (isFileQuestion) {
-
-          if (
-            type === "repository_summary"
-          ) {
-            score += 30;
-          }
-
-          if (
-            fileName
-          ) {
-            score += 3;
-          }
-        }
-
-        // ========================================
-        // M. Source code boost
-        // ========================================
-
-        if (
-          type === "source" &&
-          !isOverview &&
-          !isTechnology &&
-          !isDependency &&
-          !isArchitecture &&
-          !isFileQuestion
-        ) {
-          score += 3;
-        }
-
-        return {
+    const q = normalizeQuery(query);
+    const questionType = classifyQuestion(q);
+    const queryWords = extractQueryWords(q);
+    const possibleFileName = findMentionedFileName(queryWords);
+
+    const signals = {
+      ...questionType,
+      isSpecificFileQuestion:
+        !!possibleFileName ||
+        q.includes("implementation of") ||
+        q.includes("code in") ||
+        q.includes("explain the code") ||
+        q.includes("explain this file"),
+    };
+
+    const ranked = documents
+      .map((document, index) => {
+        const metadata = metadatas[index] || {};
+        const distance = distances[index] ?? 1;
+
+        const score = scoreCandidate({
           document,
           metadata,
           distance,
-          score,
-        };
-      }
-    );
+          queryWords,
+          q,
+          signals,
+          possibleFileName,
+        });
 
-    // ==========================================
-    // 8. Sort highest score first
-    // ==========================================
+        return { document, metadata, distance, score };
+      })
+      .sort((a, b) => b.score - a.score);
 
-    ranked.sort(
-      (a, b) => b.score - a.score
-    );
+    const needsWiderPool =
+      signals.isOverview ||
+      signals.isTechnology ||
+      signals.isDependency ||
+      signals.isApi ||
+      signals.isArchitecture ||
+      signals.isCodeReview;
 
-    // ==========================================
-    // 9. Select top results
-    // ==========================================
+   let finalLimit = limit;
 
-let finalLimit = limit;
+if (signals.isOverview) finalLimit = 12;
+if (signals.isCodeReview) finalLimit = 15;
+if (signals.isArchitecture) finalLimit = 12;
+    const finalResults = ranked.slice(0, finalLimit);
 
-if (
-  isOverview ||
-  isTechnology ||
-  isDependency ||
-  isApi ||
-  isArchitecture
-) {
-  finalLimit = 10;
-}
-
-const finalResults =
-  ranked.slice(0, finalLimit);
-    // ==========================================
-    // 10. Debug ranking
-    // ==========================================
-
-    console.log("\n🎯 Ranked Results:");
-
-finalResults.forEach((item, index) => {
-
-  const displayName =
-    item.metadata?.type === "repository_summary"
-      ? "REPOSITORY_SUMMARY"
-      : item.metadata?.file || "unknown";
-
-  console.log(
-    `${index + 1}. ${displayName}`
-  );
-
-  console.log(
-    `   Type: ${
-      item.metadata?.type || "unknown"
-    }`
-  );
-
-  console.log(
-    `   Score: ${item.score.toFixed(3)}`
-  );
-
-  console.log(
-    `   Distance: ${item.distance}`
-  );
-});
-      
-    // ==========================================
-    // 11. Return results
-    // ==========================================
+    logRanking(finalResults);
 
     return {
-      documents: [
-        finalResults.map(
-          item => item.document
-        ),
-      ],
-
-      metadatas: [
-        finalResults.map(
-          item => item.metadata
-        ),
-      ],
-
-      distances: [
-        finalResults.map(
-          item => item.distance
-        ),
-      ],
+      documents: [finalResults.map((item) => item.document)],
+      metadatas: [finalResults.map((item) => item.metadata)],
+      distances: [finalResults.map((item) => item.distance)],
     };
-
   } catch (error) {
-
-    console.error(
-      "ChromaDB Search Error:",
-      error.message
-    );
-
+    console.error("ChromaDB Search Error:", error.message);
     throw error;
   }
 }
@@ -697,21 +499,10 @@ finalResults.forEach((item, index) => {
 
 async function deleteCollection() {
   try {
-
-    await chroma.deleteCollection({
-      name: "repository_knowledge",
-    });
-
-    console.log(
-      "🗑️ Collection deleted"
-    );
-
+    await chroma.deleteCollection({ name: COLLECTION_NAME });
+    console.log("🗑️ Collection deleted");
   } catch (error) {
-
-    console.log(
-      "Collection delete error:",
-      error.message
-    );
+    console.log("Collection delete error:", error.message);
   }
 }
 

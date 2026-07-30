@@ -4,17 +4,32 @@ const {
   getContributors,
   getCommitStats,
 } = require("./gitService");
-
+const { indexRepository } = require("./vectorService");
 const { getBranches } = require("./branchService");
 const { createTimeline } = require("./analyticsService");
 const { getFileChanges } = require("./fileAnalyticsService");
 const { calculateHotspots } = require("./hotspotService");
 const { analyzeLanguages } = require("./languageService");
 const { getCodeChurn } = require("./churnService");
-async function analyzeRepository(url) {
+async function analyzeRepository(url, repositoryId) {
   console.log("1️⃣ Cloning repository...");
 
   const repoPath = await cloneRepository(url);
+  console.log("🔍 Starting repository indexing...");
+console.log("Repository:", repoPath);
+console.log("Repository ID:", repositoryId);
+indexRepository(repoPath, repositoryId)
+  .then(() => {
+    console.log("✅ Background repository indexing completed!");
+  })
+  .catch((error) => {
+    console.error(
+      "❌ Background repository indexing failed:",
+      error.message
+    );
+  });
+
+console.log("✅ Repository indexing completed!");
 
   console.log("2️⃣ Getting commits...");
   const commits = await getCommits(repoPath);
