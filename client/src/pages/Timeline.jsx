@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import axios from "axios";
+// import axios from "axios";
 import { GitCommit, Clock, Copy, Check, History, ChevronDown } from "lucide-react";
 import CommitActivityGraph from "../components/CommitActivityGraph";
 const PAGE_SIZE = 10;
@@ -87,38 +87,23 @@ export default function Timeline() {
   const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
-    useEffect(() => {
-    const repoUrl = localStorage.getItem("repoUrl");
+  
+useEffect(() => {
+  const analysis = JSON.parse(
+    localStorage.getItem("repositoryAnalysis")
+  );
 
-    if (!repoUrl) {
-      setError("No repository selected.");
-      setLoading(false);
-      return;
-    }
+  if (!analysis) {
+    setError("Please analyze a repository first.");
+    setLoading(false);
+    return;
+  }
 
-    const fetchTimeline = async () => {
-      try {
-        const response = await axios.post(
-          "http://localhost:5000/repository/analytics",
-          {
-            url: repoUrl,
-          }
-        );
+  console.log("Timeline:", analysis.timeline);
 
-        console.log("Timeline data:", response.data.timeline);
-
-        setTimeline(response.data.timeline || []);
-      } catch (err) {
-        console.error("Timeline fetch error:", err);
-        setError("Failed to load timeline.");
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    fetchTimeline();
-  }, []);
-
+  setTimeline(analysis.timeline || []);
+  setLoading(false);
+}, []);
 const graphTimeline = useMemo(() => {
   const result = {};
 

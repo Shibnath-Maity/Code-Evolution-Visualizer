@@ -286,25 +286,33 @@ function AIInsights() {
     { icon: GitCommitHorizontal, label: "Total Commits", value: stats.totalCommits || 0, sub: "Repository history" },
   ];
 
-  useEffect(() => {
-    loadRepositoryData();
-  }, []);
+  // useEffect(() => {
+  //   loadRepositoryData();
+  // }, []);
 
-  async function loadRepositoryData() {
-    try {
-      const storedRepoUrl = localStorage.getItem("repoUrl");
-      if (!storedRepoUrl) return;
+  // async function loadRepositoryData() {
+  //   try {
+  //     const storedRepoUrl = localStorage.getItem("repoUrl");
+  //     if (!storedRepoUrl) return;
 
-      const response = await axios.post(`${API_URL}/repository/analytics`, {
-        url: storedRepoUrl,
-      });
+  //     const response = await axios.post(`${API_URL}/repository/analytics`, {
+  //       url: storedRepoUrl,
+  //     });
 
-      setRepositoryData(response.data);
-    } catch (err) {
-      console.error("Repository data error:", err);
-    }
+  //     setRepositoryData(response.data);
+  //   } catch (err) {
+  //     console.error("Repository data error:", err);
+  //   }
+  // }
+useEffect(() => {
+  const analysis = JSON.parse(
+    localStorage.getItem("repositoryAnalysis")
+  );
+
+  if (analysis) {
+    setRepositoryData(analysis);
   }
-
+}, []);
   async function generateAIAnalysis() {
     if (!repositoryData) {
       setError("Repository data is not available. Analyze a repository first.");

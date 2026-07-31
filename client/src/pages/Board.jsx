@@ -66,6 +66,13 @@ const response = await API.post("/repository/analytics", {
 //       setAllCommits(data.allCommits || []);
 const data = response.data;
 
+// Save the complete analysis
+localStorage.setItem(
+  "repositoryAnalysis",
+  JSON.stringify(data)
+);
+
+// Save repository ID
 localStorage.setItem(
   "repositoryId",
   data.repositoryId
@@ -104,8 +111,8 @@ setLanguageAnalysis(data.languageAnalysis || {
 
 setCodeEvolution(data.codeEvolution || []);
 setBranches(data.branches || null);
+setHotspots(data.hotspots?.hotspots || []);
 
-setHotspots(data.hotspots || []);
 setRecentCommits(data.recentCommits || []);
 setAllCommits(data.allCommits || []);
     } catch (error) {

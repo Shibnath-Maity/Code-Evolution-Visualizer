@@ -6,7 +6,7 @@ import ContributorDetails from "../components/ContributorDetails";
 
 import { Users, Search, AlertCircle } from "lucide-react";
 
-import API from "../services/api";
+// import API from "../services/api";
 
 function getInitial(name) {
   return (name || "U").charAt(0).toUpperCase();
@@ -20,42 +20,28 @@ function Contributors() {
   const [error, setError] = useState(null);
   const [searchTerm, setSearchTerm] = useState("");
 
-  const repoUrl = localStorage.getItem("repoUrl");
+  // const repoUrl = localStorage.getItem("repoUrl");
 
   // Fetch contributors
-  useEffect(() => {
-    if (!repoUrl) {
-      setError("No repository selected. Add a repository URL to see contributors.");
-      return;
-    }
+ useEffect(() => {
+  const analysis = JSON.parse(
+    localStorage.getItem("repositoryAnalysis")
+  );
 
-    let cancelled = false;
+  if (!analysis) {
+    setError("Please analyze a repository first.");
+    setLoading(false);
+    return;
+  }
 
-    const fetchContributors = async () => {
-      setLoading(true);
-      setError(null);
+  setLoading(true);
 
-      try {
-        const response = await API.post("/repository/analytics", { url: repoUrl });
-        if (cancelled) return;
+  setContributors(analysis.contributors || {});
+  setAllCommits(analysis.allCommits || []);
 
-        setContributors(response.data.contributors || {});
-        setAllCommits(response.data.allCommits || []);
-      } catch (err) {
-        console.error("Failed to load contributors:", err);
-        if (!cancelled) {
-          setError("Couldn't load contributors for this repository. Please try again.");
-        }
-      } finally {
-        if (!cancelled) setLoading(false);
-      }
-    };
+  setLoading(false);
+}, []);
 
-    fetchContributors();
-    return () => {
-      cancelled = true;
-    };
-  }, [repoUrl]);
 
   // Sorted contributor list, total commits, and filtered results —
   // recomputed only when the underlying data or search term changes.

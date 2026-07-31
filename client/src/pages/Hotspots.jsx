@@ -14,7 +14,7 @@ import {
 } from "lucide-react";
 import { FaGithub } from "react-icons/fa";
 
-import API from "../services/api";
+// import API from "../services/api";
 
 const SORT_OPTIONS = [
   { key: "score", label: "Score" },
@@ -57,43 +57,47 @@ function Hotspots() {
 const [selectedFile, setSelectedFile] = useState(null);
   const repoUrl = localStorage.getItem("repoUrl");
 
-  const fetchHotspots = async () => {
-    if (!repoUrl) return;
+const fetchHotspots = () => {
+  const analysis = JSON.parse(
+    localStorage.getItem("repositoryAnalysis")
+  );
 
-    try {
-      setLoading(true);
-      setError(null);
+  if (!analysis) {
+    setError("Please analyze a repository first.");
+    return;
+  }
 
-      const response = await API.post("/repository/analytics", {
-        url: repoUrl,
-      });
+console.log("ANALYSIS:", analysis);
+console.log("HOTSPOTS:", analysis.hotspots);
+console.log("TYPE:", typeof analysis.hotspots);
 
-      setHotspots(response.data.hotspots || []);
-    } catch (err) {
-      console.error("Failed to load hotspots:", err);
-      setError(
-        err.response?.data?.message ||
-          "Something went wrong while analyzing hotspots. Please try again."
-      );
-    } finally {
-      setLoading(false);
-    }
-  };
+  setLoading(true);
+  setError(null);
 
+const hotspotData = Array.isArray(analysis.hotspots)
+  ? analysis.hotspots
+  : analysis.hotspots?.hotspots || [];
+
+setHotspots(hotspotData);
+console.log("Hotspots:", analysis.hotspots);
+console.log(Array.isArray(analysis.hotspots));
+
+  setLoading(false);
+};
   useEffect(() => {
     fetchHotspots();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [repoUrl]);
 
-  const scoredHotspots = useMemo(
-    () =>
-      hotspots.map((item) => ({
-        ...item,
-        score: item.score ?? item.changes ?? 0,
-      })),
-    [hotspots]
-  );
 
+const scoredHotspots = useMemo(
+  () =>
+    hotspots.map((item) => ({
+      ...item,
+      score: item.score ?? item.changes ?? 0,
+    })),
+  [hotspots]
+);
   const maxScore = useMemo(
     () => scoredHotspots.reduce((max, item) => Math.max(max, item.score || 0), 0),
     [scoredHotspots]

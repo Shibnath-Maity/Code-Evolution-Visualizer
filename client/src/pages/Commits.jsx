@@ -27,28 +27,21 @@ const [currentPage, setCurrentPage] = useState(1);
 
 const COMMITS_PER_PAGE = 10;
 
-  useEffect(() => {
-    if (!repoUrl) return;
+useEffect(() => {
+  const analysis = JSON.parse(
+    localStorage.getItem("repositoryAnalysis")
+  );
 
-    const fetchCommits = async () => {
-      try {
-        setLoading(true);
+  if (!analysis) {
+    return;
+  }
 
-        const response = await API.post("/repository/analytics", {
-          url: repoUrl,
-        });
+  console.log("First commit:", analysis.allCommits[0]);
 
-        setCommits(response.data.allCommits || []);
-
-      } catch (error) {
-        console.error("Failed to fetch commits:", error);
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    fetchCommits();
-  }, [repoUrl]);
+  setLoading(true);
+  setCommits(analysis.allCommits || []);
+  setLoading(false);
+}, []);
 
   const filteredCommits = commits.filter((commit) => {
     const search = searchTerm.toLowerCase();
@@ -69,9 +62,9 @@ const paginatedCommits = filteredCommits.slice(
   startIndex,
   startIndex + COMMITS_PER_PAGE
 );
+const handleCommitClick = async (hash) => {
+  console.log("Clicked hash:", hash);
 
-
-  const handleCommitClick = async (hash) => {
   try {
     setLoadingDetails(true);
     setLoadingDiff(true);
@@ -95,6 +88,7 @@ const paginatedCommits = filteredCommits.slice(
   }
 };
 
+  
   return (
     <div className="min-h-screen bg-gray-100 p-8">
 
