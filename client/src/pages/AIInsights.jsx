@@ -313,76 +313,34 @@ useEffect(() => {
     setRepositoryData(analysis);
   }
 }, []);
-  async function generateAIAnalysis() {
-    if (!repositoryData) {
-      setError("Repository data is not available. Analyze a repository first.");
-      return;
-    }
-
-    setLoading(true);
-    setError("");
-
-    try {
-      const prompt = `
-You are an AI assistant inside a Code Evolution Visualizer.
-
-Analyze the following repository analytics.
-
-Repository statistics:
-${JSON.stringify(repositoryData.stats, null, 2)}
-
-Contributors:
-${JSON.stringify(repositoryData.contributors, null, 2)}
-
-Timeline:
-${JSON.stringify(repositoryData.timeline?.slice(0, 100), null, 2)}
-
-File changes:
-${JSON.stringify(repositoryData.fileChanges?.slice(0, 100), null, 2)}
-
-Hotspots:
-${JSON.stringify(repositoryData.hotspots?.slice(0, 50), null, 2)}
-
-Give a developer-friendly analysis.
-
-Return exactly these sections:
-
-SUMMARY:
-Write a concise repository summary.
-
-DEVELOPMENT_ACTIVITY:
-Explain development activity and commit frequency.
-
-CODE_HEALTH:
-Discuss possible code health issues.
-
-HOTSPOTS:
-Identify important files or areas that appear frequently changed.
-
-COMMIT_QUALITY:
-Analyze commit message quality.
-
-RECOMMENDATIONS:
-Give 3-5 practical recommendations.
-
-RISK:
-Mention potential technical risks.
-
-Do not invent information that is not present in the repository data.
-`;
-
-      const response = await axios.post(`${API_URL}/ai/chat`, { question: prompt });
-
-      setAnalysis(response.data.answer);
-      setLastAnalyzedAt(new Date());
-    } catch (err) {
-      console.error("AI analysis error:", err);
-      setError(err.response?.data?.error || "Failed to generate AI analysis.");
-    } finally {
-      setLoading(false);
-    }
+ async function generateAIAnalysis() {
+  if (!repositoryData) {
+    setError("Repository data is not available. Analyze a repository first.");
+    return;
   }
 
+  setLoading(true);
+  setError("");
+
+  try {
+    const response = await axios.post(
+      `${API_URL}/ai/analyze-repository`,
+      repositoryData
+    );
+
+    setAnalysis(response.data.analysis);
+    setLastAnalyzedAt(new Date());
+  } catch (err) {
+    console.error("AI analysis error:", err);
+
+    setError(
+      err.response?.data?.error ||
+        "Failed to generate AI analysis."
+    );
+  } finally {
+    setLoading(false);
+  }
+}
   const overallScore = Math.round(
     QUALITY_METRICS.reduce((sum, metric) => sum + metric.score, 0) / QUALITY_METRICS.length
   );
