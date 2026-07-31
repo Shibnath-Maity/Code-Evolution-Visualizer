@@ -83,8 +83,9 @@ const WEIGHTS = {
   codeReviewSummaryPenalty: -10,
 };
 
-const DEFAULT_CANDIDATE_POOL = 30;
 
+const CANDIDATE_POOL_SIZE =
+  Number(process.env.RAG_CANDIDATE_POOL_SIZE) || 30;
 // ==========================================
 // Create Embedding using Ollama
 // ==========================================
@@ -287,7 +288,8 @@ function scoreCandidate({ document, metadata, distance, queryWords, q, signals, 
   let score = 0;
 
   // Semantic similarity
-  score += (1 - distance) * WEIGHTS.semantic;
+ const semanticSimilarity = Math.max(0, 1 - distance);
+score += semanticSimilarity * WEIGHTS.semantic;
 
   // Keyword matching
   for (const word of queryWords) {
@@ -417,7 +419,7 @@ async function searchDocuments(query, repositoryId, limit = 8) {
 
     const results = await collection.query({
       queryEmbeddings: [queryEmbedding],
-      nResults: DEFAULT_CANDIDATE_POOL,
+    nResults: CANDIDATE_POOL_SIZE,
       where: { repositoryId },
     });
 
@@ -465,13 +467,13 @@ async function searchDocuments(query, repositoryId, limit = 8) {
       })
       .sort((a, b) => b.score - a.score);
 
-    const needsWiderPool =
-      signals.isOverview ||
-      signals.isTechnology ||
-      signals.isDependency ||
-      signals.isApi ||
-      signals.isArchitecture ||
-      signals.isCodeReview;
+    // const needsWiderPool =
+    //   signals.isOverview ||
+    //   signals.isTechnology ||
+    //   signals.isDependency ||
+    //   signals.isApi ||
+    //   signals.isArchitecture ||
+    //   signals.isCodeReview;
 
    let finalLimit = limit;
 

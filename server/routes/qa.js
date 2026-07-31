@@ -1,108 +1,166 @@
 const express = require("express");
+const { askRepositoryAssistant } = require("../services/assistantService");
 
-const {
-  searchDocuments,
-} = require("../services/ragService");
-
-const {
-  generateAnswer,
-} = require("../services/llmService");
-console.log("🔍 generateAnswer type:", typeof generateAnswer);
 const router = express.Router();
 
-console.log("✅ qa.js loaded");
+const DEBUG = process.env.DEBUG_ASSISTANT === "true";
+const MAX_QUESTION_LENGTH = 2000;
 
+const RATE_LIMIT_WINDOW_MS = 60 * 1000;
+const RATE_LIMIT_MAX_REQUESTS = 20;
+
+const requestLog = new Map();
+
+// ==========================================
+// Logging
+// ==========================================
+
+function log(...args) {
+  if (DEBUG) {
+    console.log(...args);
+  }
+}
+
+// ==========================================
+// Rate limiting
+// ==========================================
+
+function isRateLimited(key) {
+  const now = Date.now();
+
+  const timestamps = (requestLog.get(key) || []).filter(
+    (timestamp) => now - timestamp < RATE_LIMIT_WINDOW_MS
+  );
+
+  if (timestamps.length >= RATE_LIMIT_MAX_REQUESTS) {
+    requestLog.set(key, timestamps);
+    return true;
+  }
+
+  timestamps.push(now);
+  requestLog.set(key, timestamps);
+
+  return false;
+}
+
+// Cleanup old rate-limit entries
+setInterval(() => {
+  const now = Date.now();
+
+  for (const [key, timestamps] of requestLog.entries()) {
+    const fresh = timestamps.filter(
+      (timestamp) =>
+        now - timestamp < RATE_LIMIT_WINDOW_MS
+    );
+
+    if (fresh.length === 0) {
+      requestLog.delete(key);
+    } else {
+      requestLog.set(key, fresh);
+    }
+  }
+}, RATE_LIMIT_WINDOW_MS).unref();
+
+// ==========================================
 // Test route
-router.get("/test", (req, res) => {
-  console.log("✅ QA test route called");
+// ==========================================
 
+router.get("/test", (req, res) => {
   res.json({
     message: "QA route is working",
   });
 });
 
+// ==========================================
 // AI Question Answering
+// ==========================================
+
 router.post("/", async (req, res) => {
+  const { question, repositoryId } = req.body || {};
+
+  // ----------------------------------------
+  // Validation
+  // ----------------------------------------
+
+  if (typeof question !== "string" || !question.trim()) {
+    return res.status(400).json({
+      error: "question is required",
+    });
+  }
+
+  if (
+    typeof repositoryId !== "string" &&
+    typeof repositoryId !== "number"
+  ) {
+    return res.status(400).json({
+      error: "repositoryId is required",
+    });
+  }
+
+  const repositoryIdStr = String(repositoryId).trim();
+
+  if (!repositoryIdStr) {
+    return res.status(400).json({
+      error: "repositoryId is required",
+    });
+  }
+
+  const trimmedQuestion = question.trim();
+
+  if (trimmedQuestion.length > MAX_QUESTION_LENGTH) {
+    return res.status(400).json({
+      error: `question must be ${MAX_QUESTION_LENGTH} characters or fewer`,
+    });
+  }
+
+  // ----------------------------------------
+  // Rate limiting
+  // Per client IP + repository
+  // ----------------------------------------
+
+  const rateLimitKey = `${req.ip}:${repositoryIdStr}`;
+
+  if (isRateLimited(rateLimitKey)) {
+    return res.status(429).json({
+      error:
+        "Too many questions, please slow down and try again shortly.",
+    });
+  }
+
+  log(
+    "🧠 Repository AI Question:",
+    trimmedQuestion,
+    "| repo:",
+    repositoryIdStr
+  );
+
+  // ----------------------------------------
+  // Repository Assistant
+  // ----------------------------------------
+
   try {
-    const { question, repositoryId } = req.body;
-
-    if (!question || !repositoryId) {
-      return res.status(400).json({
-        error: "question and repositoryId are required",
-      });
-    }
-
-    console.log("\n🧠 Repository AI Question:");
-    console.log(question);
-
-    // 1. Search ChromaDB
-    const results = await searchDocuments(
-      question,
-      repositoryId,
-      5
+    const result = await askRepositoryAssistant(
+      trimmedQuestion,
+      repositoryIdStr
     );
 
-    const documents = results.documents?.[0] || [];
-
-    console.log(
-      `📚 Retrieved ${documents.length} relevant chunks`
-    );
-
-    if (documents.length === 0) {
-      return res.json({
-        answer:
-          "I could not find relevant information in this repository.",
-      });
-    }
-
-    // 2. Combine retrieved context
-  const metadata = results.metadatas?.[0] || [];
-
-const context = documents
-  .map((doc, index) => {
-    const meta = metadata[index] || {};
-
-    return `
-================ FILE ${index + 1} ================
-
-File: ${meta.file || "unknown"}
-Type: ${meta.type || "unknown"}
-Language: ${meta.language || "unknown"}
-Directory: ${meta.directory || "."}
-
-CONTENT:
-${doc}
-
-================ END FILE ${index + 1} ================
-`;
-  })
-  .join("\n\n");
-
-    // 3. Send context to Gemini
-    console.log("🤖 Sending context to Gemini...");
-
-    const answer = await generateAnswer(
-      question,
-      context
-    );
-
-    // 4. Return answer
-    const sources = (results.metadatas?.[0] || []).map((metadata) => ({
-  file: metadata.file || metadata.fileName || "Unknown file",
-  language: metadata.language || "Unknown",
-  type: metadata.type || "source",
-  directory: metadata.directory || ".",
-  extension: metadata.extension || "",
-}));
-  
-res.json({
-  answer,
-  sources,
-});
+    return res.json({
+      answer: result.answer,
+      sources: result.sources || [],
+    });
   } catch (error) {
-    console.error("❌ QA Error:", error.message);
+    console.error(
+      "❌ QA Error:",
+      error.response?.data || error.message
+    );
 
-    res.status(500).json({
+    if (error.code === "GEMINI_NOT_CONFIGURED") {
+      return res.status(503).json({
+        error: "AI assistant is not configured.",
+      });
+    }
+
+    return res.status(500).json({
       error: "Failed to generate answer",
     });
   }

@@ -60,16 +60,19 @@ console.log("Repository ID from frontend:", repositoryId);
     // Send dashboard immediately
     res.json({
         repositoryId,
-      stats: result.stats,
-      contributors: result.contributors,
-      timeline: result.timeline,
-      fileAnalysis: result.fileAnalysis,
-      languageAnalysis: result.languageAnalysis,
-      codeEvolution: result.codeEvolution,
-      hotspots: result.hotspots,
-      branches: result.branches,
-      recentCommits: result.recentCommits,
-      allCommits: result.allCommits,
+  stats: result.stats,
+  contributors: result.contributors,
+  timeline: result.timeline,
+  fileAnalysis: result.fileAnalysis,
+  languageAnalysis: result.languageAnalysis,
+  codeEvolution: result.codeEvolution,
+
+  hotspots: result.hotspots,
+  allScoredHotspots: result.allScoredHotspots,
+
+  branches: result.branches,
+  recentCommits: result.recentCommits,
+  allCommits: result.allCommits,
     });
 
     // ==========================================
@@ -102,5 +105,61 @@ console.log("Repository ID from frontend:", repositoryId);
     });
   }
 });
+// Commit Details
+router.get("/commit/:hash", async (req, res) => {
+  try {
+    const { hash } = req.params;
+
+    if (!currentRepoPath) {
+      return res.status(400).json({
+        success: false,
+        message: "Repository not analyzed yet.",
+      });
+    }
+
+    const data = await getCommitDetails(currentRepoPath, hash);
+
+    res.json({
+      success: true,
+      data,
+    });
+  } catch (error) {
+    console.error(error);
+
+    res.status(500).json({
+      success: false,
+      message: error.message,
+    });
+  }
+});
+
+// Commit Diff
+router.get("/commit/:hash/diff", async (req, res) => {
+  try {
+    const { hash } = req.params;
+
+    if (!currentRepoPath) {
+      return res.status(400).json({
+        success: false,
+        message: "Repository not analyzed yet.",
+      });
+    }
+
+    const data = await getCommitDiff(currentRepoPath, hash);
+
+    res.json({
+      success: true,
+      data,
+    });
+  } catch (error) {
+    console.error(error);
+
+    res.status(500).json({
+      success: false,
+      message: error.message,
+    });
+  }
+});
+
 
 module.exports = router;

@@ -204,6 +204,8 @@ const response = await axios.post(
     } catch (err) {
       console.error("Assistant error:", err);
 
+console.error("Response data:", err.response?.data);
+console.error("Response status:", err.response?.status);
       setMessages((prev) => [
         ...prev,
         {

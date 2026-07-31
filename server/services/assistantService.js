@@ -1,218 +1,610 @@
-const axios = require("axios");
+const Groq = require("groq-sdk");
 const { searchDocuments } = require("./ragService");
 
-const OLLAMA_URL = "http://localhost:11434";
-const CHAT_MODEL = "llama3.2";
-const REQUEST_TIMEOUT_MS = 60_000;
-const RESULT_COUNT = 10;
-const MAX_CHARS_PER_SOURCE = 2500; // guard against one huge file blowing the context window
+const GROQ_API_KEY = process.env.GROQ_API_KEY;
+const DEBUG = process.env.DEBUG_ASSISTANT === "true";
+
+if (!GROQ_API_KEY) {
+  console.warn("⚠️ GROQ_API_KEY is not configured.");
+}
+
+const groq = GROQ_API_KEY
+  ? new Groq({ apiKey: GROQ_API_KEY })
+  : null;
 
 // ==========================================
-// Build repository context from retrieved docs
+// Configuration
+// ==========================================
+
+const CHAT_MODEL =
+  process.env.ASSISTANT_CHAT_MODEL || "llama-3.3-70b-versatile";
+
+// Keep retrieval small to reduce Groq token usage.
+const RESULT_COUNT =
+  Number(process.env.ASSISTANT_RESULT_COUNT) || 6;
+
+// Limit each retrieved chunk.
+const MAX_CHARS_PER_SOURCE =
+  Number(process.env.ASSISTANT_MAX_CHARS_PER_SOURCE) || 2000;
+
+// Limit total context sent to Groq.
+const MAX_TOTAL_CONTEXT_CHARS =
+  Number(process.env.ASSISTANT_MAX_TOTAL_CONTEXT_CHARS) || 10000;
+
+const MAX_QUESTION_LENGTH = 2000;
+
+const GROQ_TIMEOUT_MS =
+  Number(process.env.ASSISTANT_GROQ_TIMEOUT_MS) || 30000;
+
+const MAX_RETRIES = 1;
+
+const CACHE_TTL_MS =
+  Number(process.env.ASSISTANT_CACHE_TTL_MS) || 5 * 60 * 1000;
+
+const MAX_CACHE_ENTRIES = 200;
+
+// ==========================================
+// Logger
+// ==========================================
+
+function log(...args) {
+  if (DEBUG) {
+    console.log(...args);
+  }
+}
+
+// ==========================================
+// In-memory response cache
+// ==========================================
+
+const responseCache = new Map();
+
+function cacheKey(question, repositoryId) {
+  return `${repositoryId}::${question.trim().toLowerCase()}`;
+}
+
+function getFromCache(key) {
+  const entry = responseCache.get(key);
+
+  if (!entry) {
+    return null;
+  }
+
+  if (Date.now() - entry.timestamp > CACHE_TTL_MS) {
+    responseCache.delete(key);
+    return null;
+  }
+
+  // Refresh recency.
+  responseCache.delete(key);
+  responseCache.set(key, entry);
+
+  return entry.value;
+}
+
+function setInCache(key, value) {
+  if (responseCache.size >= MAX_CACHE_ENTRIES) {
+    const oldestKey = responseCache.keys().next().value;
+
+    if (oldestKey) {
+      responseCache.delete(oldestKey);
+    }
+  }
+
+  responseCache.set(key, {
+    value,
+    timestamp: Date.now(),
+  });
+}
+
+// ==========================================
+// Truncate large documents
 // ==========================================
 
 function truncate(text, maxChars) {
-  if (!text || text.length <= maxChars) return text || "";
-  return `${text.slice(0, maxChars)}\n... [truncated, ${text.length - maxChars} more characters]`;
+  if (!text || text.length <= maxChars) {
+    return text || "";
+  }
+
+  return (
+    text.slice(0, maxChars) +
+    `\n... [truncated, ${text.length - maxChars} more characters]`
+  );
 }
+
+// ==========================================
+// Sort retrieved chunks by relevance
+// ==========================================
+
+function sortByRelevance(documents, metadatas, distances) {
+  const order = documents
+    .map((_, index) => index)
+    .sort(
+      (a, b) =>
+        (distances[a] ?? Infinity) -
+        (distances[b] ?? Infinity)
+    );
+
+  return {
+    documents: order.map((index) => documents[index]),
+    metadatas: order.map((index) => metadatas[index]),
+    distances: order.map((index) => distances[index]),
+  };
+}
+
+// ==========================================
+// Remove duplicate chunks from same file
+//
+// This prevents sending too many chunks from
+// the same document to Groq.
+// ==========================================
+
+function removeDuplicateChunks(documents, metadatas, distances) {
+  const seen = new Set();
+
+  const filteredDocuments = [];
+  const filteredMetadatas = [];
+  const filteredDistances = [];
+
+  for (let i = 0; i < documents.length; i++) {
+    const metadata = metadatas[i] || {};
+
+    const file = metadata.file || `Unknown-${i}`;
+
+    // Include chunk number so different useful chunks
+    // from the same file can still be kept.
+    const chunk =
+      metadata.chunk !== undefined
+        ? metadata.chunk
+        : "unknown";
+
+    const key = `${file}::${chunk}`;
+
+    if (seen.has(key)) {
+      continue;
+    }
+
+    seen.add(key);
+
+    filteredDocuments.push(documents[i]);
+    filteredMetadatas.push(metadata);
+    filteredDistances.push(distances[i] ?? null);
+  }
+
+  return {
+    documents: filteredDocuments,
+    metadatas: filteredMetadatas,
+    distances: filteredDistances,
+  };
+}
+
+// ==========================================
+// Build repository context
+// ==========================================
 
 function buildContext(documents, metadatas) {
-  return documents
-    .map((document, index) => {
-      const metadata = metadatas[index] || {};
-     return [
-  `--- SOURCE ${index + 1} ---`,
-  `File: ${metadata.file || "Unknown"}`,
-  `Language: ${metadata.language || "Unknown"}`,
-  `Type: ${metadata.type || "source"}`,
-  `Problem: ${metadata.problem || "Unknown"}`,
-  "",
-  truncate(document, MAX_CHARS_PER_SOURCE),
-].join("\n");
-    })
-    .join("\n\n");
+  const chunks = [];
+
+  let totalChars = 0;
+
+  for (let index = 0; index < documents.length; index++) {
+    const metadata = metadatas[index] || {};
+
+    const truncatedDoc = truncate(
+      documents[index],
+      MAX_CHARS_PER_SOURCE
+    );
+
+    const block = [
+      `========== SOURCE ${index + 1} ==========`,
+      `File: ${metadata.file || "Unknown"}`,
+      `Directory: ${metadata.directory || "Unknown"}`,
+      `Language: ${metadata.language || "Unknown"}`,
+      `Extension: ${metadata.extension || "Unknown"}`,
+      `Type: ${metadata.type || "source"}`,
+      `Chunk: ${
+        metadata.chunk !== undefined
+          ? `${metadata.chunk + 1}/${
+              metadata.totalChunks || "?"
+            }`
+          : "Unknown"
+      }`,
+      "",
+      truncatedDoc,
+      "==========================================",
+    ].join("\n");
+
+    if (
+      totalChars + block.length > MAX_TOTAL_CONTEXT_CHARS &&
+      chunks.length > 0
+    ) {
+      log(
+        `✂️ Context budget reached: ${chunks.length}/${documents.length} chunks`
+      );
+
+      break;
+    }
+
+    chunks.push(block);
+    totalChars += block.length;
+  }
+
+  return chunks.join("\n\n");
 }
 
 // ==========================================
-// Build the prompt
-// (rules stated once each — the original repeated
-// several of these 2-3x in slightly different wording,
-// which tends to make smaller models less consistent,
-// not more)
+// System instruction
 // ==========================================
 
-function buildPrompt(question, context) {
-  return `
-You are a senior software engineer performing repository analysis, code review, and code explanation.
+const SYSTEM_INSTRUCTION = `
+You are the AI assistant inside a Code Evolution Visualizer.
 
-Your knowledge is STRICTLY LIMITED to the repository context below.
+Your job is to answer questions about ONE specific software repository.
 
-Do NOT use your general programming knowledge to fill in missing repository details.
-Only use it to explain code that is explicitly present in the retrieved repository context.
-If the repository context does not contain enough information, NEVER guess.
+The repository context provided to you is your primary source of truth.
 
-Instead reply exactly:
+==========================================
+STRICT GROUNDING RULES
+==========================================
 
-"This information is not available in the indexed repository."
+1. Use repository context whenever answering repository-specific questions.
 
-==================================================
-GENERAL RULES
-==================================================
+2. NEVER invent:
+   - files
+   - folders
+   - functions
+   - classes
+   - variables
+   - APIs
+   - dependencies
+   - frameworks
+   - architecture
+   - database systems
+   - implementation details
 
-- Use ONLY the retrieved repository context.
-- Never invent files, functions, classes, variables, APIs, architecture, dependencies, or technologies.
-- Every conclusion MUST be supported by the retrieved repository context.
-- Never speculate.
-- Never assume missing code.
-- Quote or reference the relevant file whenever possible.
-- Explain your reasoning using the retrieved code.
-- If only part of a file is available, explicitly state that additional repository context is required before making conclusions.
-- Do NOT provide generic software engineering advice.
-- Do NOT report bugs unless they are directly visible in the retrieved code.
-- Do NOT report missing validation unless the retrieved code clearly shows it.
-- Do NOT report security vulnerabilities without direct evidence.
-- Do NOT report performance issues without direct evidence.
-- Do NOT mention algorithm complexity unless the user specifically asks or the question is about an algorithm.
-Never recommend code changes unless the retrieved code clearly demonstrates the issue.
+3. Do not assume that a common technology exists just because the
+   repository appears to use a particular programming language.
 
-If there is uncertainty, say:
+4. If the retrieved context does not contain enough evidence, say:
 
 "I don't have enough repository context to verify this."
-==================================================
-REPOSITORY OVERVIEW QUESTIONS
-==================================================
 
-If the user asks for a repository overview, include:
+5. Do not pretend that you inspected files that were not included
+   in the context.
 
-- Project purpose
-- Folder structure
-- Technologies used
-- Main modules
-- Overall architecture
-- Important files
-- Brief summary
+6. If only a portion of a file was retrieved, explicitly mention
+   that the answer is based on the retrieved portion.
 
-If any information cannot be verified from the repository context, explicitly state that.
+7. When possible, mention the exact file responsible for the behavior.
 
-==================================================
-CODE EXPLANATION QUESTIONS
-==================================================
+8. Distinguish clearly between:
+   - facts directly visible in the repository
+   - reasonable explanations of visible code
 
-If the user asks to explain code, include:
+9. Do not provide generic programming advice unless the user
+   explicitly asks for recommendations.
 
-- What the code does
-- Important functions
-- Important classes
-- Important variables
-- Logic flow
-- Related files
-- Dependencies (only if visible)
+==========================================
+FILES / DATASETS / TABLES
+==========================================
 
-Explain ONLY what exists in the retrieved code.
+10. When the user asks for FILES, return actual repository file
+    paths only.
 
-==================================================
-CODE REVIEW / CODE IMPROVEMENT QUESTIONS
-==================================================
+11. Never describe database tables, datasets, columns, concepts,
+    or directories as files.
 
-Review ONLY the retrieved code.
+12. When the user asks for TECHNOLOGIES, return technologies,
+    frameworks, libraries, runtimes, and dependencies only.
 
-Look for:
+13. When the user asks for DATABASE TABLES or DATASETS, identify
+    them as tables or datasets, not files.
 
-- Code duplication
-- Poor naming
-- Long functions
-- Repeated logic
-- Missing validation
-- Missing error handling
-- Security issues
-- Performance issues
-- Maintainability problems
-- Readability problems
-- Dead code
-- Unused variables
-- Unused imports
+14. Never convert a table name, dataset name, column name, or
+    documentation concept into a file path unless the repository
+    context explicitly shows that it is a file.
 
-ONLY report issues that are directly visible in the retrieved repository context.
+15. When asked which files perform a specific task, only return
+    files for which the retrieved context provides direct evidence.
 
-Never infer issues from incomplete snippets.
+==========================================
+CODE REVIEW
+==========================================
 
-If there is not enough repository context to verify an issue, explicitly say:
+16. Only report code issues when the retrieved source provides
+    direct evidence.
+
+17. Never report an issue using uncertain language such as:
+    - might
+    - could
+    - possibly
+    - appears to
+    - seems to
+    - likely
+    - probably
+    - may
+
+18. For unused imports, only report them when the retrieved
+    source clearly shows that the imported name is never referenced.
+
+19. If the retrieved context is insufficient to verify an issue,
+    say:
 
 "I don't have enough repository context to confirm this issue."
 
-==================================================
-FOR EVERY CONFIRMED ISSUE USE THIS FORMAT
-==================================================
+20. If only part of a file was retrieved, never claim that you
+    inspected the entire file.
 
-Issue:
+Use:
 
-Evidence:
+"The retrieved portion of <file> shows..."
 
-Why it matters:
+==========================================
+ANSWER QUALITY
+==========================================
 
-Suggested improvement:
+Give useful, natural answers.
 
-Affected file:
+Do NOT simply repeat retrieved code.
 
-Confidence:
+Explain what the code means.
 
-- High: Directly supported by the retrieved code.
-- Medium: Strongly implied by multiple retrieved snippets.
-- Low: Limited repository context available.
+For code explanations, explain:
 
-==================================================
-IMPORTANT REVIEW RULES
-==================================================
+- What it does
+- Important functions
+- Important variables
+- Control flow
+- How the pieces interact
+- Related files when they are actually present
 
-Evidence MUST come directly from the retrieved code.
+For architecture questions:
 
-Do NOT invent:
+- Identify actual components present
+- Explain how they interact
+- Mention relevant files
+- Describe the data flow
 
-- bugs
-- edge cases
-- validation problems
-- security vulnerabilities
-- performance issues
+For technology questions:
 
-If no issues are directly visible, respond exactly:
+- Identify technologies directly supported by repository evidence
+- Mention where they appear
 
-"I reviewed the retrieved repository context and found no clearly verifiable code quality issues."
+For commit/development questions:
 
-==================================================
+- Use repository analytics or commit information provided
+- Do not invent historical events
+
+==========================================
+PROGRAMMING LANGUAGES
+==========================================
+
+When asked for programming languages, return only actual programming
+languages.
+
+Do NOT classify these as programming languages:
+
+- requirements.txt
+- dependency files
+- package manifests
+- YAML
+- Markdown
+- TOML
+
+YAML, Markdown and TOML are configuration/documentation formats.
+
+==========================================
+DATABASE TABLES
+==========================================
+
+When asked for database tables, only identify a name as a database
+table when the repository context explicitly identifies it as a table.
+
+If a dataset name is mentioned but its type is unclear, say:
+
+"The retrieved context mentions this dataset, but does not explicitly
+identify it as a database table."
+
+==========================================
+TECHNOLOGY CLAIMS
+==========================================
+
+Do not infer capabilities that are not explicitly supported by
+repository context.
+
+For example, if Hugging Face is only shown as a dataset host,
+do not claim that it provides model serving for this repository.
+
+==========================================
+RESPONSE STYLE
+==========================================
+
+Be concise but useful.
+
+Use headings when they improve readability.
+
+Use bullet points for multiple items.
+
+Use code formatting when mentioning:
+
+- files
+- functions
+- variables
+- commands
+- APIs
+
+Prefer explanations that a software engineering student can understand.
+
+Do not start every response with unnecessary phrases such as:
+
+"Based on the repository context..."
+
+==========================================
+SOURCES
+==========================================
+
+At the end of the answer include:
+
+Sources:
+- file/path
+- file/path
+
+Only list files that actually contributed to the answer.
+
+==========================================
+IMPORTANT
+==========================================
+
+The retrieved repository context may be incomplete.
+
+If the answer cannot be verified from the provided context,
+be honest rather than guessing.
+`;
+
+// ==========================================
+// Promise timeout
+// ==========================================
+
+function withTimeout(promise, ms, message) {
+  let timeoutHandle;
+
+  const timeoutPromise = new Promise((_, reject) => {
+    timeoutHandle = setTimeout(() => {
+      reject(new Error(message));
+    }, ms);
+  });
+
+  return Promise.race([
+    promise,
+    timeoutPromise,
+  ]).finally(() => {
+    clearTimeout(timeoutHandle);
+  });
+}
+
+// ==========================================
+// Generate Groq answer
+// ==========================================
+
+async function generateGroqAnswer(question, context) {
+  if (!groq) {
+    throw new Error(
+      "Groq API is not configured. Please set GROQ_API_KEY in .env."
+    );
+  }
+
+  const prompt = `
 USER QUESTION
-==================================================
+==========================================
 
 ${question}
 
-==================================================
+==========================================
+
 REPOSITORY CONTEXT
-==================================================
+==========================================
 
 ${context}
 
-==================================================
-SOURCES USED
-==================================================
+==========================================
 
-At the end of your answer, list every file that was used to produce the answer.
+Answer the user's question using ONLY the repository context.
 
-Example:
-
-Sources:
-- src/app.js
-- server/routes/repository.js
-- package.json
-
-==================================================
-ANSWER
-==================================================
+If the context is insufficient, say so instead of guessing.
 `;
+
+  let lastError;
+
+  for (
+    let attempt = 0;
+    attempt <= MAX_RETRIES;
+    attempt++
+  ) {
+    try {
+      const completion = await withTimeout(
+        groq.chat.completions.create({
+          model: CHAT_MODEL,
+
+          messages: [
+            {
+              role: "system",
+              content: SYSTEM_INSTRUCTION,
+            },
+            {
+              role: "user",
+              content: prompt,
+            },
+          ],
+
+          temperature: 0.2,
+
+          // Reduced from 2048 to save tokens.
+          max_tokens: 1200,
+        }),
+
+        GROQ_TIMEOUT_MS,
+
+        `Groq request timed out after ${GROQ_TIMEOUT_MS}ms`
+      );
+
+      const answer =
+        completion.choices?.[0]?.message?.content?.trim();
+
+      if (!answer) {
+        throw new Error(
+          "Groq returned an empty response."
+        );
+      }
+
+      return answer;
+
+    } catch (error) {
+      lastError = error;
+
+      // Never retry rate-limit errors.
+      const isRateLimit =
+        error.status === 429 ||
+        error.code === "rate_limit_exceeded";
+
+      const isRetryable =
+        attempt < MAX_RETRIES &&
+        !isRateLimit &&
+        (
+          error.status >= 500 ||
+          error.message?.includes("fetch") ||
+          error.message?.includes("timed out")
+        );
+
+      if (!isRetryable) {
+        break;
+      }
+
+      log(
+        `⏳ Retrying Groq call (attempt ${
+          attempt + 2
+        }/${MAX_RETRIES + 1})...`
+      );
+
+      await new Promise((resolve) =>
+        setTimeout(
+          resolve,
+          500 * (attempt + 1)
+        )
+      );
+    }
+  }
+
+  throw lastError;
 }
+
 // ==========================================
 // Ask Repository Assistant
 // ==========================================
 
-async function askRepositoryAssistant(question, repositoryId) {
+async function askRepositoryAssistant(
+  question,
+  repositoryId
+) {
   if (!question || !question.trim()) {
     throw new Error("Question is required.");
   }
@@ -221,119 +613,232 @@ async function askRepositoryAssistant(question, repositoryId) {
     throw new Error("Repository ID is required.");
   }
 
-  console.log("\n🤖 User Question:", question);
+  const trimmedQuestion = question
+    .trim()
+    .slice(0, MAX_QUESTION_LENGTH);
+
+  // ========================================
+  // CACHE
+  // ========================================
+
+  const key = cacheKey(
+    trimmedQuestion,
+    repositoryId
+  );
+
+  const cached = getFromCache(key);
+
+  if (cached) {
+    log(
+      "⚡ Cache hit for question:",
+      trimmedQuestion
+    );
+
+    return cached;
+  }
+
+  log(
+    "\n🤖 User Question:",
+    trimmedQuestion
+  );
+
+  log(
+    "📦 Repository ID:",
+    repositoryId
+  );
 
   try {
-    // ======================================
-    // STEP 1: Retrieve relevant documents
-    // ======================================
+    // ========================================
+    // STEP 1: Retrieve relevant chunks
+    // ========================================
 
-    const results = await searchDocuments(question, repositoryId, RESULT_COUNT);
+    const searchResults =
+      await searchDocuments(
+        trimmedQuestion,
+        repositoryId,
+        RESULT_COUNT
+      );
 
-    const documents = results.documents?.[0] || [];
-    const metadatas = results.metadatas?.[0] || [];
-    const distances = results.distances?.[0] || [];
+    let documents =
+      searchResults.documents?.[0] || [];
 
-    // Check if language information exists
-const hasLanguageInfo = metadatas.some(
-  (m) => m.language && m.language !== "Unknown"
-);
+    let metadatas =
+      searchResults.metadatas?.[0] || [];
 
-if (
-  question.toLowerCase().includes("language") &&
-  !hasLanguageInfo
-) {
-  return {
-    answer: "This information is not available in the indexed repository.",
-    sources: [],
-  };
-}
-
-// Debug: show retrieved files
-console.log("\n📂 Retrieved Files:");
-
-metadatas.forEach((m, i) => {
-  console.log(`${i + 1}. ${m.file || "Unknown"}`);
-});
-
+    let distances =
+      searchResults.distances?.[0] || [];
 
     if (documents.length === 0) {
-      return {
-        answer: "I couldn't find relevant information in the repository.",
+      const emptyResult = {
+        answer:
+          "I couldn't find relevant information in the indexed repository.",
         sources: [],
       };
+
+      setInCache(key, emptyResult);
+
+      return emptyResult;
     }
 
-    // ======================================
-    // STEP 2: Build context + prompt
-    // ======================================
+    log(
+      `🔎 Retrieved ${documents.length} chunks`
+    );
 
-    const context = buildContext(documents, metadatas);
-    const prompt = buildPrompt(question, context);
+    // ========================================
+    // STEP 2: Sort by relevance
+    // ========================================
 
-    // ======================================
-    // STEP 3: Ask Ollama LLM
-    // ======================================
+    ({
+      documents,
+      metadatas,
+      distances,
+    } = sortByRelevance(
+      documents,
+      metadatas,
+      distances
+    ));
 
-    let response;
-    try {
-      response = await axios.post(
-        `${OLLAMA_URL}/api/generate`,
-       {
-  model: CHAT_MODEL,
-  prompt,
-  stream: false,
-  options: {
-    temperature: 0.1,
-    top_p: 0.9
-  }
-},
-        { timeout: REQUEST_TIMEOUT_MS }
-      );
-    } catch (llmError) {
-      if (llmError.code === "ECONNREFUSED") {
-        throw new Error(
-          `Could not reach Ollama at ${OLLAMA_URL}. Is it running?`
+    // ========================================
+    // STEP 3: Remove duplicate chunks
+    // ========================================
+
+    ({
+      documents,
+      metadatas,
+      distances,
+    } = removeDuplicateChunks(
+      documents,
+      metadatas,
+      distances
+    ));
+
+    log(
+      `📚 Using ${documents.length} unique chunks`
+    );
+
+    log(
+      "\n📂 Retrieved Files by relevance:"
+    );
+
+    metadatas.forEach(
+      (metadata, index) => {
+        log(
+          `${index + 1}. ${
+            metadata.file || "Unknown"
+          }`
         );
       }
-      if (llmError.code === "ECONNABORTED") {
-        throw new Error(
-          `Ollama did not respond within ${REQUEST_TIMEOUT_MS}ms.`
-        );
-      }
-      throw llmError;
-    }
+    );
+
+    // ========================================
+    // STEP 4: Build context
+    // ========================================
+
+    const context = buildContext(
+      documents,
+      metadatas
+    );
+
+    log(
+      `📖 Context size: ${context.length} characters`
+    );
+
+    // ========================================
+    // STEP 5: Ask Groq
+    // ========================================
+
+    log(
+      "🧠 Sending repository context to Groq..."
+    );
 
     const answer =
-      response.data?.response?.trim() ||
-      "The assistant did not return an answer for this question.";
+      await generateGroqAnswer(
+        trimmedQuestion,
+        context
+      );
 
-    // ======================================
-    // STEP 4: Return answer + sources
-    // ======================================
-const sources = [
-  ...new Map(
-    metadatas.map((metadata, index) => [
-      metadata.file || `Unknown-${index}`,
-      {
-        file: metadata.file || "Unknown",
-        directory: metadata.directory || "Unknown",
-        language: metadata.language || "Unknown",
-        type: metadata.type || "source",
-        problem: metadata.problem || "Unknown",
-        distance: distances[index] ?? null,
-      },
-    ])
-  ).values(),
-];
-    
+    log(
+      "✅ Groq answer generated"
+    );
 
-    return { answer, sources };
+    // ========================================
+    // STEP 6: Build sources
+    // ========================================
+
+    const sources = [
+      ...new Map(
+        metadatas.map(
+          (metadata, index) => [
+            metadata.file ||
+              `Unknown-${index}`,
+
+            {
+              file:
+                metadata.file ||
+                "Unknown",
+
+              directory:
+                metadata.directory ||
+                "Unknown",
+
+              language:
+                metadata.language ||
+                "Unknown",
+
+              type:
+                metadata.type ||
+                "source",
+
+              problem:
+                metadata.problem ||
+                "Unknown",
+
+              chunk:
+                metadata.chunk ??
+                null,
+
+              distance:
+                distances[index] ??
+                null,
+            },
+          ]
+        )
+      ).values(),
+    ];
+
+    // ========================================
+    // STEP 7: Cache result
+    // ========================================
+
+    const result = {
+      answer,
+      sources,
+    };
+
+    setInCache(
+      key,
+      result
+    );
+
+    return result;
+
   } catch (error) {
-    console.error("❌ Assistant Error:", error.response?.data || error.message);
+
+    console.error(
+      "❌ Assistant Error:",
+      error.response?.data ||
+        error.error ||
+        error.message ||
+        error
+    );
+
     throw error;
   }
 }
+
+// ==========================================
+// Export
+// ==========================================
 
 module.exports = {
   askRepositoryAssistant,
