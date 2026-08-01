@@ -21,13 +21,6 @@ import {
 
 const API_URL = "http://localhost:5000";
 
-const QUALITY_METRICS = [
-  { label: "Code Consistency", score: 0 },
-  { label: "Commit Message Quality", score: 0 },
-  { label: "Test Coverage Signal", score: 0 },
-  { label: "Refactor Frequency", score: 0 },
-];
-
 // Maps the section headers the AI is asked to return (see the prompt in
 // generateAIAnalysis) to how they're displayed. Keeping this in one place
 // means the prompt and the UI can't silently drift apart.
@@ -152,37 +145,6 @@ function QuickFactCard({ icon: Icon, label, value, sub }) {
   );
 }
 
-function QualityBar({ label, score }) {
-  const color =
-    score >= 80 ? "bg-emerald-500" : score >= 60 ? "bg-amber-500" : "bg-red-500";
-
-  return (
-    <div>
-      <div className="flex items-center justify-between mb-1.5">
-        <span className="text-sm text-slate-600">{label}</span>
-        <span className="text-sm font-medium text-slate-900">{score}%</span>
-      </div>
-      <div className="h-2 rounded-full bg-slate-100 overflow-hidden">
-        <div className={`h-full rounded-full ${color} transition-all`} style={{ width: `${score}%` }} />
-      </div>
-    </div>
-  );
-}
-
-function RecommendationCard({ icon: Icon, accent, title, description }) {
-  return (
-    <div className="flex gap-3 p-4 rounded-xl border border-slate-100 hover:bg-slate-50 transition-colors">
-      <div className={`h-9 w-9 rounded-lg flex items-center justify-center shrink-0 ${accent}`}>
-        <Icon className="h-4 w-4" />
-      </div>
-      <div className="min-w-0">
-        <p className="text-sm font-semibold text-slate-900">{title}</p>
-        <p className="text-xs text-slate-500 mt-1">{description}</p>
-      </div>
-    </div>
-  );
-}
-
 // One card per section of the AI's response, instead of a single wall of
 // pre-wrapped text. This is the main "after analyze" readability fix.
 function AnalysisSectionCard({ sectionKey, content }) {
@@ -286,69 +248,41 @@ function AIInsights() {
     { icon: GitCommitHorizontal, label: "Total Commits", value: stats.totalCommits || 0, sub: "Repository history" },
   ];
 
-  // useEffect(() => {
-  //   loadRepositoryData();
-  // }, []);
+  useEffect(() => {
+    const analysis = JSON.parse(localStorage.getItem("repositoryAnalysis"));
 
-  // async function loadRepositoryData() {
-  //   try {
-  //     const storedRepoUrl = localStorage.getItem("repoUrl");
-  //     if (!storedRepoUrl) return;
+    if (analysis) {
+      setRepositoryData(analysis);
+    }
+  }, []);
 
-  //     const response = await axios.post(`${API_URL}/repository/analytics`, {
-  //       url: storedRepoUrl,
-  //     });
+  async function generateAIAnalysis() {
+    if (!repositoryData) {
+      setError("Repository data is not available. Analyze a repository first.");
+      return;
+    }
 
-  //     setRepositoryData(response.data);
-  //   } catch (err) {
-  //     console.error("Repository data error:", err);
-  //   }
-  // }
-useEffect(() => {
-  const analysis = JSON.parse(
-    localStorage.getItem("repositoryAnalysis")
-  );
+    setLoading(true);
+    setError("");
 
-  if (analysis) {
-    setRepositoryData(analysis);
-  }
-}, []);
- async function generateAIAnalysis() {
-  if (!repositoryData) {
-    setError("Repository data is not available. Analyze a repository first.");
-    return;
+    try {
+      const response = await axios.post(`${API_URL}/ai/analyze-repository`, repositoryData);
+
+      setAnalysis(response.data.analysis);
+      setLastAnalyzedAt(new Date());
+    } catch (err) {
+      console.error("AI analysis error:", err);
+
+      setError(err.response?.data?.error || "Failed to generate AI analysis.");
+    } finally {
+      setLoading(false);
+    }
   }
 
-  setLoading(true);
-  setError("");
-
-  try {
-    const response = await axios.post(
-      `${API_URL}/ai/analyze-repository`,
-      repositoryData
-    );
-
-    setAnalysis(response.data.analysis);
-    setLastAnalyzedAt(new Date());
-  } catch (err) {
-    console.error("AI analysis error:", err);
-
-    setError(
-      err.response?.data?.error ||
-        "Failed to generate AI analysis."
-    );
-  } finally {
-    setLoading(false);
-  }
-}
-  const overallScore = Math.round(
-    QUALITY_METRICS.reduce((sum, metric) => sum + metric.score, 0) / QUALITY_METRICS.length
-  );
-  const hasQualityData = QUALITY_METRICS.some((m) => m.score > 0);
   const sections = parseAnalysis(analysis);
 
   return (
-    <div className="p-8">
+    <div className="p-8 max-w-6xl mx-auto">
       {/* Header */}
       <div className="flex items-center justify-between mb-2 gap-4">
         <div className="flex items-center gap-3">
@@ -378,7 +312,9 @@ useEffect(() => {
         </button>
       </div>
 
-      <p className="text-slate-500 mt-2 mb-8">Get AI-powered insights about your repository.</p>
+      <p className="text-slate-500 mt-2 mb-8">
+        Get AI-powered insights about your repository.
+      </p>
 
       {/* No repository connected yet */}
       {!repositoryData && (
@@ -394,17 +330,17 @@ useEffect(() => {
       )}
 
       {repositoryData && (
-        <>
+        <div className="space-y-6">
           {/* Error */}
           {error && (
-            <div className="mb-6 flex items-start gap-2 p-4 rounded-xl border border-red-200 bg-red-50 text-red-600 text-sm">
+            <div className="flex items-start gap-2 p-4 rounded-xl border border-red-200 bg-red-50 text-red-600 text-sm">
               <AlertCircle className="h-4 w-4 mt-0.5 shrink-0" />
               <span>{error}</span>
             </div>
           )}
 
           {/* AI Summary */}
-          <div className="bg-white rounded-2xl p-6 shadow-sm mb-6 border border-slate-100">
+          <div className="bg-white rounded-2xl p-6 shadow-sm border border-slate-100">
             <div className="flex items-center justify-between flex-wrap gap-2">
               <div className="flex items-center gap-2">
                 <Sparkles className="h-5 w-5 text-indigo-600" />
@@ -447,86 +383,35 @@ useEffect(() => {
                   )}
                 </div>
               ) : (
-                <div className="text-slate-500 py-6">
-                  Click <span className="font-medium text-indigo-600">Analyze Repository</span> to let your AI
-                  assistant analyze the repository.
+                <div className="flex flex-col items-center text-center py-10">
+                  <div className="h-11 w-11 rounded-xl bg-indigo-50 flex items-center justify-center mb-3">
+                    <Sparkles className="h-5 w-5 text-indigo-600" />
+                  </div>
+                  <p className="text-sm text-slate-500 max-w-sm">
+                    Click <span className="font-medium text-indigo-600">Analyze Repository</span> to let your AI
+                    assistant generate a summary, development activity breakdown, and recommendations for this
+                    codebase.
+                  </p>
                 </div>
               )}
             </div>
+          </div>
 
-            {/* Quick Facts */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4 mt-6">
+          {/* Quick Facts */}
+          <div>
+            <h2 className="text-sm font-semibold text-slate-500 uppercase tracking-wide mb-3">
+              Quick Facts
+            </h2>
+            <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
               {quickFacts.map((fact) => (
                 <QuickFactCard key={fact.label} {...fact} />
               ))}
             </div>
           </div>
 
-          {/* Bottom section */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            {/* Code Quality */}
-            <div className="bg-white rounded-2xl p-6 shadow-sm border border-slate-100">
-              <div className="flex items-center justify-between mb-5">
-                <h2 className="font-semibold text-slate-900">Code Quality</h2>
-                {hasQualityData ? (
-                  <span className="text-sm font-semibold text-slate-900">
-                    {overallScore}
-                    <span className="text-slate-400 font-normal">/100</span>
-                  </span>
-                ) : (
-                  <span className="text-[10px] uppercase font-semibold text-slate-400 bg-slate-50 px-2 py-1 rounded-full">
-                    Coming soon
-                  </span>
-                )}
-              </div>
-
-              {hasQualityData ? (
-                <div className="flex flex-col gap-4">
-                  {QUALITY_METRICS.map((metric) => (
-                    <QualityBar key={metric.label} {...metric} />
-                  ))}
-                </div>
-              ) : (
-                <p className="text-sm text-slate-400">
-                  Quality scoring isn't wired up to live data yet — check back after that's connected.
-                </p>
-              )}
-            </div>
-
-            {/* AI Assistant */}
-            <div className="bg-white rounded-2xl p-6 shadow-sm border border-slate-100">
-              <div className="flex items-center gap-2 mb-5">
-                <Bot className="h-5 w-5 text-indigo-600" />
-                <h2 className="font-semibold text-slate-900">AI Assistant</h2>
-              </div>
-
-              <div className="space-y-3">
-                <RecommendationCard
-                  icon={AlertCircle}
-                  accent="bg-red-50 text-red-500"
-                  title="Find risky files"
-                  description="Ask the AI which files are changing frequently and may require refactoring."
-                />
-                <RecommendationCard
-                  icon={Lightbulb}
-                  accent="bg-amber-50 text-amber-500"
-                  title="Improve commit quality"
-                  description="Ask the AI to analyze your commit messages and suggest better practices."
-                />
-                <RecommendationCard
-                  icon={ShieldCheck}
-                  accent="bg-emerald-50 text-emerald-500"
-                  title="Improve repository health"
-                  description="Ask the AI to identify testing, maintainability and technical debt risks."
-                />
-              </div>
-            </div>
-          </div>
-       
-<RepositoryChatbot
-    repositoryId={repositoryData?.repositoryId}
-/>
-        </>
+          {/* AI Assistant chat */}
+          <RepositoryChatbot repositoryId={repositoryData?.repositoryId} />
+        </div>
       )}
     </div>
   );

@@ -2,7 +2,7 @@ import { BrowserRouter, Routes, Route } from "react-router-dom";
 
 import Home from "./pages/Home";
 import Board from "./pages/Board";
-import Repositories from "./pages/Repositories";
+import DebugCenter from "./pages/DebugCenter";
 import Commits from "./pages/Commits";
 import Contributors from "./pages/Contributors";
 import Hotspots from "./pages/Hotspots";
@@ -23,7 +23,7 @@ function App() {
         {/* Application pages */}
         <Route element={<AppLayout />}>
           <Route path="/dashboard" element={<Board />} />
-          <Route path="/repositories" element={<Repositories />} />
+        <Route path="/debug-center" element={<DebugCenter />} />
           <Route path="/commits" element={<Commits />} />
           <Route path="/contributors" element={<Contributors />} />
           <Route path="/hotspots" element={<Hotspots />} />

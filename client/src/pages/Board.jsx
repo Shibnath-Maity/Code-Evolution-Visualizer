@@ -3,11 +3,13 @@ import API from "../services/api";
 import TimelineChart from "../components/TimelineChart";
 import FileAnalysis from "../components/FileAnalysis";
 import RepositoryOverview from "../components/RepositoryOverview";
-
+import RepositoryArchitecture from "../components/RepositoryArchitecture";
 // import RepositoryInput from "../components/RepositoryInput";
 import StatCard from "../components/StatCard";
 // import Navbar from "../components/Navbar";
 import { useLocation, useNavigate } from "react-router-dom";
+import LanguageDistribution from "../components/LanguageDistribution";
+import ProjectHealthScore from "../components/ProjectHealthScore";
 function Board() {
 
   const location = useLocation();
@@ -65,7 +67,10 @@ const response = await API.post("/repository/analytics", {
 //       setRecentCommits(data.recentCommits || []);
 //       setAllCommits(data.allCommits || []);
 const data = response.data;
-
+localStorage.setItem("repoPath", data.repoPath);
+localStorage.setItem("repositoryId", data.repositoryId);
+console.log("Saved Repo Path:", data.repoPath);
+console.log("🏗️ ARCHITECTURE FROM BACKEND:", data.architecture);
 // Save the complete analysis
 localStorage.setItem(
   "repositoryAnalysis",
@@ -111,10 +116,15 @@ setLanguageAnalysis(data.languageAnalysis || {
 
 setCodeEvolution(data.codeEvolution || []);
 setBranches(data.branches || null);
-setHotspots(data.hotspots?.hotspots || []);
+setHotspots(
+  Array.isArray(data.hotspots)
+    ? data.hotspots
+    : data.hotspots?.hotspots || []
+);
 
 setRecentCommits(data.recentCommits || []);
 setAllCommits(data.allCommits || []);
+setArchitecture(data.architecture || null);
     } catch (error) {
       console.error("❌ Repository analysis failed:", error);
       console.error("Backend:", error.response?.data);
@@ -145,7 +155,7 @@ const [languageAnalysis, setLanguageAnalysis] = useState({
   totalFiles: 0,
   languages: [],
 });
-
+const [architecture, setArchitecture] = useState(null);
 const [codeEvolution, setCodeEvolution] = useState([]);
 const [branches, setBranches] = useState(null);
 
@@ -163,6 +173,7 @@ const [searchTerm, setSearchTerm] = useState("");
 const [allCommits, setAllCommits] = useState([]);
 const [repoInfo, setRepoInfo] = useState(null);
 const [loading, setLoading] = useState(false);
+
 const copyDiff = () => {
   navigator.clipboard.writeText(commitDiff);
   alert("Diff copied!");
@@ -214,16 +225,47 @@ localStorage.setItem("repositoryId", repositoryId);
   console.log("All:", data.allCommits?.length);
 
   // Update dashboard data
-  setStats(data.stats);
-  setContributors(data.contributors);
-  setFileAnalysis(data.fileAnalysis);
-  setLanguageAnalysis(data.languageAnalysis);
-  setCodeEvolution(data.codeEvolution);
-  setBranches(data.branches);
-  setHotspots(data.hotspots);
-  setRecentCommits(data.recentCommits);
-  setAllCommits(data.allCommits);
+//   setStats(data.stats);
+//   setContributors(data.contributors);
+//   setFileAnalysis(data.fileAnalysis);
+//   setLanguageAnalysis(data.languageAnalysis);
+//   setCodeEvolution(data.codeEvolution);
+//   setBranches(data.branches);
+//   setHotspots(data.hotspots);
+//   setRecentCommits(data.recentCommits);
+//   setAllCommits(data.allCommits);
+// setArchitecture(data.architecture || null);
+setStats(data.stats || {});
 
+setContributors(data.contributors || {});
+
+setFileAnalysis(data.fileAnalysis || {
+  totalFiles: 0,
+  mostChangedFiles: [],
+  allFiles: [],
+});
+
+setLanguageAnalysis(data.languageAnalysis || {
+  totalFiles: 0,
+  languages: [],
+});
+
+setCodeEvolution(data.codeEvolution || []);
+
+setBranches(data.branches || null);
+
+setHotspots(
+  Array.isArray(data.hotspots)
+    ? data.hotspots
+    : data.hotspots?.hotspots || []
+);
+
+setRecentCommits(data.recentCommits || []);
+
+setAllCommits(data.allCommits || []);
+
+// ⭐ IMPORTANT
+setArchitecture(data.architecture || null);
   // Send analysis data to AI Insights
   navigate("/ai-insights", {
     state: {
@@ -366,7 +408,34 @@ console.log("Commits:", recentCommits);
     color="bg-gradient-to-br from-orange-500 to-orange-700"
     trend="from last analysis"
   />
+{/* Repository Architecture */}
 
+</div>
+{/* Project Health */}
+<div className="mb-8">
+  <ProjectHealthScore
+    stats={stats}
+    fileAnalysis={fileAnalysis}
+    codeEvolution={codeEvolution}
+    architecture={architecture}
+    languageAnalysis={languageAnalysis}
+    commits={allCommits}
+  />
+</div>
+
+{/* Repository Architecture */}
+{/* <div className="mb-8">
+  <RepositoryArchitecture
+    architecture={architecture}
+  />
+</div> */}
+<div className="mb-8">
+  <RepositoryArchitecture architecture={architecture} />
+</div>
+<div className="mb-8">
+  <LanguageDistribution
+    languageAnalysis={languageAnalysis}
+  />
 </div>
       {/* search box */}
       {/* <div className="mb-4">

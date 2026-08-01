@@ -93,8 +93,46 @@ async function cloneRepository(repoUrl) {
 
 async function getCommits(repoPath) {
   const git = simpleGit(repoPath);
+
   const log = await git.log();
-  return log.all;
+
+  const commits = [];
+
+  for (const commit of log.all) {
+    const diff = await git.raw([
+      "show",
+      "--stat",
+      "--format=",
+      commit.hash,
+    ]);
+
+    let additions = 0;
+    let deletions = 0;
+    let filesChanged = 0;
+
+    const lines = diff.split("\n");
+
+    for (const line of lines) {
+      const plus = (line.match(/\+/g) || []).length;
+      const minus = (line.match(/-/g) || []).length;
+
+      additions += plus;
+      deletions += minus;
+
+      if (line.includes("|")) {
+        filesChanged++;
+      }
+    }
+
+    commits.push({
+      ...commit,
+      additions,
+      deletions,
+      files_changed: filesChanged,
+    });
+  }
+
+  return commits;
 }
 
 // ==========================================
@@ -247,6 +285,65 @@ async function getCommitDiff(repoPath, hash) {
 }
 
 // ==========================================
+// AI Commit Data
+// ==========================================
+
+async function getAICommitData(repoPath, hash) {
+  assertValidHash(hash);
+
+  const git = simpleGit(repoPath);
+
+  // Complete commit information
+  const raw = await git.show([
+    hash,
+    "--stat",
+    "--patch",
+    "--format=fuller",
+  ]);
+
+  const lines = raw.split("\n");
+
+  const data = {
+    hash,
+    author: "",
+    date: "",
+    message: "",
+    files: [],
+    diff: raw,
+  };
+
+  let messageFound = false;
+
+  for (const line of lines) {
+    if (line.startsWith("Author:")) {
+      data.author = line.replace("Author:", "").trim();
+    }
+
+    else if (line.startsWith("CommitDate:")) {
+      data.date = line.replace("CommitDate:", "").trim();
+    }
+
+    else if (!messageFound && line.startsWith("    ")) {
+      data.message = line.trim();
+      messageFound = true;
+    }
+
+    else if (
+      line.includes("|") &&
+      !line.includes("file changed") &&
+      !line.includes("files changed")
+    ) {
+      const file = line.split("|")[0].trim();
+
+      if (file.length) {
+        data.files.push(file);
+      }
+    }
+  }
+
+  return data;
+}
+// ==========================================
 // Timeline
 // ==========================================
 
@@ -283,4 +380,5 @@ module.exports = {
   getCommitDiff,
   getTimeline,
   getCommitType,
+  getAICommitData,
 };

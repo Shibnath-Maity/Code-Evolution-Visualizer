@@ -80,24 +80,39 @@ const WEIGHTS = {
   sourceCodeGeneric: 3,
   codeReviewSource: 30,
   codeReviewExtension: 20,
-  codeReviewSummaryPenalty: -10,
+  // Step 2: repository summaries are useful context for code-review
+  // questions too (they orient the LLM on architecture before it looks
+  // at individual files), so this is now a boost instead of a penalty.
+  codeReviewSummaryBoost: 35,
 };
-
 
 const CANDIDATE_POOL_SIZE =
   Number(process.env.RAG_CANDIDATE_POOL_SIZE) || 30;
+
 // ==========================================
 // Create Embedding using Ollama
 // ==========================================
-
 async function createEmbedding(text) {
+  if (!text || !text.trim()) {
+    throw new Error("Cannot create embedding: empty text.");
+  }
+
   try {
+    console.log("Embedding input:", text);
+
     const response = await axios.post(`${OLLAMA_URL}/api/embed`, {
       model: "nomic-embed-text",
       input: text,
     });
 
-    return response.data.embeddings[0];
+    const embedding = response.data.embeddings?.[0];
+
+    if (!embedding) {
+      console.error("Ollama returned:", response.data);
+      throw new Error("Embedding not returned by Ollama.");
+    }
+
+    return embedding;
   } catch (error) {
     console.error("Embedding Error:", error.response?.data || error.message);
     throw error;
@@ -221,23 +236,23 @@ function classifyQuestion(q) {
 
   const isCodeReview = includesAny(q, [
     "improvement",
-  "improve",
-  "refactor",
-  "review",
-  "code quality",
-  "best practice",
-  "bug",
-  "optimize",
-  "suggest",
-  "issue",
-  "issues",
-  "problem",
-  "problems",
-  "security",
-  "performance",
-  "maintainability",
-  "readability",
-  "clean code",
+    "improve",
+    "refactor",
+    "review",
+    "code quality",
+    "best practice",
+    "bug",
+    "optimize",
+    "suggest",
+    "issue",
+    "issues",
+    "problem",
+    "problems",
+    "security",
+    "performance",
+    "maintainability",
+    "readability",
+    "clean code",
   ]);
 
   return {
@@ -288,8 +303,8 @@ function scoreCandidate({ document, metadata, distance, queryWords, q, signals, 
   let score = 0;
 
   // Semantic similarity
- const semanticSimilarity = Math.max(0, 1 - distance);
-score += semanticSimilarity * WEIGHTS.semantic;
+  const semanticSimilarity = Math.max(0, 1 - distance);
+  score += semanticSimilarity * WEIGHTS.semantic;
 
   // Keyword matching
   for (const word of queryWords) {
@@ -386,7 +401,9 @@ score += semanticSimilarity * WEIGHTS.semantic;
   if (isCodeReview) {
     if (type === "source") score += WEIGHTS.codeReviewSource;
     if (CODE_EXTENSIONS.has(extension)) score += WEIGHTS.codeReviewExtension;
-    if (type === "repository_summary") score += WEIGHTS.codeReviewSummaryPenalty;
+    // Step 2: boost (not penalize) repository summaries on code-review
+    // questions, so the LLM gets architecture context alongside source.
+    if (type === "repository_summary") score += WEIGHTS.codeReviewSummaryBoost;
   }
 
   return score;
@@ -412,17 +429,49 @@ function logRanking(finalResults) {
 // Search Repository Knowledge
 // ==========================================
 
-async function searchDocuments(query, repositoryId, limit = 8) {
+async function searchDocuments(
+  query,
+  repositoryId,
+  limit = 8,
+  targetFile = null
+) {
   try {
     const collection = await getCollection();
     const queryEmbedding = await createEmbedding(query);
 
+    console.log("========== QUERY EMBEDDING ==========");
+    console.log("Exists:", !!queryEmbedding);
+    console.log("Is Array:", Array.isArray(queryEmbedding));
+    console.log("Length:", queryEmbedding?.length);
+    console.log("First 5:", queryEmbedding?.slice(0, 5));
+
+    console.log("Calling ChromaDB query...");
+  let where;
+
+if (targetFile) {
+  where = {
+    $and: [
+      { repositoryId },
+      { fileName: targetFile }
+    ]
+  };
+} else {
+  where = {
+    repositoryId
+  };
+}
+    // Step 1: pull a wide candidate pool from Chroma and let our own
+    // scoring/ranking narrow it down, instead of asking Chroma for only
+    // `limit` (8) results up front — that starved the ranker of anything
+    // to rank. Targeted single-file lookups stay tight since there's
+    // nothing to rank there.
     const results = await collection.query({
       queryEmbeddings: [queryEmbedding],
-    nResults: CANDIDATE_POOL_SIZE,
-      where: { repositoryId },
+      nResults: targetFile ? 3 : CANDIDATE_POOL_SIZE,
+      where,
     });
 
+    console.log("ChromaDB query successful!");
     const documents = results.documents?.[0] || [];
     const metadatas = results.metadatas?.[0] || [];
     const distances = results.distances?.[0] || [];
@@ -467,19 +516,32 @@ async function searchDocuments(query, repositoryId, limit = 8) {
       })
       .sort((a, b) => b.score - a.score);
 
-    // const needsWiderPool =
-    //   signals.isOverview ||
-    //   signals.isTechnology ||
-    //   signals.isDependency ||
-    //   signals.isApi ||
-    //   signals.isArchitecture ||
-    //   signals.isCodeReview;
+    // Step 3: for repository-wide questions, guarantee the repository
+    // summary is present at the top even if its score didn't happen to
+    // win the ranking — the LLM needs that orienting context before
+    // diving into individual files.
+    if (
+      signals.isOverview ||
+      signals.isArchitecture ||
+      signals.isTechnology ||
+      signals.isCodeReview
+    ) {
+      const summaryIndex = ranked.findIndex(
+        (r) => r.metadata.type === "repository_summary"
+      );
 
-   let finalLimit = limit;
+      if (summaryIndex > 0) {
+        const [summary] = ranked.splice(summaryIndex, 1);
+        ranked.unshift(summary);
+      }
+    }
 
-if (signals.isOverview) finalLimit = 12;
-if (signals.isCodeReview) finalLimit = 15;
-if (signals.isArchitecture) finalLimit = 12;
+    let finalLimit = limit;
+
+    if (signals.isOverview) finalLimit = 12;
+    if (signals.isCodeReview) finalLimit = 15;
+    if (signals.isArchitecture) finalLimit = 12;
+
     const finalResults = ranked.slice(0, finalLimit);
 
     logRanking(finalResults);

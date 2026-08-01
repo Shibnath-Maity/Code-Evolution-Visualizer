@@ -7,7 +7,7 @@ const repoRoutes = require("./routes/repo");
 const aiRoutes = require("./routes/ai");
 const assistantRoutes = require("./routes/assistant");
 const qaRoutes = require("./routes/qa");
-
+const debugRoutes = require("./routes/debug");
 const app = express();
 
 app.use(cors());
@@ -18,6 +18,7 @@ app.use("/api", repoRoutes);
 app.use("/ai", aiRoutes);
 app.use("/assistant", assistantRoutes);
 
+app.use("/repository", debugRoutes);
 // QA routes
 app.use("/api/qa", qaRoutes);
 

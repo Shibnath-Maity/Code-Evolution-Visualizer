@@ -4,6 +4,7 @@ import logo from "../assets/logo.png";
 import {
     Home,
   LayoutDashboard,
+    Wrench,
   FolderGit2,
   GitCommit,
   Users,
@@ -16,11 +17,12 @@ import {
 const NAV_ITEMS = [
     { label: "Home", icon: Home, path: "/" },
   { label: "Dashboard", icon: LayoutDashboard, path: "/dashboard" },
-  { label: "Repositories", icon: FolderGit2, path: "/repositories" },
+
   { label: "Commits", icon: GitCommit, path: "/commits" },
   { label: "Contributors", icon: Users, path: "/contributors" },
   { label: "Hotspots", icon: Flame, path: "/hotspots" },
   { label: "Timeline", icon: Clock, path: "/timeline" },
+    { label: "Debug Center", icon: Wrench, path: "/debug-center" },
   { label: "AI Insights", icon: Sparkles, path: "/ai-insights" },
   { label: "Settings", icon: Settings, path: "/settings" },
 ];

@@ -6,8 +6,9 @@ const {
   getCommits,
   getContributors,
   getCommitStats,
-      getCommitDiff,
-   getCommitDetails,
+  getCommitDiff,
+  getCommitDetails,
+  getAICommitData,
 } = require("../services/gitService");
 const { analyzeRepository } = require("../services/analysisService");
 
@@ -16,6 +17,12 @@ const { getFileChanges } = require("../services/fileAnalyticsService");
 const { calculateHotspots } = require("../services/hotspotService");
 const { getRepositoryInfo } = require("../services/githubService");
 const { indexRepository } = require("../services/vectorService");
+const {
+  setCurrentRepository,
+} = require("../services/repositoryContext");
+const {
+  generateCommitSummary,
+} = require("../services/aiCommitService");
 let currentRepoPath = "";
 // Test Route
 router.get("/info", (req, res) => {
@@ -52,7 +59,27 @@ console.log("Repository ID from frontend:", repositoryId);
 
     // Normal repository analysis
     const result = await analyzeRepository(url, repositoryId);
+    setCurrentRepository(
+  repositoryId,
+  result.repoPath
+);
 
+console.log("Current Repository:", {
+  repositoryId,
+  repoPath: result.repoPath,
+});
+currentRepoPath = result.repoPath;
+
+// Save repository for AI Assistant / Debug Center
+setCurrentRepository(repositoryId, result.repoPath);
+
+console.log("✅ Current Repository Saved");
+console.log({
+  repositoryId,
+  repoPath: result.repoPath,
+});
+
+console.log(result.commitStatistics);
     currentRepoPath = result.repoPath;
 
     console.log("8️⃣ Sending dashboard response...");
@@ -66,13 +93,16 @@ console.log("Repository ID from frontend:", repositoryId);
   fileAnalysis: result.fileAnalysis,
   languageAnalysis: result.languageAnalysis,
   codeEvolution: result.codeEvolution,
-
+  repoPath: result.repoPath,   // ⭐ ADD THIS
   hotspots: result.hotspots,
   allScoredHotspots: result.allScoredHotspots,
 
   branches: result.branches,
   recentCommits: result.recentCommits,
   allCommits: result.allCommits,
+    // 🏗️ Repository Architecture
+  architecture: result.architecture,
+  commitStatistics: result.commitStatistics,
     });
 
     // ==========================================
@@ -153,6 +183,41 @@ router.get("/commit/:hash/diff", async (req, res) => {
     });
   } catch (error) {
     console.error(error);
+
+    res.status(500).json({
+      success: false,
+      message: error.message,
+    });
+  }
+});
+// ==========================================
+// AI Commit Summary
+// ==========================================
+
+router.get("/commit/:hash/summary", async (req, res) => {
+  try {
+    const { hash } = req.params;
+
+    if (!currentRepoPath) {
+      return res.status(400).json({
+        success: false,
+        message: "Repository not analyzed yet.",
+      });
+    }
+
+    // Get commit information
+    const commit = await getAICommitData(currentRepoPath, hash);
+
+    // Generate AI summary
+    const summary = await generateCommitSummary(commit);
+
+    res.json({
+      success: true,
+      data: summary,
+    });
+
+  } catch (error) {
+    console.error("AI Commit Summary Error:", error);
 
     res.status(500).json({
       success: false,
