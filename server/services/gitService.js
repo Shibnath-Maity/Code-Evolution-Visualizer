@@ -371,6 +371,83 @@ function getCommitType(message = "") {
   return "other";
 }
 
+// ==========================================
+// File Commit History + Co-Change (Dependencies)
+// ==========================================
+//
+// One git log --numstat pass across the whole repo (same pattern as
+// getContributors), filtered down to commits that touched `filePath`.
+// Also tallies which other files appeared in those same commits —
+// "temporal coupling" — to power the Dependencies tab without needing
+// a real import-graph analyzer.
+
+async function getFileHistory(repoPath, filePath) {
+  const git = simpleGit(repoPath);
+
+  const raw = await git.raw([
+    "log",
+    `--pretty=format:${COMMIT_SEP}%H${FIELD_SEP}%an${FIELD_SEP}%ad${FIELD_SEP}%s`,
+    "--date=iso-strict",
+    "--numstat",
+  ]);
+
+  const blocks = raw.split(COMMIT_SEP).filter(Boolean);
+
+  const fileCommits = [];
+  const coupledCounts = {};
+
+  for (const block of blocks) {
+    const lines = block.split("\n");
+    const header = lines[0];
+    const [hash, author, date, ...msgParts] = header.split(FIELD_SEP);
+    const message = msgParts.join(FIELD_SEP);
+
+    let matchedStats = null;
+    const filesInCommit = [];
+
+    for (let i = 1; i < lines.length; i++) {
+      const line = lines[i].trim();
+      if (!line) continue;
+
+      const [addedStr, removedStr, file] = line.split("\t");
+      if (file === undefined) continue;
+
+      filesInCommit.push(file);
+
+      if (file === filePath) {
+        matchedStats = {
+          added: addedStr === "-" ? 0 : parseInt(addedStr, 10) || 0,
+          removed: removedStr === "-" ? 0 : parseInt(removedStr, 10) || 0,
+        };
+      }
+    }
+
+    // This commit didn't touch the requested file — skip it entirely.
+    if (!matchedStats) continue;
+
+    fileCommits.push({
+      hash,
+      author_name: author,
+      date,
+      message,
+      additions: matchedStats.added,
+      deletions: matchedStats.removed,
+    });
+
+    filesInCommit.forEach((f) => {
+      if (f === filePath) return;
+      coupledCounts[f] = (coupledCounts[f] || 0) + 1;
+    });
+  }
+
+  const coupledFiles = Object.entries(coupledCounts)
+    .map(([file, count]) => ({ file, count }))
+    .sort((a, b) => b.count - a.count)
+    .slice(0, 20);
+
+  return { commits: fileCommits, coupledFiles };
+}
+
 module.exports = {
   cloneRepository,
   getCommits,
@@ -381,4 +458,5 @@ module.exports = {
   getTimeline,
   getCommitType,
   getAICommitData,
+   getFileHistory,
 };

@@ -15,7 +15,9 @@ const { calculateHotspots } = require("./hotspotService");
 const { analyzeLanguages } = require("./languageService");
 const { getCodeChurn } = require("./churnService");
 const { calculateProjectHealth } = require("./healthService");
-
+const {
+    generateHotspotInsights
+} = require("./hotspotAIService");
 // NEW
 const { setCurrentRepository } = require("./repositoryContext");
 
@@ -104,12 +106,19 @@ async function analyzeRepository(url, repositoryId) {
     const languageAnalysis = analyzeLanguages(fileAnalysis);
 
     // Hotspots
-    logStep("Calculating hotspots...");
-    const hotspots = calculateHotspots(
-      fileAnalysis,
-      contributors
-    );
+   // Hotspots
+logStep("Calculating hotspots...");
 
+const hotspots = calculateHotspots(
+  fileAnalysis,
+  contributors
+);
+
+logStep("Generating AI hotspot insights...");
+
+const hotspotInsights = await generateHotspotInsights(
+  hotspots.hotspots
+);
     // Health
     logStep("Calculating project health...");
 
@@ -152,7 +161,7 @@ async function analyzeRepository(url, repositoryId) {
       // Hotspots
       hotspots: hotspots.hotspots,
       allScoredHotspots: hotspots.allScored,
-
+hotspotInsights,
       // Branches
       branches: branchData,
 

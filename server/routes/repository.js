@@ -9,6 +9,7 @@ const {
   getCommitDiff,
   getCommitDetails,
   getAICommitData,
+    getFileHistory,
 } = require("../services/gitService");
 const { analyzeRepository } = require("../services/analysisService");
 
@@ -100,6 +101,7 @@ console.log(result.commitStatistics);
   hotspots: result.hotspots,
   allScoredHotspots: result.allScoredHotspots,
 
+  hotspotInsights: result.hotspotInsights, 
   branches: result.branches,
   recentCommits: result.recentCommits,
   allCommits: result.allCommits,
@@ -252,5 +254,42 @@ router.get("/commit/:hash/summary", async (req, res) => {
   }
 });
 
+// ==========================================
+// File Commit History + Co-Change (for Hotspot details panel)
+// ==========================================
+
+router.get("/hotspots/commits", async (req, res) => {
+  try {
+    const { file } = req.query;
+
+    if (!file) {
+      return res.status(400).json({
+        success: false,
+        message: "file query param is required.",
+      });
+    }
+
+    if (!currentRepoPath) {
+      return res.status(400).json({
+        success: false,
+        message: "Repository not analyzed yet.",
+      });
+    }
+
+    const data = await getFileHistory(currentRepoPath, file);
+
+    res.json({
+      success: true,
+      data,
+    });
+  } catch (error) {
+    console.error("File History Error:", error);
+
+    res.status(500).json({
+      success: false,
+      message: error.message,
+    });
+  }
+});
 
 module.exports = router;
