@@ -2,6 +2,7 @@
   "dependencies": {
     "@google/generative-ai": "^0.24.1",
     "chromadb": "^3.5.0",
-    "dotenv": "^17.4.2"
+    "dotenv": "^17.4.2",
+    "react-markdown": "^10.1.0"
   }
 }

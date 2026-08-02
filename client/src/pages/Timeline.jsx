@@ -3,15 +3,8 @@ import { useEffect, useMemo, useState } from "react";
 import { GitCommit, Clock, Copy, Check, History, ChevronDown } from "lucide-react";
 import CommitActivityGraph from "../components/CommitActivityGraph";
 const PAGE_SIZE = 10;
-
-const TYPE_DOT = {
-  feat: "bg-emerald-500",
-  fix: "bg-orange-500",
-  docs: "bg-blue-500",
-  refactor: "bg-amber-500",
-  other: "bg-slate-400",
-};
-
+import CommitCalendar from "../components/CommitCalendar";
+import { TYPE_DOT } from "../constants/commitTypes";
 function relativeTime(date) {
   if (!date) return "Unknown date";
   const diffMs = Date.now() - date.getTime();
@@ -145,25 +138,53 @@ const graphTimeline = useMemo(() => {
     }
     return groups;
   }, [parsed, visibleCount]);
+const calendarData = useMemo(() => {
+  const activity = {};
 
-  if (!timeline.length) {
-    return (
-      <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-8 text-center">
-        <History size={28} className="mx-auto mb-3 text-gray-300" />
-        <h2 className="text-xl font-semibold text-slate-900 mb-1">Commit Timeline</h2>
-        <p className="text-gray-500 text-sm">No timeline data available.</p>
-      </div>
-    );
-  }
+  timeline.forEach((commit) => {
+    if (!commit.date) return;
 
+    const date = commit.date.substring(0, 10);
+    activity[date] = (activity[date] || 0) + 1;
+  });
+
+  return Object.entries(activity).map(([date, commits]) => ({
+    date,
+    count: commits,
+    level:
+      commits === 0
+        ? 0
+        : commits <= 2
+        ? 1
+        : commits <= 5
+        ? 2
+        : commits <= 10
+        ? 3
+        : 4,
+  }));
+}, [timeline]);
+
+if (!timeline.length) {
+  return (
+    <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-8 text-center">
+      <History size={28} className="mx-auto mb-3 text-gray-300" />
+      <h2 className="text-xl font-semibold">
+        Commit Timeline
+      </h2>
+      <p>No timeline data available.</p>
+    </div>
+  );
+}
   const hasMore = visibleCount < parsed.length;
 
 return (
   <div className="space-y-6">
 
     {/* Commit Activity Graph */}
-  
+  <CommitCalendar timeline={timeline} />
 <CommitActivityGraph timeline={graphTimeline} />
+
+
     {/* Existing Commit Timeline */}
     <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
       <div className="flex items-center justify-between mb-6">

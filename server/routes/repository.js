@@ -23,6 +23,9 @@ const {
 const {
   generateCommitSummary,
 } = require("../services/aiCommitService");
+const {
+  getCommitCalendar,
+} = require("../services/calendarService");
 let currentRepoPath = "";
 // Test Route
 router.get("/info", (req, res) => {
@@ -135,6 +138,29 @@ console.log(result.commitStatistics);
     });
   }
 });
+
+router.get("/calendar", async (req, res) => {
+  try {
+    const { repoPath } = req.query;
+
+    if (!repoPath) {
+      return res.status(400).json({
+        error: "repoPath is required",
+      });
+    }
+
+    const calendar = await getCommitCalendar(repoPath);
+
+    res.json(calendar);
+  } catch (err) {
+    console.error(err);
+
+    res.status(500).json({
+      error: "Unable to generate calendar",
+    });
+  }
+});
+
 // Commit Details
 router.get("/commit/:hash", async (req, res) => {
   try {

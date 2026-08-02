@@ -8,6 +8,7 @@ const aiRoutes = require("./routes/ai");
 const assistantRoutes = require("./routes/assistant");
 const qaRoutes = require("./routes/qa");
 const debugRoutes = require("./routes/debug");
+const contributorRoute = require("./routes/contributor");
 const app = express();
 
 app.use(cors());
@@ -21,7 +22,7 @@ app.use("/assistant", assistantRoutes);
 app.use("/repository", debugRoutes);
 // QA routes
 app.use("/api/qa", qaRoutes);
-
+app.use("/api/contributor", contributorRoute);
 app.get("/", (req, res) => {
   res.json({
     message: "API Running",

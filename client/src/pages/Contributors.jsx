@@ -3,15 +3,34 @@ import { useEffect, useMemo, useState } from "react";
 import TopContributors from "../components/TopContributors";
 import ContributorStats from "../components/ContributorStats";
 import ContributorDetails from "../components/ContributorDetails";
-
+import ContributorActivity from "../components/ContributorActivity";
 import { Users, Search, AlertCircle } from "lucide-react";
-
+import ContributorAI from "../components/ContributorAI";
 // import API from "../services/api";
-
+// import ReactMarkdown from "react-markdown";
 function getInitial(name) {
   return (name || "U").charAt(0).toUpperCase();
 }
 
+function relativeTime(date) {
+  if (!date) return "";
+
+  const diff = Date.now() - new Date(date).getTime();
+
+  const mins = Math.floor(diff / 60000);
+
+  if (mins < 60) return `${mins} min ago`;
+
+  const hrs = Math.floor(mins / 60);
+
+  if (hrs < 24) return `${hrs} hr ago`;
+
+  const days = Math.floor(hrs / 24);
+
+  if (days < 30) return `${days} day${days > 1 ? "s" : ""} ago`;
+
+  return new Date(date).toLocaleDateString();
+}
 function Contributors() {
   const [contributors, setContributors] = useState({});
   const [allCommits, setAllCommits] = useState([]);
@@ -19,7 +38,7 @@ function Contributors() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [searchTerm, setSearchTerm] = useState("");
-
+  const [activeContributor, setActiveContributor] = useState(null);
   // const repoUrl = localStorage.getItem("repoUrl");
 
   // Fetch contributors
@@ -38,7 +57,6 @@ function Contributors() {
 
   setContributors(analysis.contributors || {});
   setAllCommits(analysis.allCommits || []);
-
   setLoading(false);
 }, []);
 
@@ -59,11 +77,49 @@ function Contributors() {
     return { filteredContributors: filtered, totalCommits: total };
   }, [contributors, searchTerm]);
 
-  const contributorList = useMemo(
-    () => Object.values(contributors).sort((a, b) => (b.commits || 0) - (a.commits || 0)),
-    [contributors]
+ const contributorList = useMemo(() => {
+  return Object.values(contributors).sort(
+    (a, b) => (b.commits || 0) - (a.commits || 0)
+  );
+}, [contributors]);
+
+const contributorSummary = useMemo(() => {
+  const totalContributors = contributorList.length;
+  const totalCommits = contributorList.reduce(
+    (sum, c) => sum + (c.commits || 0),
+    0
   );
 
+  const topContributor = contributorList[0];
+
+  const averageCommits =
+    totalContributors === 0
+      ? 0
+      : (totalCommits / totalContributors).toFixed(1);
+
+  return {
+    totalContributors,
+    totalCommits,
+    averageCommits,
+    topContributor,
+  };
+}, [contributorList]);
+const contributorLastCommit = useMemo(() => {
+  const map = {};
+
+  allCommits.forEach((commit) => {
+    if (!commit.author || !commit.date) return;
+
+    if (
+      !map[commit.author] ||
+      new Date(commit.date) > new Date(map[commit.author].date)
+    ) {
+      map[commit.author] = commit;
+    }
+  });
+
+  return map;
+}, [allCommits]);
   return (
     <div className="bg-gray-100 min-h-screen">
       <div className="max-w-7xl mx-auto px-8 py-8">
@@ -109,9 +165,37 @@ function Contributors() {
 
         {/* All Contributors */}
         <div className="bg-white rounded-2xl shadow-sm overflow-hidden">
-          <div className="px-6 py-5 border-b">
-            <h2 className="text-xl font-bold text-slate-900">All Contributors</h2>
-          </div>
+        <div className="px-6 py-5 border-b">
+  <div className="flex items-center justify-between flex-wrap gap-3">
+
+    <div>
+      <h2 className="text-xl font-bold text-slate-900">
+        All Contributors
+      </h2>
+
+      <p className="text-sm text-gray-500 mt-1">
+        {contributorSummary.totalContributors} contributors
+        <span className="mx-2">•</span>
+
+        {contributorSummary.totalCommits} commits
+
+        <span className="mx-2">•</span>
+
+        Avg {contributorSummary.averageCommits} commits/person
+      </p>
+    </div>
+
+    {contributorSummary.topContributor && (
+      <div className="text-sm text-gray-500">
+        🏆 Top Contributor:
+        <span className="font-semibold text-slate-900 ml-1">
+          {contributorSummary.topContributor.name}
+        </span>
+      </div>
+    )}
+
+  </div>
+</div>
 
           {error ? (
             <div className="p-8 text-center text-gray-500 flex flex-col items-center gap-2">
@@ -135,11 +219,15 @@ function Contributors() {
                     key={key}
                     role="button"
                     tabIndex={0}
-                    onClick={() => setSelectedContributor(contributor.name)}
+                   onClick={() => {
+  setSelectedContributor(contributor.name);
+  setActiveContributor(contributor.name);
+}}
                     onKeyDown={(e) => {
                       if (e.key === "Enter" || e.key === " ") {
                         e.preventDefault();
                         setSelectedContributor(contributor.name);
+                        setActiveContributor(contributor.name);
                       }
                     }}
                     aria-label={`View details for ${contributor.name || "unknown contributor"}`}
@@ -158,9 +246,21 @@ function Contributors() {
                           <h3 className="font-semibold text-slate-900 truncate">
                             {contributor.name || "Unknown Contributor"}
                           </h3>
-                          <p className="text-sm text-gray-500">
-                            Contributor #{index + 1}
-                          </p>
+                        <div className="space-y-1">
+  <p className="text-sm text-gray-500">
+    {index === 0 && "🥇 Top Contributor"}
+    {index === 1 && "🥈 Second Contributor"}
+    {index === 2 && "🥉 Third Contributor"}
+    {index > 2 && `Rank #${index + 1}`}
+  </p>
+
+  {contributorLastCommit[contributor.name] && (
+    <p className="text-xs text-gray-400">
+      Last commit •{" "}
+      {relativeTime(contributorLastCommit[contributor.name].date)}
+    </p>
+  )}
+</div>
                         </div>
                       </div>
 
@@ -188,12 +288,26 @@ function Contributors() {
             </div>
           )}
         </div>
-
-        <ContributorDetails
+{activeContributor && (
+  <>
+    <ContributorActivity
+      contributorName={activeContributor}
+      allCommits={allCommits}
+    />
+    <ContributorAI
+      contributorName={activeContributor}
+      allCommits={allCommits}
+    />
+  </>
+)}
+       <ContributorDetails
           selectedContributor={selectedContributor}
           allCommits={allCommits}
-          onClose={() => setSelectedContributor(null)}
-        />
+          onClose={() => {
+            setSelectedContributor(null);
+            setActiveContributor(null);
+          }}
+        />   
       </div>
     </div>
   );

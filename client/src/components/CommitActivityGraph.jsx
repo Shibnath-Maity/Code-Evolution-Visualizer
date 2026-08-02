@@ -1,45 +1,67 @@
+// CommitActivityGraph.jsx
 import { useMemo, useState } from "react";
 import {
-  AreaChart,
-  Area,
-  XAxis,
-  YAxis,
-  CartesianGrid,
-  Tooltip,
-  ResponsiveContainer,
+  AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ReferenceLine, ResponsiveContainer,
 } from "recharts";
-import { Activity, TrendingUp, Flame } from "lucide-react";
+import { Activity } from "lucide-react";
 
 const RANGE_OPTIONS = [
-  { value: "all", label: "All time" },
-  { value: "7", label: "Last 7 days" },
-  { value: "30", label: "Last 30 days" },
-  { value: "90", label: "Last 3 months" },
+  { value: "all", label: "All" },
+  { value: "7", label: "7D" },
+  { value: "30", label: "30D" },
+  { value: "90", label: "90D" },
 ];
+
+function toLocalDateKey(date) {
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, "0");
+  const d = String(date.getDate()).padStart(2, "0");
+  return `${y}-${m}-${d}`;
+}
 
 function formatAxisDate(value) {
   const date = new Date(value);
-  if (isNaN(date)) return value;
-  return date.toLocaleDateString(undefined, { month: "short", day: "numeric" });
+  return isNaN(date) ? value : date.toLocaleDateString(undefined, { month: "short", day: "numeric" });
 }
 
 function formatFullDate(value) {
   const date = new Date(value);
-  if (isNaN(date)) return value;
-  return date.toLocaleDateString(undefined, {
-    weekday: "short",
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-  });
+  return isNaN(date)
+    ? value
+    : date.toLocaleDateString(undefined, { month: "long", day: "numeric", year: "numeric" });
+}
+
+// Fills every day between the first commit and today with 0 where there's
+// no activity, so the line reflects real continuity instead of skipping
+// silently between commit days.
+function buildContinuousData(timeline) {
+  const counts = {};
+  let earliest = null;
+
+  for (const [date, count] of Object.entries(timeline)) {
+    counts[date] = count;
+    const d = new Date(date);
+    if (!earliest || d < earliest) earliest = d;
+  }
+  if (!earliest) return [];
+
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const data = [];
+
+  for (let d = new Date(earliest); d <= today; d.setDate(d.getDate() + 1)) {
+    const key = toLocalDateKey(d);
+    data.push({ date: key, commits: counts[key] || 0 });
+  }
+  return data;
 }
 
 function CustomTooltip({ active, payload, label }) {
   if (!active || !payload?.length) return null;
   return (
-    <div className="bg-white border border-gray-100 shadow-lg rounded-xl px-4 py-3">
-      <p className="text-xs text-gray-400 mb-1">{formatFullDate(label)}</p>
-      <p className="text-sm font-semibold text-slate-900">
+    <div className="rounded-lg bg-white shadow-md border border-gray-100 px-3 py-2">
+      <p className="text-[11px] text-gray-400 mb-0.5">{formatFullDate(label)}</p>
+      <p className="text-[13px] font-semibold text-slate-900">
         {payload[0].value} {payload[0].value === 1 ? "commit" : "commits"}
       </p>
     </div>
@@ -49,142 +71,123 @@ function CustomTooltip({ active, payload, label }) {
 export default function CommitActivityGraph({ timeline = {} }) {
   const [range, setRange] = useState("all");
 
-  const graphData = useMemo(
-    () =>
-      Object.entries(timeline)
-        .map(([date, count]) => ({ date, commits: count }))
-        .sort((a, b) => new Date(a.date) - new Date(b.date)),
-    [timeline]
-  );
+  const graphData = useMemo(() => buildContinuousData(timeline), [timeline]);
 
   const filteredData = useMemo(() => {
     if (range === "all") return graphData;
-
-    const days = Number(range);
     const cutoff = new Date();
-    cutoff.setDate(cutoff.getDate() - days);
-
+    cutoff.setDate(cutoff.getDate() - Number(range));
     return graphData.filter((item) => new Date(item.date) >= cutoff);
   }, [graphData, range]);
 
-  // Stats now derive from filteredData so they always match what's
-  // actually plotted on the chart for the selected range — previously
-  // these were computed from graphData (all-time) regardless of range,
-  // which meant the numbers above the chart didn't match what the
-  // chart itself was showing whenever a narrower range was selected.
   const stats = useMemo(() => {
     if (!filteredData.length) return null;
-    const total = filteredData.reduce((sum, item) => sum + item.commits, 0);
-    const peak = filteredData.reduce(
-      (max, item) => (item.commits > max.commits ? item : max),
-      filteredData[0]
-    );
-    const average = total / filteredData.length;
-    return { total, peak, average };
+    const total = filteredData.reduce((sum, d) => sum + d.commits, 0);
+    const activeDays = filteredData.filter((d) => d.commits > 0).length;
+    const peak = filteredData.reduce((max, d) => (d.commits > max.commits ? d : max), filteredData[0]);
+    const average = activeDays === 0 ? 0 : total / activeDays;
+    return { total, activeDays, peak, average };
   }, [filteredData]);
 
   if (!graphData.length) {
     return (
-      <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6 text-center py-10">
-        <Activity size={28} className="mx-auto mb-3 text-gray-300" />
-        <h2 className="text-xl font-semibold text-slate-900">Commit Activity</h2>
-        <p className="text-sm text-gray-500 mt-2">No commit activity available.</p>
+      <div className="bg-white rounded-2xl border border-gray-200 p-6 text-center py-10">
+        <Activity size={24} className="mx-auto mb-3 text-gray-300" />
+        <h2 className="text-[15px] font-semibold text-slate-900">Commit Activity</h2>
+        <p className="text-[13px] text-gray-500 mt-1">No commit activity available.</p>
       </div>
     );
   }
 
   return (
-    <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6">
-      {/* Header */}
-      <div className="flex items-center justify-between mb-2 flex-wrap gap-3">
-        <div>
-          <h2 className="text-xl font-semibold text-slate-900">Commit Activity</h2>
-          <p className="text-sm text-gray-500 mt-1">Repository commits over time</p>
-        </div>
+    <div className="bg-white rounded-2xl border border-gray-200 p-6">
+      <div className="flex items-center justify-between mb-1 flex-wrap gap-3">
+        <h2 className="text-[15px] font-semibold text-slate-900">Commit Activity</h2>
 
-        <div className="flex items-center gap-3">
-          <select
-            value={range}
-            onChange={(e) => setRange(e.target.value)}
-            className="border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-600 bg-white outline-none focus:ring-2 focus:ring-indigo-200"
-          >
-            {RANGE_OPTIONS.map((opt) => (
-              <option key={opt.value} value={opt.value}>
-                {opt.label}
-              </option>
-            ))}
-          </select>
-
-          <span className="text-sm text-gray-400">{stats?.total || 0} commits</span>
+        <div className="flex gap-1.5">
+          {RANGE_OPTIONS.map((opt) => (
+            <button
+              key={opt.value}
+              onClick={() => setRange(opt.value)}
+              className={`px-2.5 py-1 rounded-full text-xs font-medium transition-colors ${
+                range === opt.value
+                  ? "bg-indigo-600 text-white"
+                  : "bg-gray-100 hover:bg-gray-200 text-gray-500"
+              }`}
+            >
+              {opt.label}
+            </button>
+          ))}
         </div>
       </div>
 
-      {/* Quick stats — reflect the selected range, not all-time */}
       {stats && (
-        <div className="flex items-center gap-5 mb-6 flex-wrap">
-          <span className="flex items-center gap-1.5 text-xs text-gray-500">
-            <TrendingUp size={13} className="text-indigo-500" />
-            Avg {stats.average.toFixed(1)}/active day
+        <p className="text-[13px] text-gray-500 mb-5 flex flex-wrap items-center gap-x-1.5">
+          <span>{stats.total} commits</span>
+          <Dot />
+          <span>{stats.activeDays} active days</span>
+          <Dot />
+          <span>
+            {stats.peak.commits} peak · {formatAxisDate(stats.peak.date)}
           </span>
-          <span className="flex items-center gap-1.5 text-xs text-gray-500">
-            <Flame size={13} className="text-orange-500" />
-            Peak {stats.peak.commits} on {formatAxisDate(stats.peak.date)}
-          </span>
-        </div>
+          {stats.average > 0 && (
+            <>
+              <Dot />
+              <span>{stats.average.toFixed(1)} avg/active day</span>
+            </>
+          )}
+        </p>
       )}
 
-      {/* No data in the selected range */}
       {!filteredData.length ? (
-        <div className="h-[320px] flex flex-col items-center justify-center text-center">
-          <Activity size={32} className="text-gray-300 mb-3" />
-          <h3 className="text-lg font-semibold text-slate-800">No commit activity</h3>
-          <p className="text-sm text-gray-500 mt-1">
-            No commits found for this time period.
-          </p>
+        <div className="h-[340px] flex flex-col items-center justify-center text-center">
+          <Activity size={28} className="text-gray-300 mb-3" />
+          <p className="text-[13px] text-gray-500">No commits in this range.</p>
         </div>
       ) : (
-        <div className="w-full h-[320px]">
+        <div className="w-full h-[340px]">
           <ResponsiveContainer width="100%" height="100%">
-            <AreaChart
-              data={filteredData}
-              margin={{ top: 8, right: 12, left: -12, bottom: 0 }}
-            >
+            <AreaChart data={filteredData} margin={{ top: 8, right: 8, left: -16, bottom: 0 }}>
               <defs>
                 <linearGradient id="commitActivityGradient" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="0%" stopColor="#6366f1" stopOpacity={0.25} />
+                  <stop offset="0%" stopColor="#6366f1" stopOpacity={0.18} />
                   <stop offset="100%" stopColor="#6366f1" stopOpacity={0} />
                 </linearGradient>
               </defs>
-
               <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
-
               <XAxis
                 dataKey="date"
                 tickFormatter={formatAxisDate}
-                tick={{ fontSize: 12, fill: "#94a3b8" }}
+                tick={{ fontSize: 11, fill: "#94a3b8" }}
                 axisLine={false}
                 tickLine={false}
-                minTickGap={24}
+                minTickGap={28}
               />
-
               <YAxis
                 allowDecimals={false}
-                tick={{ fontSize: 12, fill: "#94a3b8" }}
+                tick={{ fontSize: 11, fill: "#94a3b8" }}
                 axisLine={false}
                 tickLine={false}
-                width={32}
+                width={28}
               />
-
+              {stats && stats.average > 0 && (
+                <ReferenceLine
+                  y={stats.average}
+                  stroke="#cbd5e1"
+                  strokeDasharray="4 4"
+                  ifOverflow="extendDomain"
+                />
+              )}
               <Tooltip content={<CustomTooltip />} />
-
               <Area
                 type="monotone"
                 dataKey="commits"
                 stroke="#6366f1"
-                strokeWidth={3}
+                strokeWidth={1.75}
                 fill="url(#commitActivityGradient)"
-                dot={{ r: 4, fill: "#6366f1", strokeWidth: 0 }}
-                activeDot={{ r: 6 }}
+                dot={false}
+                activeDot={{ r: 5, stroke: "#fff", strokeWidth: 2 }}
+                animationDuration={300}
               />
             </AreaChart>
           </ResponsiveContainer>
@@ -192,4 +195,8 @@ export default function CommitActivityGraph({ timeline = {} }) {
       )}
     </div>
   );
+}
+
+function Dot() {
+  return <span className="text-gray-300">·</span>;
 }
