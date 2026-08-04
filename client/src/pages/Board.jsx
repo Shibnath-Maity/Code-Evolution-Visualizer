@@ -10,6 +10,7 @@ import StatCard from "../components/StatCard";
 import { useLocation, useNavigate } from "react-router-dom";
 import LanguageDistribution from "../components/LanguageDistribution";
 import ProjectHealthScore from "../components/ProjectHealthScore";
+import DownloadRepositoryReport from "../components/DownloadRepositoryReport";
 function Board() {
 
   const location = useLocation();
@@ -355,17 +356,31 @@ console.log("Commits:", recentCommits);
   <div className="max-w-7xl mx-auto px-8 py-8">
 
     {/* Repository Header */}
-    <div className="mb-8">
-      <h1 className="text-3xl font-bold text-slate-900">
-        Repository Dashboard
-      </h1>
+  <div className="mb-8 flex justify-between items-start">
+  <div>
+    <h1 className="text-3xl font-bold text-slate-900">
+      Repository Dashboard
+    </h1>
 
-      {repoUrl && (
-        <p className="mt-2 text-sm text-slate-500 break-all">
-          Repository: {repoUrl}
-        </p>
-      )}
-    </div>
+    {repoUrl && (
+      <p className="mt-2 text-sm text-slate-500 break-all">
+        Repository: {repoUrl}
+      </p>
+    )}
+  </div>
+
+  <DownloadRepositoryReport
+    repoUrl={repoUrl}
+    stats={stats}
+    contributors={contributors}
+    fileAnalysis={fileAnalysis}
+    languageAnalysis={languageAnalysis}
+    architecture={architecture}
+    codeEvolution={codeEvolution}
+    hotspots={hotspots}
+    recentCommits={recentCommits}
+  />
+</div>
 
     {/* Your existing dashboard cards start here */}
 

@@ -16,19 +16,33 @@ async function generate(prompt) {
 }
 
 async function generateJSON(prompt) {
-  const response = await ai.models.generateContent({
-    model: MODEL,
-    contents: prompt,
-    config: {
-      responseMimeType: "application/json",
-    },
-  });
-
   try {
-    return JSON.parse(response.text);
+    const response = await ai.models.generateContent({
+      model: MODEL,
+      contents: prompt,
+      config: {
+        responseMimeType: "application/json",
+      },
+    });
+
+    const text =
+      typeof response.text === "function"
+        ? response.text()
+        : response.text;
+
+    console.log("Gemini Response:", text);
+
+    return JSON.parse(text);
+
   } catch (error) {
-    console.error("Failed to parse Gemini JSON:", response.text);
-    throw new Error("Gemini returned invalid JSON.");
+    console.error("Gemini Error:");
+    console.error(error);
+
+    if (error.response) {
+      console.error(error.response);
+    }
+
+    throw error;
   }
 }
 

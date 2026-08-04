@@ -116,9 +116,16 @@ const hotspots = calculateHotspots(
 
 logStep("Generating AI hotspot insights...");
 
-const hotspotInsights = await generateHotspotInsights(
-  hotspots.hotspots
-);
+let hotspotInsights = [];
+
+try {
+    hotspotInsights = await generateHotspotInsights(
+        hotspots.hotspots
+    );
+} catch (err) {
+    console.error("Hotspot Insight Error:");
+    console.error(err);
+}
     // Health
     logStep("Calculating project health...");
 

@@ -41,7 +41,14 @@ Hotspot Data:
 ${JSON.stringify(hotspots, null, 2)}
 `;
 
-  return await generateJSON(prompt);
+  try {
+    return await generateJSON(prompt);
+} catch (err) {
+    console.error("Hotspot AI Failed:");
+    console.error(err);
+
+    return [];
+}
 }
 
 module.exports = {

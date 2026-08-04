@@ -12,11 +12,15 @@ const {
     getFileHistory,
 } = require("../services/gitService");
 const { analyzeRepository } = require("../services/analysisService");
-
+const { solveIssue } = require("../services/issueSolverService");
 const { createTimeline } = require("../services/analyticsService");
 const { getFileChanges } = require("../services/fileAnalyticsService");
 const { calculateHotspots } = require("../services/hotspotService");
-const { getRepositoryInfo } = require("../services/githubService");
+const {
+  getRepositoryInfo,
+  getRepositoryIssues,
+  getRepositoryIssue,
+} = require("../services/githubService");
 const { indexRepository } = require("../services/vectorService");
 const {
   setCurrentRepository,
@@ -52,7 +56,96 @@ router.get("/repo-info", async (req, res) => {
     });
   }
 });
+// ==========================================
+// Fetch Repository Issues
+// ==========================================
+router.post("/issues", async (req, res) => {
+  try {
+    const { repoUrl } = req.body;
 
+    if (!repoUrl) {
+      return res.status(400).json({
+        success: false,
+        message: "Repository URL is required",
+      });
+    }
+
+    const repo = await getRepositoryInfo(repoUrl);
+
+    const issues = await getRepositoryIssues(
+      repo.owner,
+      repo.repo
+    );
+
+    res.json({
+      success: true,
+      repository: repo,
+      issues,
+    });
+
+  } catch (error) {
+    console.error("Issue Fetch Error:", error);
+
+    res.status(500).json({
+      success: false,
+      message: error.message,
+    });
+  }
+});
+
+// ==========================================
+// AI Issue Solver
+// ==========================================
+// ==========================================
+// AI Issue Solver
+// ==========================================
+router.post("/issue-solution", async (req, res) => {
+  try {
+    const { owner, repo, issueNumber } = req.body;
+
+    if (!owner || !repo || !issueNumber) {
+      return res.status(400).json({
+        success: false,
+        message: "owner, repo and issueNumber are required",
+      });
+    }
+
+    // Make sure repository is analyzed
+    if (!currentRepoPath) {
+      return res.status(400).json({
+        success: false,
+        message: "Analyze the repository first.",
+      });
+    }
+
+    // Fetch issue from GitHub
+    const issue = await getRepositoryIssue(
+      owner,
+      repo,
+      issueNumber
+    );
+
+    // Ask Gemini to solve it
+    const solution = await solveIssue({
+      issue,
+      repoPath: currentRepoPath,
+    });
+
+    res.json({
+      success: true,
+      issue,
+      solution,
+    });
+
+  } catch (error) {
+    console.error("Issue Solver Error:", error);
+
+    res.status(500).json({
+      success: false,
+      message: error.message,
+    });
+  }
+});
 // Analyze Repository
 router.post("/analytics", async (req, res) => {
   try {
@@ -131,14 +224,16 @@ console.log(result.commitStatistics);
 //     });
 
   } catch (error) {
-    console.error("❌ Backend Error:");
+    console.error("========== BACKEND ERROR ==========");
     console.error(error);
+    console.error(error.stack);
 
     res.status(500).json({
-      success: false,
-      message: error.message,
+        success: false,
+        message: error.message,
+        stack: error.stack,
     });
-  }
+}
 });
 
 router.get("/calendar", async (req, res) => {

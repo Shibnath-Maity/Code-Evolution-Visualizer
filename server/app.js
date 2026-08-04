@@ -1,4 +1,5 @@
 require("dotenv").config();
+console.log("GitHub Token Loaded:", !!process.env.GITHUB_TOKEN);
 const express = require("express");
 const cors = require("cors");
 
@@ -30,6 +31,29 @@ app.get("/", (req, res) => {
 });
 
 const PORT = 5000;
+
+const {
+  getRepositoryInfo,
+  getRepositoryIssues,
+} = require("./services/githubService");
+
+app.get("/test-issues", async (req, res) => {
+  try {
+    const repoUrl = "https://github.com/facebook/react";
+
+    const repo = await getRepositoryInfo(repoUrl);
+
+    const issues = await getRepositoryIssues(repo.owner, repo.repo);
+
+    res.json({
+      repository: repo.name,
+      issueCount: issues.length,
+      firstIssue: issues[0],
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
 
 app.listen(PORT, () => {
   console.log(`🚀 Server running on port ${PORT}`);

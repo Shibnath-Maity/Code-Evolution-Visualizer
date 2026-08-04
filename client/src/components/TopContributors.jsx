@@ -1,278 +1,154 @@
-import React, { useMemo, useState } from "react";
-import { ArrowUpDown, ArrowUp, ArrowDown, Users } from "lucide-react";
+import { useMemo, useState } from "react";
+import { Search, Trophy, GitCommit } from "lucide-react";
 
-// Deterministic color pick so the same person always gets the same avatar color
-const AVATAR_PALETTE = [
-  { bg: "bg-violet-100", text: "text-violet-700" },
-  { bg: "bg-sky-100", text: "text-sky-700" },
-  { bg: "bg-emerald-100", text: "text-emerald-700" },
-  { bg: "bg-amber-100", text: "text-amber-700" },
-  { bg: "bg-rose-100", text: "text-rose-700" },
-  { bg: "bg-cyan-100", text: "text-cyan-700" },
-];
+const MEDALS = ["🥇", "🥈", "🥉"];
+const RANK_LABELS = ["Top Contributor", "Second Contributor", "Third Contributor"];
 
-function avatarColor(seed = "") {
-  let hash = 0;
-  for (let i = 0; i < seed.length; i++) hash = seed.charCodeAt(i) + ((hash << 5) - hash);
-  return AVATAR_PALETTE[Math.abs(hash) % AVATAR_PALETTE.length];
+function getInitial(name) {
+  return (name || "U").charAt(0).toUpperCase();
 }
 
-const RANK_STYLES = {
-  0: "bg-amber-400 text-amber-950",
-  1: "bg-gray-300 text-gray-700",
-  2: "bg-orange-300 text-orange-900",
-};
-
-const COLUMNS = [
-  { key: "name", label: "Contributor", align: "left" },
-  { key: "commits", label: "Commits", align: "right" },
-  { key: "linesAdded", label: "Lines Added", align: "right" },
-  { key: "linesRemoved", label: "Lines Removed", align: "right" },
-  { key: "filesChanged", label: "Files Changed", align: "right" },
-  { key: "lastContribution", label: "Last Contribution", align: "right" },
-];
-
-function formatNumber(n = 0) {
-  return new Intl.NumberFormat("en-US").format(n);
+function relativeTime(date) {
+  if (!date) return null;
+  const diff = Date.now() - new Date(date).getTime();
+  const days = Math.floor(diff / 86400000);
+  if (days <= 0) return "Today";
+  if (days === 1) return "Yesterday";
+  if (days < 30) return `${days} days ago`;
+  return new Date(date).toLocaleDateString();
 }
 
-const TopContributors = ({ contributors = [] }) => {
-  const [sortKey, setSortKey] = useState("commits");
-  const [sortDir, setSortDir] = useState("desc");
+export default function TopContributors({
+  contributors = [],
+  aggregates = {},
+  activeContributor,
+  onSelect,
+}) {
+  const [query, setQuery] = useState("");
 
-  const maxChanges = useMemo(
-    () =>
-      Math.max(
-        1,
-        ...contributors.map((c) => (c.linesAdded || 0) + (c.linesRemoved || 0))
-      ),
+  const totalCommits = useMemo(
+    () => contributors.reduce((sum, c) => sum + (c.commits || 0), 0),
     [contributors]
   );
 
-  const sorted = useMemo(() => {
-    const list = [...contributors];
-    list.sort((a, b) => {
-      const av = a[sortKey];
-      const bv = b[sortKey];
-      if (sortKey === "name" || sortKey === "lastContribution") {
-        const cmp = String(av || "").localeCompare(String(bv || ""));
-        return sortDir === "asc" ? cmp : -cmp;
-      }
-      const cmp = (Number(av) || 0) - (Number(bv) || 0);
-      return sortDir === "asc" ? cmp : -cmp;
-    });
-    return list;
-  }, [contributors, sortKey, sortDir]);
-
-  const handleSort = (key) => {
-    if (key === sortKey) {
-      setSortDir((d) => (d === "asc" ? "desc" : "asc"));
-    } else {
-      setSortKey(key);
-      setSortDir("desc");
-    }
-  };
-
-  const SortIcon = ({ colKey }) => {
-    if (colKey !== sortKey) {
-      return <ArrowUpDown className="w-3.5 h-3.5 text-gray-300 group-hover:text-gray-400" />;
-    }
-    return sortDir === "asc" ? (
-      <ArrowUp className="w-3.5 h-3.5 text-gray-700" />
-    ) : (
-      <ArrowDown className="w-3.5 h-3.5 text-gray-700" />
-    );
-  };
-
-  if (contributors.length === 0) {
-    return (
-      <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
-        <div className="px-6 py-5 border-b border-gray-200">
-          <h2 className="text-lg font-semibold text-gray-900">Top Contributors</h2>
-        </div>
-        <div className="flex flex-col items-center justify-center py-16 px-6 text-center">
-          <div className="w-12 h-12 rounded-full bg-gray-100 flex items-center justify-center mb-3">
-            <Users className="w-6 h-6 text-gray-400" />
-          </div>
-          <p className="text-sm font-medium text-gray-900">No contributors yet</p>
-          <p className="text-sm text-gray-500 mt-1">
-            Activity will show up here once commits start landing.
-          </p>
-        </div>
-      </div>
-    );
-  }
+  const filtered = useMemo(() => {
+    if (!query.trim()) return contributors;
+    const q = query.toLowerCase();
+    return contributors.filter((c) => (c.name || "").toLowerCase().includes(q));
+  }, [contributors, query]);
 
   return (
-    <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
-      {/* Header */}
-      <div className="px-6 py-5 border-b border-gray-200 flex items-center justify-between">
-        <h2 className="text-lg font-semibold text-gray-900">Top Contributors</h2>
-        <span className="text-xs font-medium text-gray-500 bg-gray-100 rounded-full px-2.5 py-1">
-          {contributors.length} {contributors.length === 1 ? "person" : "people"}
-        </span>
+    <div className="bg-white rounded-2xl shadow-sm p-6">
+      <div className="flex items-center justify-between gap-3 mb-4 flex-wrap">
+        <div className="flex items-center gap-2">
+          <Trophy size={18} className="text-indigo-600" />
+          <h2 className="text-lg font-bold text-slate-900">Top Contributors</h2>
+        </div>
+
+        <div className="relative">
+          <Search
+            size={14}
+            className="absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400"
+          />
+          <input
+            type="text"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder="Search..."
+            aria-label="Search contributors"
+            className="text-sm border border-gray-200 rounded-lg pl-8 pr-3 py-1.5 w-40 outline-none focus:border-indigo-400 focus:ring-4 focus:ring-indigo-100"
+          />
+        </div>
       </div>
 
-      {/* Desktop table */}
-      <div className="hidden md:block overflow-x-auto">
-        <table className="w-full text-sm">
-          <thead>
-            <tr className="text-gray-500 border-b border-gray-100">
-              {COLUMNS.map((col, i) => (
-                <th
-                  key={col.key}
-                  scope="col"
-                  className={`${i === 0 ? "px-6" : "px-4"} py-4 font-medium ${
-                    col.align === "right" ? "text-right" : "text-left"
-                  }`}
-                >
-                  <button
-                    type="button"
-                    onClick={() => handleSort(col.key)}
-                    className={`group inline-flex items-center gap-1.5 rounded focus:outline-none focus-visible:ring-2 focus-visible:ring-violet-400 ${
-                      col.align === "right" ? "flex-row-reverse" : ""
-                    }`}
-                  >
-                    <span>{col.label}</span>
-                    <SortIcon colKey={col.key} />
-                  </button>
-                </th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {sorted.map((contributor, index) => {
-              const colors = avatarColor(contributor.email || contributor.name);
-              const changeShare =
-                ((contributor.linesAdded || 0) + (contributor.linesRemoved || 0)) /
-                maxChanges;
-              return (
-                <tr
-                  key={contributor.email || contributor.name || index}
-                  className="border-b border-gray-100 last:border-none hover:bg-gray-50/80 transition-colors"
-                >
-                  {/* Contributor */}
-                  <td className="px-6 py-4">
-                    <div className="flex items-center gap-3">
-                      <span
-                        className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-semibold ${
-                          RANK_STYLES[index] || "bg-gray-100 text-gray-400"
-                        }`}
-                      >
-                        {index + 1}
-                      </span>
-                      <div
-                        className={`w-9 h-9 rounded-full flex items-center justify-center font-semibold ${colors.bg} ${colors.text}`}
-                      >
-                        {contributor.name?.charAt(0).toUpperCase() || "?"}
-                      </div>
-                      <div>
-                        <div className="font-medium text-gray-900">
-                          {contributor.name || "Unknown"}
-                        </div>
-                        <div className="text-xs text-gray-500">
-                          @{contributor.username || "unknown"}
-                        </div>
-                      </div>
-                    </div>
-                  </td>
-                  {/* Commits */}
-                  <td className="px-4 py-4 text-right">
-                    <div className="font-semibold text-gray-900 tabular-nums">
-                      {formatNumber(contributor.commits)}
-                    </div>
-                    <div className="text-xs text-gray-500 tabular-nums">
-                      {contributor.commitPercentage || 0}%
-                    </div>
-                  </td>
-                  {/* Lines Added */}
-                  <td className="px-4 py-4 text-right font-semibold text-emerald-600 tabular-nums">
-                    +{formatNumber(contributor.linesAdded)}
-                  </td>
-                  {/* Lines Removed */}
-                  <td className="px-4 py-4 text-right font-semibold text-rose-500 tabular-nums">
-                    −{formatNumber(contributor.linesRemoved)}
-                  </td>
-                  {/* Files Changed */}
-                  <td className="px-4 py-4 text-right font-semibold text-gray-700 tabular-nums">
-                    {formatNumber(contributor.filesChanged)}
-                  </td>
-                  {/* Last Contribution + mini activity bar */}
-                  <td className="px-6 py-4 text-right">
-                    <div className="text-gray-700">{contributor.lastContribution || "N/A"}</div>
-                    <div className="mt-1.5 h-1 w-20 ml-auto rounded-full bg-gray-100 overflow-hidden">
-                      <div
-                        className="h-full rounded-full bg-gray-400"
-                        style={{ width: `${Math.max(6, changeShare * 100)}%` }}
-                      />
-                    </div>
-                  </td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
-      </div>
+      {filtered.length === 0 ? (
+        <p className="text-sm text-gray-400 py-10 text-center">No contributors found.</p>
+      ) : (
+        <div className="space-y-5">
+          {filtered.map((contributor, index) => {
+            const commits = contributor.commits || 0;
+            const pct = totalCommits > 0 ? ((commits / totalCommits) * 100).toFixed(1) : "0.0";
+            const agg = aggregates[contributor.name] || {};
+            const isActive = activeContributor === contributor.name;
 
-      {/* Mobile cards */}
-      <div className="md:hidden divide-y divide-gray-100">
-        {sorted.map((contributor, index) => {
-          const colors = avatarColor(contributor.email || contributor.name);
-          return (
-            <div key={contributor.email || contributor.name || index} className="px-4 py-4">
-              <div className="flex items-center gap-3">
-                <span
-                  className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-semibold shrink-0 ${
-                    RANK_STYLES[index] || "bg-gray-100 text-gray-400"
-                  }`}
-                >
-                  {index + 1}
-                </span>
-                <div
-                  className={`w-9 h-9 rounded-full flex items-center justify-center font-semibold shrink-0 ${colors.bg} ${colors.text}`}
-                >
-                  {contributor.name?.charAt(0).toUpperCase() || "?"}
-                </div>
-                <div className="min-w-0">
-                  <div className="font-medium text-gray-900 truncate">
-                    {contributor.name || "Unknown"}
+            return (
+              <button
+                key={contributor.name || index}
+                type="button"
+                onClick={() => onSelect?.(contributor.name)}
+                className={`w-full text-left rounded-xl p-4 border transition ${
+                  isActive
+                    ? "border-indigo-300 bg-indigo-50/60 ring-2 ring-indigo-100"
+                    : "border-gray-100 hover:bg-gray-50"
+                }`}
+              >
+                <div className="flex items-start justify-between gap-4">
+                  <div className="flex items-center gap-3 min-w-0">
+                    <div className="relative shrink-0">
+                      <div className="w-11 h-11 rounded-full bg-indigo-100 text-indigo-700 flex items-center justify-center font-bold">
+                        {getInitial(contributor.name)}
+                      </div>
+                      {index < 3 && (
+                        <span className="absolute -top-1.5 -left-1.5 w-5 h-5 rounded-full bg-yellow-400 text-white text-[11px] font-bold flex items-center justify-center border-2 border-white">
+                          {index + 1}
+                        </span>
+                      )}
+                    </div>
+
+                    <div className="min-w-0">
+                      <p className="font-semibold text-slate-900 truncate">
+                        {contributor.name || "Unknown Contributor"}
+                      </p>
+                      {contributor.email && (
+                        <p className="text-xs text-gray-400 truncate">{contributor.email}</p>
+                      )}
+                      <p className="text-xs text-gray-500 mt-0.5">
+                        {index < 3 ? (
+                          <>
+                            {MEDALS[index]} {RANK_LABELS[index]}
+                          </>
+                        ) : (
+                          `Rank #${index + 1}`
+                        )}
+                      </p>
+                    </div>
                   </div>
-                  <div className="text-xs text-gray-500 truncate">
-                    @{contributor.username || "unknown"}
+
+                  <div className="text-right shrink-0">
+                    <p className="font-bold text-slate-900 flex items-center gap-1 justify-end">
+                      <GitCommit size={13} className="text-indigo-400" />
+                      {commits}
+                    </p>
+                    <p className="text-xs text-gray-500">commits</p>
                   </div>
                 </div>
-              </div>
-              <div className="mt-3 grid grid-cols-2 gap-y-2 text-xs">
-                <div>
-                  <span className="text-gray-500">Commits </span>
-                  <span className="font-semibold text-gray-900 tabular-nums">
-                    {formatNumber(contributor.commits)}
-                  </span>
+
+                <div className="mt-3 h-2 bg-gray-100 rounded-full overflow-hidden">
+                  <div
+                    className="h-full bg-indigo-600 rounded-full transition-all"
+                    style={{ width: `${pct}%` }}
+                  />
                 </div>
-                <div className="text-right">
-                  <span className="text-gray-500">Files </span>
-                  <span className="font-semibold text-gray-700 tabular-nums">
-                    {formatNumber(contributor.filesChanged)}
-                  </span>
+
+                <div className="flex items-center flex-wrap gap-x-5 gap-y-1 mt-3 text-xs">
+                  <span className="text-gray-400">{pct}% of total</span>
+                  {typeof agg.additions === "number" && (
+                    <span className="text-emerald-600 font-medium">+{agg.additions}</span>
+                  )}
+                  {typeof agg.deletions === "number" && (
+                    <span className="text-rose-500 font-medium">-{agg.deletions}</span>
+                  )}
+                  {agg.lastActive && (
+                    <span className="text-gray-400">
+                      Last active · {relativeTime(agg.lastActive)}
+                    </span>
+                  )}
                 </div>
-                <div>
-                  <span className="font-semibold text-emerald-600 tabular-nums">
-                    +{formatNumber(contributor.linesAdded)}
-                  </span>{" "}
-                  <span className="font-semibold text-rose-500 tabular-nums">
-                    −{formatNumber(contributor.linesRemoved)}
-                  </span>
-                </div>
-                <div className="text-right text-gray-500">
-                  {contributor.lastContribution || "N/A"}
-                </div>
-              </div>
-            </div>
-          );
-        })}
-      </div>
+              </button>
+            );
+          })}
+        </div>
+      )}
     </div>
   );
-};
-
-export default TopContributors;
+}
