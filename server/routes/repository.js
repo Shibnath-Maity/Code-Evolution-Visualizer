@@ -33,6 +33,13 @@ const {
 } = require("../services/calendarService");
 let currentRepoPath = "";
 // Test Route
+const {
+  explainFile,
+} = require("../services/fileExplanationService");
+
+const {
+  buildArchitecture,
+} = require("../services/architectureService");
 router.get("/info", (req, res) => {
   res.json({
     name: "Code Evolution Visualizer",
@@ -156,6 +163,9 @@ console.log("Repository ID from frontend:", repositoryId);
 
     // Normal repository analysis
     const result = await analyzeRepository(url, repositoryId);
+    console.log("===== ANALYSIS RESULT =====");
+console.log(result);
+console.log("repoPath =", result.repoPath);
     setCurrentRepository(
   repositoryId,
   result.repoPath
@@ -188,6 +198,7 @@ console.log(result.commitStatistics);
   contributors: result.contributors,
   timeline: result.timeline,
   fileAnalysis: result.fileAnalysis,
+  aiFileAnalysis: result.aiFileAnalysis,
   languageAnalysis: result.languageAnalysis,
   codeEvolution: result.codeEvolution,
   repoPath: result.repoPath,   // ⭐ ADD THIS
@@ -341,6 +352,57 @@ router.get("/commit/:hash/summary", async (req, res) => {
 
   } catch (error) {
     console.error("AI Commit Summary Error:", error);
+
+    res.status(500).json({
+      success: false,
+      message: error.message,
+    });
+  }
+});
+// ==========================================
+// AI File Explanation
+// ==========================================
+
+
+// ==========================================
+// AI File Explanation
+// ==========================================
+router.post("/file-explanation", async (req, res) => {
+  try {
+    const { filePath } = req.body;
+
+    if (!filePath) {
+      return res.status(400).json({
+        success: false,
+        message: "filePath is required",
+      });
+    }
+
+    if (!currentRepoPath) {
+      return res.status(400).json({
+        success: false,
+        message: "Analyze repository first.",
+      });
+    }
+
+    console.log("currentRepoPath:", currentRepoPath);
+    console.log("filePath:", filePath);
+
+    const architecture = buildArchitecture(currentRepoPath);
+
+    const explanation = await explainFile(
+      currentRepoPath,
+      filePath,
+      architecture
+    );
+
+    res.json({
+      success: true,
+      data: explanation,
+    });
+
+  } catch (error) {
+    console.error("File Explanation Error:", error);
 
     res.status(500).json({
       success: false,

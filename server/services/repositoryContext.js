@@ -1,12 +1,18 @@
 let currentRepository = {
   repositoryId: null,
   repoPath: null,
+  architecture: null,
 };
 
-function setCurrentRepository(repositoryId, repoPath) {
+function setCurrentRepository(
+  repositoryId,
+  repoPath,
+  architecture
+) {
   currentRepository = {
     repositoryId,
     repoPath,
+    architecture,
   };
 
   console.log("✅ Repository Saved");
@@ -14,9 +20,6 @@ function setCurrentRepository(repositoryId, repoPath) {
 }
 
 function getCurrentRepository() {
-  console.log("📦 Current Repository");
-  console.log(currentRepository);
-
   return currentRepository;
 }
 

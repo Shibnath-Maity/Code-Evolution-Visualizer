@@ -20,7 +20,9 @@ const {
 } = require("./hotspotAIService");
 // NEW
 const { setCurrentRepository } = require("./repositoryContext");
-
+const {
+  analyzeRepositoryFiles,
+} = require("./aiFileAnalysisService");
 let stepCounter = 0;
 
 function logStep(message) {
@@ -62,17 +64,26 @@ async function analyzeRepository(url, repositoryId) {
   stepCounter = 0;
 
   try {
-    // Clone Repository
-    logStep("Cloning repository...");
-    const repoPath = await cloneRepository(url);
+   // Clone Repository
+logStep("Cloning repository...");
+const repoPath = await cloneRepository(url);
 
-    // Save current repository for Debug Center & AI Chat
-    setCurrentRepository(repositoryId, repoPath);
+// Build Architecture
+logStep("Building repository architecture...");
+const architecture = buildArchitecture(repoPath);
 
-    // Architecture
-    logStep("Building repository architecture...");
-    const architecture = buildArchitecture(repoPath);
-
+// Save repository AFTER architecture is available
+setCurrentRepository(
+  repositoryId,
+  repoPath,
+  architecture
+);
+    console.log("===== ARCHITECTURE =====");
+console.log("repoPath =", repoPath);
+console.log(architecture.dashboard);
+console.log(architecture.tree);
+console.log("Architecture:");
+console.log(JSON.stringify(architecture, null, 2));
     // Background indexing
     const indexingPromise = startBackgroundIndexing(
       repoPath,
@@ -96,6 +107,11 @@ async function analyzeRepository(url, repositoryId) {
       getFileChanges(repoPath),
       getCodeChurn(repoPath),
     ]);
+    // AI File Analysis
+logStep("Analyzing repository files with AI...");
+
+const aiFileAnalysis =
+  await analyzeRepositoryFiles(fileAnalysis);
 
     // Timeline
     logStep("Building timeline...");
@@ -155,7 +171,8 @@ try {
 
       // Files
       fileAnalysis,
-
+// AI File Analysis
+aiFileAnalysis,
       // Languages
       languageAnalysis,
 

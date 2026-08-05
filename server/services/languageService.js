@@ -97,12 +97,15 @@ function analyzeLanguages(fileAnalysis) {
 
   const counts = {};
   const frameworks = new Set();
-
 files.forEach((file) => {
-  const language = detectLanguage(file.file);
+  const filePath = file.path || file.name;
+
+  if (!filePath) return;
+
+  const language = detectLanguage(filePath);
   counts[language] = (counts[language] || 0) + 1;
 
-  const name = path.basename(file.file);
+  const name = path.basename(filePath);
 
   if (name === "package.json") frameworks.add("Node.js");
   if (name === "next.config.js") frameworks.add("Next.js");
@@ -116,6 +119,7 @@ files.forEach((file) => {
   if (name === "requirements.txt") frameworks.add("Python");
   if (name === "pyproject.toml") frameworks.add("Python");
 });
+
   const totalFiles = files.length;
 
   const languages = Object.keys(counts);
