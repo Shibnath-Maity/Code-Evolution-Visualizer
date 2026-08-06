@@ -1,27 +1,50 @@
 const express = require("express");
 const router = express.Router();
 
+const protect = require("../middleware/authMiddleware");
 const contributorAIService = require("../services/contributorAIService");
 
-router.post("/ask", async (req, res) => {
+router.post("/ask", protect, async (req, res) => {
   try {
-    const { contributorName, question, allCommits } = req.body;
-const start = Date.now();
+    const { contributorName, question, allCommits } = req.body || {};
 
-const answer = await contributorAIService.askContributor({
-  contributorName,
-  question,
-  allCommits,
-});
+    if (typeof contributorName !== "string" || !contributorName.trim()) {
+      return res.status(400).json({
+        success: false,
+        message: "contributorName is required.",
+      });
+    }
 
-const duration = Date.now() - start;
+    if (typeof question !== "string" || !question.trim()) {
+      return res.status(400).json({
+        success: false,
+        message: "question is required.",
+      });
+    }
 
-res.json({
-  success: true,
-  answer,
-  duration,
-});
-  
+    if (!Array.isArray(allCommits)) {
+      return res.status(400).json({
+        success: false,
+        message: "allCommits must be an array.",
+      });
+    }
+
+    const start = Date.now();
+
+    const answer = await contributorAIService.askContributor({
+      contributorName: contributorName.trim(),
+      question: question.trim(),
+      allCommits,
+    });
+
+    const duration = Date.now() - start;
+
+    res.json({
+      success: true,
+      answer,
+      duration,
+    });
+
   } catch (err) {
     console.error(err);
 

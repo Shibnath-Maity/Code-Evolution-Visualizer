@@ -32,6 +32,7 @@ const {
   getCommitCalendar,
 } = require("../services/calendarService");
 let currentRepoPath = "";
+const protect = require("../middleware/authMiddleware");
 // Test Route
 const {
   explainFile,
@@ -49,7 +50,7 @@ router.get("/info", (req, res) => {
   });
 });
 //Add repo
-router.get("/repo-info", async (req, res) => {
+router.get("/repo-info", protect, async (req, res) => {
   try {
     const { url } = req.query;
 
@@ -66,7 +67,7 @@ router.get("/repo-info", async (req, res) => {
 // ==========================================
 // Fetch Repository Issues
 // ==========================================
-router.post("/issues", async (req, res) => {
+router.post("/issues", protect, async (req, res) => {
   try {
     const { repoUrl } = req.body;
 
@@ -106,7 +107,7 @@ router.post("/issues", async (req, res) => {
 // ==========================================
 // AI Issue Solver
 // ==========================================
-router.post("/issue-solution", async (req, res) => {
+router.post("/issue-solution", protect, async (req, res) => {
   try {
     const { owner, repo, issueNumber } = req.body;
 
@@ -154,7 +155,7 @@ router.post("/issue-solution", async (req, res) => {
   }
 });
 // Analyze Repository
-router.post("/analytics", async (req, res) => {
+router.post("/analytics", protect, async (req, res) => {
   try {
 const { url, repositoryId } = req.body;
   //  const repositoryId = crypto.randomUUID();
@@ -247,7 +248,7 @@ console.log(result.commitStatistics);
 }
 });
 
-router.get("/calendar", async (req, res) => {
+router.get("/calendar", protect, async (req, res) => {
   try {
     const { repoPath } = req.query;
 
@@ -270,7 +271,7 @@ router.get("/calendar", async (req, res) => {
 });
 
 // Commit Details
-router.get("/commit/:hash", async (req, res) => {
+router.get("/commit/:hash", protect, async (req, res) => {
   try {
     const { hash } = req.params;
 
@@ -298,7 +299,7 @@ router.get("/commit/:hash", async (req, res) => {
 });
 
 // Commit Diff
-router.get("/commit/:hash/diff", async (req, res) => {
+router.get("/commit/:hash/diff", protect, async (req, res) => {
   try {
     const { hash } = req.params;
 
@@ -328,7 +329,7 @@ router.get("/commit/:hash/diff", async (req, res) => {
 // AI Commit Summary
 // ==========================================
 
-router.get("/commit/:hash/summary", async (req, res) => {
+router.get("/commit/:hash/summary", protect, async (req, res) => {
   try {
     const { hash } = req.params;
 
@@ -367,7 +368,7 @@ router.get("/commit/:hash/summary", async (req, res) => {
 // ==========================================
 // AI File Explanation
 // ==========================================
-router.post("/file-explanation", async (req, res) => {
+router.post("/file-explanation", protect, async (req, res) => {
   try {
     const { filePath } = req.body;
 
@@ -415,7 +416,7 @@ router.post("/file-explanation", async (req, res) => {
 // File Commit History + Co-Change (for Hotspot details panel)
 // ==========================================
 
-router.get("/hotspots/commits", async (req, res) => {
+router.get("/hotspots/commits", protect, async (req, res) => {
   try {
     const { file } = req.query;
 

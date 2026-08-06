@@ -1,3 +1,5 @@
+
+const protect = require("../middleware/authMiddleware");
 const express = require("express");
 
 const {
@@ -9,7 +11,7 @@ const router = express.Router();
 // ==========================================
 // Ask AI Repository Assistant
 // ==========================================
-router.post("/ask", async (req, res) => {
+router.post("/ask", protect, async (req, res) => {
   try {
     const {
       question,

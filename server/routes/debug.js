@@ -1,11 +1,14 @@
 const express = require("express");
 const router = express.Router();
 
-const { solveBug } = require("../services/bugSolverService");
+const protect = require("../middleware/authMiddleware");
 
-router.post("/bug-solver", async (req, res) => {
+const { solveBug } = require("../services/bugSolverService");
+const { getCurrentRepository } = require("../services/repositoryContext");
+
+router.post("/bug-solver", protect, async (req, res) => {
   try {
-    const { error } = req.body;
+    const { error, repositoryId } = req.body;
 
     if (!error?.trim()) {
       return res.status(400).json({
@@ -13,11 +16,28 @@ router.post("/bug-solver", async (req, res) => {
         message: "Error message is required.",
       });
     }
-const result = await solveBug({
-  error,
-  repoPath: null,
-  repositoryId: null,
-});
+
+    if (!repositoryId) {
+      return res.status(400).json({
+        success: false,
+        message: "repositoryId is required.",
+      });
+    }
+
+    const repoPath = getCurrentRepository(repositoryId);
+
+    if (!repoPath) {
+      return res.status(400).json({
+        success: false,
+        message: "Repository not analyzed yet.",
+      });
+    }
+
+    const result = await solveBug({
+      error,
+      repoPath,
+      repositoryId,
+    });
 
     res.json({
       success: true,

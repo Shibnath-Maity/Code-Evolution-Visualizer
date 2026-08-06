@@ -1,4 +1,5 @@
 const express = require("express");
+const protect = require("../middleware/authMiddleware");
 const { askRepositoryAssistant } = require("../services/assistantService");
 
 const router = express.Router();
@@ -75,7 +76,7 @@ router.get("/test", (req, res) => {
 // AI Question Answering
 // ==========================================
 
-router.post("/", async (req, res) => {
+router.post("/",protect, async (req, res) => {
   const { question, repositoryId } = req.body || {};
 
   // ----------------------------------------

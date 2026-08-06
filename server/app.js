@@ -1,7 +1,11 @@
 require("dotenv").config();
+
 console.log("GitHub Token Loaded:", !!process.env.GITHUB_TOKEN);
+
 const express = require("express");
 const cors = require("cors");
+
+const connectDB = require("./config/db");
 
 const repositoryRoutes = require("./routes/repository");
 const repoRoutes = require("./routes/repo");
@@ -10,18 +14,22 @@ const assistantRoutes = require("./routes/assistant");
 const qaRoutes = require("./routes/qa");
 const debugRoutes = require("./routes/debug");
 const contributorRoute = require("./routes/contributor");
-const app = express();
+const authRoutes = require("./routes/authRoutes");
+
+const app = express(); // ✅ Create app first
+
+connectDB();
 
 app.use(cors());
 app.use(express.json());
+
+app.use("/auth", authRoutes); // ✅ Now this is correct
 
 app.use("/repository", repositoryRoutes);
 app.use("/api", repoRoutes);
 app.use("/ai", aiRoutes);
 app.use("/assistant", assistantRoutes);
-
 app.use("/repository", debugRoutes);
-// QA routes
 app.use("/api/qa", qaRoutes);
 app.use("/api/contributor", contributorRoute);
 app.get("/", (req, res) => {

@@ -3,6 +3,7 @@ const {
   askOllama,
   analyzeRepository,
 } = require("../services/aiService");
+const protect = require("../middleware/authMiddleware");
 
 const router = express.Router();
 
@@ -85,7 +86,7 @@ function isUnavailableError(error) {
 // Normal AI Chat
 // ==========================================
 
-router.post("/chat", async (req, res) => {
+router.post("/chat", protect, async (req, res) => {
   const { question } = req.body || {};
 
   // Validation
@@ -104,7 +105,7 @@ router.post("/chat", async (req, res) => {
   }
 
   // Rate limit
-  const rateLimitKey = `chat:${req.ip}`;
+  const rateLimitKey = `chat:${req.user?.id || req.ip}`;
 
   if (isRateLimited(rateLimitKey, CHAT_RATE_LIMIT_MAX)) {
     return res.status(429).json({
@@ -141,7 +142,7 @@ router.post("/chat", async (req, res) => {
 // Repository AI Analysis
 // ==========================================
 
-router.post("/analyze-repository", async (req, res) => {
+router.post("/analyze-repository", protect, async (req, res) => {
   const repositoryData = req.body || {};
 
   // Validation
@@ -161,7 +162,7 @@ router.post("/analyze-repository", async (req, res) => {
   }
 
   // Rate limit
-  const rateLimitKey = `analysis:${req.ip}`;
+  const rateLimitKey = `analysis:${req.user?.id || req.ip}`;
 
   if (isRateLimited(rateLimitKey, ANALYSIS_RATE_LIMIT_MAX)) {
     return res.status(429).json({

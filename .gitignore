@@ -3,13 +3,38 @@ node_modules/
 client/node_modules/
 server/node_modules/
 
-# Local cloned repositories
-server/repositories/
-
 # Environment variables
+.env
+client/.env
 server/.env
 
-# ChromaDB local data
-chroma_data/
+# Repository clones
+server/repositories/
 
+# ChromaDB
+chroma_data/
+chroma/
+chroma_db/
+
+# Build folders
+dist/
+client/dist/
+server/dist/
+
+# Logs
+*.log
+logs/
+
+# Coverage
+coverage/
+
+# IDE
+.vscode/
+.idea/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Test files
 server/test*.js
