@@ -1,10 +1,12 @@
-import { useEffect, useMemo, useState } from "react";
-// import axios from "axios";
+import { useMemo, useState, useEffect, memo } from "react";
 import { GitCommit, Clock, Copy, Check, History, ChevronDown } from "lucide-react";
 import CommitActivityGraph from "../components/CommitActivityGraph";
-const PAGE_SIZE = 10;
 import CommitCalendar from "../components/CommitCalendar";
 import { TYPE_DOT } from "../constants/commitTypes";
+import { useAnalysis } from "../context/AnalysisContext";
+
+const PAGE_SIZE = 10;
+
 function relativeTime(date) {
   if (!date) return "Unknown date";
   const diffMs = Date.now() - date.getTime();
@@ -39,7 +41,7 @@ function dayLabel(date) {
   });
 }
 
-function initials(name) {
+function getInitials(name) {
   return (name || "?")
     .split(" ")
     .filter(Boolean)
@@ -48,8 +50,14 @@ function initials(name) {
     .join("");
 }
 
-function CommitHash({ hash }) {
+const CommitHash = memo(function CommitHash({ hash }) {
   const [copied, setCopied] = useState(false);
+
+  useEffect(() => {
+    if (!copied) return;
+    const timer = setTimeout(() => setCopied(false), 1200);
+    return () => clearTimeout(timer);
+  }, [copied]);
 
   if (!hash) return null;
 
@@ -58,9 +66,8 @@ function CommitHash({ hash }) {
     try {
       await navigator.clipboard.writeText(hash);
       setCopied(true);
-      setTimeout(() => setCopied(false), 1200);
     } catch {
-      // ignore copy failures — button just won't flip to "copied"
+      // ignore copy failures
     }
   };
 
@@ -74,48 +81,36 @@ function CommitHash({ hash }) {
       {hash.substring(0, 7)}
     </button>
   );
-}
+});
+
 export default function Timeline() {
-  const [timeline, setTimeline] = useState([]);
+  const { analysis } = useAnalysis();
   const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState("");
-  
-useEffect(() => {
-  const analysis = JSON.parse(
-    localStorage.getItem("repositoryAnalysis")
+
+  const timeline = analysis?.timeline ?? [];
+
+  // Reset pagination only when switching repositories
+  useEffect(() => {
+    setVisibleCount(PAGE_SIZE);
+  }, [analysis?.repositoryId ?? analysis?.repoUrl]);
+
+  const graphTimeline = useMemo(
+    () =>
+      timeline.reduce((acc, commit) => {
+        const date = commit.date?.slice(0, 10);
+        if (!date) return acc;
+        acc[date] = (acc[date] || 0) + 1;
+        return acc;
+      }, {}),
+    [timeline]
   );
-
-  if (!analysis) {
-    setError("Please analyze a repository first.");
-    setLoading(false);
-    return;
-  }
-
-  console.log("Timeline:", analysis.timeline);
-
-  setTimeline(analysis.timeline || []);
-  setLoading(false);
-}, []);
-const graphTimeline = useMemo(() => {
-  const result = {};
-
-  timeline.forEach((commit) => {
-    const date = commit.date?.substring(0, 10);
-
-    if (!date) return;
-
-    result[date] = (result[date] || 0) + 1;
-  });
-
-  return result;
-}, [timeline]);
 
   const parsed = useMemo(
     () =>
       timeline.map((commit) => ({
         ...commit,
         _date: commit.date ? new Date(commit.date) : null,
+        initials: getInitials(commit.author),
       })),
     [timeline]
   );
@@ -126,9 +121,7 @@ const graphTimeline = useMemo(() => {
     let currentKey = null;
 
     for (const commit of visible) {
-      const key = commit._date
-        ? commit._date.toDateString()
-        : "unknown";
+      const key = commit._date ? commit._date.toDateString() : "unknown";
       if (key !== currentKey) {
         groups.push({ key, label: dayLabel(commit._date), commits: [commit] });
         currentKey = key;
@@ -138,150 +131,105 @@ const graphTimeline = useMemo(() => {
     }
     return groups;
   }, [parsed, visibleCount]);
-const calendarData = useMemo(() => {
-  const activity = {};
 
-  timeline.forEach((commit) => {
-    if (!commit.date) return;
+  if (!timeline.length) {
+    return (
+      <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-8 text-center max-w-md mx-auto my-12">
+        <History size={32} className="mx-auto mb-3 text-gray-300" />
+        <h2 className="text-lg font-semibold text-slate-800">No Commit History Found</h2>
+        <p className="text-sm text-gray-500 mt-2 leading-relaxed">
+          This repository doesn't contain enough commit history or the analysis hasn't finished yet.
+        </p>
+      </div>
+    );
+  }
 
-    const date = commit.date.substring(0, 10);
-    activity[date] = (activity[date] || 0) + 1;
-  });
-
-  return Object.entries(activity).map(([date, commits]) => ({
-    date,
-    count: commits,
-    level:
-      commits === 0
-        ? 0
-        : commits <= 2
-        ? 1
-        : commits <= 5
-        ? 2
-        : commits <= 10
-        ? 3
-        : 4,
-  }));
-}, [timeline]);
-
-if (!timeline.length) {
-  return (
-    <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-8 text-center">
-      <History size={28} className="mx-auto mb-3 text-gray-300" />
-      <h2 className="text-xl font-semibold">
-        Commit Timeline
-      </h2>
-      <p>No timeline data available.</p>
-    </div>
-  );
-}
   const hasMore = visibleCount < parsed.length;
 
-return (
-  <div className="space-y-6">
+  return (
+    <div className="space-y-6">
+      <CommitCalendar timeline={timeline} />
+      <CommitActivityGraph timeline={graphTimeline} />
 
-    {/* Commit Activity Graph */}
-  <CommitCalendar timeline={timeline} />
-<CommitActivityGraph timeline={graphTimeline} />
+      <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
+        <div className="flex items-center justify-between mb-6">
+          <h2 className="text-xl font-semibold text-slate-900">Commit Timeline</h2>
+          <span className="text-sm text-gray-400">{parsed.length} commits</span>
+        </div>
 
+        <div>
+          {grouped.map((group) => (
+            <div key={group.key} className="mb-8 last:mb-0">
+              <p className="text-xs font-semibold uppercase tracking-wide text-gray-400 mb-4">
+                {group.label}
+              </p>
 
-    {/* Existing Commit Timeline */}
-    <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
-      <div className="flex items-center justify-between mb-6">
-        <h2 className="text-xl font-semibold text-slate-900">
-          Commit Timeline
-        </h2>
+              <div className="relative border-l-2 border-gray-100 ml-4">
+                {group.commits.map((commit) => {
+                  const dotColor = TYPE_DOT[commit.type] || "bg-indigo-500";
 
-        <span className="text-sm text-gray-400">
-          {parsed.length} commits
-        </span>
-      </div>
+                  return (
+                    <div
+                      key={commit.hash}
+                      className="mb-6 last:mb-0 ml-6 relative group"
+                    >
+                      <span
+                        className={`absolute -left-[31px] top-1 w-3.5 h-3.5 ${dotColor} rounded-full border-4 border-white shadow`}
+                      />
 
-      <div>
-        {grouped.map((group) => (
-          <div key={group.key} className="mb-8 last:mb-0">
-            <p className="text-xs font-semibold uppercase tracking-wide text-gray-400 mb-4">
-              {group.label}
-            </p>
+                      <div className="rounded-xl px-4 py-3 -mx-4 group-hover:bg-gray-50 transition-colors">
+                        <div className="flex items-center justify-between gap-3 flex-wrap">
+                          <p
+                            className="text-xs text-gray-400"
+                            title={commit._date ? commit._date.toLocaleString() : undefined}
+                          >
+                            <Clock size={11} className="inline mr-1 -mt-0.5" />
+                            {relativeTime(commit._date)}
+                          </p>
 
-            <div className="relative border-l-2 border-gray-100 ml-4">
-              {group.commits.map((commit, index) => {
-                const dotColor =
-                  TYPE_DOT[commit.type] || "bg-indigo-500";
+                          {commit.type && (
+                            <span className="text-[10px] font-medium px-2 py-0.5 rounded-full bg-gray-100 text-gray-600">
+                              {commit.type}
+                            </span>
+                          )}
+                        </div>
 
-                return (
-                  <div
-                    key={commit.hash || index}
-                    className="mb-6 last:mb-0 ml-6 relative group"
-                  >
-                    {/* Timeline Dot */}
-                    <span
-                      className={`absolute -left-[31px] top-1 w-3.5 h-3.5 ${dotColor} rounded-full border-4 border-white shadow`}
-                    />
+                        <h3 className="font-semibold text-slate-800 mt-1 flex items-center gap-2">
+                          <GitCommit size={15} className="text-gray-300 shrink-0" />
+                          {commit.message || "No commit message"}
+                        </h3>
 
-                    <div className="rounded-xl px-4 py-3 -mx-4 group-hover:bg-gray-50 transition-colors">
-                      
-                      <div className="flex items-center justify-between gap-3 flex-wrap">
-                        <p
-                          className="text-xs text-gray-400"
-                          title={
-                            commit._date
-                              ? commit._date.toLocaleString()
-                              : undefined
-                          }
-                        >
-                          <Clock
-                            size={11}
-                            className="inline mr-1 -mt-0.5"
-                          />
-                          {relativeTime(commit._date)}
-                        </p>
-
-                        {commit.type && (
-                          <span className="text-[10px] font-medium px-2 py-0.5 rounded-full bg-gray-100 text-gray-600">
-                            {commit.type}
+                        <div className="flex items-center gap-2 mt-2">
+                          <span className="w-5 h-5 rounded-full bg-indigo-100 text-indigo-700 text-[10px] font-bold flex items-center justify-center shrink-0">
+                            {commit.initials}
                           </span>
-                        )}
+
+                          <p className="text-sm text-gray-600">
+                            {commit.author || "Unknown author"}
+                          </p>
+                        </div>
+
+                        <CommitHash hash={commit.hash} />
                       </div>
-
-                      <h3 className="font-semibold text-slate-800 mt-1 flex items-center gap-2">
-                        <GitCommit
-                          size={15}
-                          className="text-gray-300 shrink-0"
-                        />
-                        {commit.message || "No commit message"}
-                      </h3>
-
-                      <div className="flex items-center gap-2 mt-2">
-                        <span className="w-5 h-5 rounded-full bg-indigo-100 text-indigo-700 text-[10px] font-bold flex items-center justify-center shrink-0">
-                          {initials(commit.author)}
-                        </span>
-
-                        <p className="text-sm text-gray-600">
-                          {commit.author || "Unknown author"}
-                        </p>
-                      </div>
-
-                      <CommitHash hash={commit.hash} />
                     </div>
-                  </div>
-                );
-              })}
+                  );
+                })}
+              </div>
             </div>
-          </div>
-        ))}
+          ))}
+        </div>
+
+        {hasMore && (
+          <button
+            onClick={() =>
+              setVisibleCount((v) => Math.min(v + PAGE_SIZE, parsed.length))
+            }
+            className="w-full flex items-center justify-center gap-1.5 py-2.5 rounded-xl border border-gray-200 text-sm font-medium text-gray-600 hover:bg-gray-50 transition-colors"
+          >
+            Show more <ChevronDown size={15} />
+          </button>
+        )}
       </div>
-
-      {hasMore && (
-        <button
-          onClick={() => setVisibleCount((v) => v + PAGE_SIZE)}
-          className="w-full flex items-center justify-center gap-1.5 py-2.5 rounded-xl border border-gray-200 text-sm font-medium text-gray-600 hover:bg-gray-50 transition-colors"
-        >
-          Show more <ChevronDown size={15} />
-        </button>
-      )}
     </div>
-
-  </div>
-);
+  );
 }

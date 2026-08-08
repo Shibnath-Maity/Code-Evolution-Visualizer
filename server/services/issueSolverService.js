@@ -1,5 +1,4 @@
 const { searchDocuments } = require("./ragService");
-const { getCurrentRepository } = require("./repositoryContext");
 const { getCommits, getCommitDiff } = require("./gitService");
 const { generateJSON } = require("./geminiService");
 
@@ -7,24 +6,19 @@ const MAX_DOCUMENTS = 5;
 const MAX_RELATED_COMMITS = 3;
 const MAX_DIFF_CHARS = 1000;
 
-async function solveIssue({ issue, repoPath }) {
+async function solveIssue({
+  issue,
+  repoPath,
+  repositoryId,
+}) {
   try {
     if (!issue) {
       throw new Error("Issue data is required.");
     }
 
-    // Use current repository if not supplied
-    if (!repoPath) {
-      const current = getCurrentRepository();
-
-      if (!current || !current.repoPath || !current.repositoryId) {
-        throw new Error("Repository not analyzed.");
-      }
-
-      repoPath = current.repoPath;
+    if (!repositoryId) {
+      throw new Error("repositoryId is missing.");
     }
-
-    const { repositoryId } = getCurrentRepository();
 
     console.log("Repository:", repositoryId);
 

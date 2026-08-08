@@ -1,13 +1,17 @@
 import { Outlet } from "react-router-dom";
-import Navbar from "../components/Navbar";
+import Sidebar from "../components/Sidebar";
 
 function AppLayout() {
   return (
-    <div>
-      <Navbar />
+    <div className="flex min-h-screen bg-slate-50">
+      {/* Sidebar */}
+      <Sidebar />
 
-      <main>
-        <Outlet />
+      {/* Main Content */}
+      <main className="ml-72 flex-1 overflow-y-auto">
+        <div className="mx-auto max-w-screen-2xl p-8">
+          <Outlet />
+        </div>
       </main>
     </div>
   );

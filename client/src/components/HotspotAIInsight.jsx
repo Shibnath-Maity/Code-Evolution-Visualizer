@@ -1,4 +1,5 @@
 import React from "react";
+import { useAnalysis } from "../context/AnalysisContext";
 import {
   Brain,
   ShieldAlert,
@@ -9,21 +10,28 @@ import {
   CircleCheck,
 } from "lucide-react";
 
+/* ==========================================================
+   CONFIG & HELPERS
+========================================================== */
+
 const RISK_CONFIG = {
   High: {
-    badge: "bg-red-100 text-red-700 border-red-200 dark:bg-red-950/40 dark:text-red-400 dark:border-red-900",
+    badge:
+      "bg-red-100 text-red-700 border-red-200 dark:bg-red-950/40 dark:text-red-400 dark:border-red-900",
     accent: "border-l-red-400 dark:border-l-red-700",
     icon: ShieldAlert,
     iconColor: "text-red-500",
   },
   Medium: {
-    badge: "bg-yellow-100 text-yellow-700 border-yellow-200 dark:bg-yellow-950/40 dark:text-yellow-400 dark:border-yellow-900",
+    badge:
+      "bg-yellow-100 text-yellow-700 border-yellow-200 dark:bg-yellow-950/40 dark:text-yellow-400 dark:border-yellow-900",
     accent: "border-l-yellow-400 dark:border-l-yellow-700",
     icon: ShieldQuestion,
     iconColor: "text-yellow-500",
   },
   Low: {
-    badge: "bg-green-100 text-green-700 border-green-200 dark:bg-green-950/40 dark:text-green-400 dark:border-green-900",
+    badge:
+      "bg-green-100 text-green-700 border-green-200 dark:bg-green-950/40 dark:text-green-400 dark:border-green-900",
     accent: "border-l-green-400 dark:border-l-green-700",
     icon: ShieldCheck,
     iconColor: "text-green-500",
@@ -31,7 +39,8 @@ const RISK_CONFIG = {
 };
 
 const FALLBACK_RISK = {
-  badge: "bg-slate-100 text-slate-700 border-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:border-slate-700",
+  badge:
+    "bg-slate-100 text-slate-700 border-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:border-slate-700",
   accent: "border-l-slate-300 dark:border-l-slate-600",
   icon: ShieldQuestion,
   iconColor: "text-slate-400",
@@ -76,14 +85,45 @@ function LoadingState() {
   );
 }
 
-export default function HotspotAIInsight({ insight }) {
-  if (!insight) {
+/* ==========================================================
+   MAIN COMPONENT
+========================================================== */
+
+export default function HotspotAIInsight({ insight: propInsight }) {
+  const { analysis, loading } = useAnalysis();
+
+  // Safely extract insight without treating arrays as valid insights
+  const activeInsight =
+    propInsight ||
+    analysis?.hotspotsInsight ||
+    (analysis?.hotspots && !Array.isArray(analysis.hotspots)
+      ? analysis.hotspots
+      : null);
+
+  if (loading) {
     return <LoadingState />;
   }
 
-  const risk = RISK_CONFIG[insight.riskLevel] || FALLBACK_RISK;
+  if (!activeInsight) {
+    return (
+      <div className="rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 p-6 shadow-sm">
+        <div className="flex items-center gap-2 text-slate-500 dark:text-slate-400">
+          <Brain className="w-5 h-5 text-violet-500" />
+          <p className="text-sm font-medium">No AI insight available for this selection.</p>
+        </div>
+      </div>
+    );
+  }
+
+  // Normalize risk key string (e.g., "high" -> "High")
+  const rawRisk = activeInsight.riskLevel || activeInsight.risk_level || "";
+  const normalizedRiskKey = rawRisk
+    ? rawRisk.charAt(0).toUpperCase() + rawRisk.slice(1).toLowerCase()
+    : "Unknown";
+
+  const risk = RISK_CONFIG[normalizedRiskKey] || FALLBACK_RISK;
   const RiskIcon = risk.icon;
-  const recommendations = insight.recommendations ?? [];
+  const recommendations = activeInsight.recommendations ?? [];
 
   return (
     <div
@@ -97,7 +137,7 @@ export default function HotspotAIInsight({ insight }) {
         </h2>
       </div>
 
-      {/* Risk */}
+      {/* Risk Level */}
       <div className="mb-6">
         <SectionHeading icon={RiskIcon} iconColor={risk.iconColor}>
           Risk Level
@@ -105,18 +145,18 @@ export default function HotspotAIInsight({ insight }) {
         <span
           className={`inline-block px-4 py-1 rounded-full text-sm font-semibold border ${risk.badge}`}
         >
-          {insight.riskLevel ?? "Unknown"}
+          {rawRisk || "Unknown"}
         </span>
       </div>
 
       {/* Summary */}
-      {insight.summary && (
+      {activeInsight.summary && (
         <div className="mb-6">
           <h3 className="font-semibold text-slate-700 dark:text-slate-200 mb-2">
             Summary
           </h3>
           <p className="leading-7 text-slate-600 dark:text-slate-300">
-            {insight.summary}
+            {activeInsight.summary}
           </p>
         </div>
       )}
@@ -137,8 +177,8 @@ export default function HotspotAIInsight({ insight }) {
                   className="w-4 h-4 mt-0.5 flex-shrink-0 text-emerald-500"
                   aria-hidden="true"
                 />
-                <span className="text-slate-700 dark:text-slate-200">
-                  {item}
+                <span className="text-slate-700 dark:text-slate-200 text-sm">
+                  {typeof item === "string" ? item : item.text || item.description}
                 </span>
               </li>
             ))}
@@ -150,14 +190,14 @@ export default function HotspotAIInsight({ insight }) {
         )}
       </div>
 
-      {/* Impact */}
-      {insight.impact && (
+      {/* Potential Impact */}
+      {activeInsight.impact && (
         <div>
           <SectionHeading icon={TriangleAlert} iconColor="text-orange-500">
             Potential Impact
           </SectionHeading>
           <p className="leading-7 text-slate-600 dark:text-slate-300">
-            {insight.impact}
+            {activeInsight.impact}
           </p>
         </div>
       )}

@@ -1,11 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Sparkles, Send, AlertCircle, Loader2, Copy, Download, Check } from "lucide-react";
 import ReactMarkdown from "react-markdown";
-
-const ASK_ENDPOINT =
-  import.meta.env?.VITE_API_URL
-    ? `${import.meta.env.VITE_API_URL}/api/contributor/ask`
-    : "http://localhost:5000/api/contributor/ask";
+import API from "../services/api";
 
 const MAX_QUESTION_LENGTH = 300;
 
@@ -22,8 +18,6 @@ const SUGGESTIONS = [
   "Give an overall performance review.",
 ];
 
-// Sized to fill a grid cell (h-full, internal scroll) instead of a
-// free-standing page card, so it drops straight into the dashboard grid.
 export default function ContributorAI({ contributorName, allCommits }) {
   const [question, setQuestion] = useState("");
   const [status, setStatus] = useState("idle"); // idle | loading | error
@@ -34,8 +28,7 @@ export default function ContributorAI({ contributorName, allCommits }) {
   const abortRef = useRef(null);
   const textareaRef = useRef(null);
 
-  // Reset conversation state when switching contributors so stale
-  // answers don't linger under the wrong name.
+  // Reset conversation state when switching contributors so stale answers don't linger
   useEffect(() => {
     setQuestion("");
     setAnswer("");
@@ -62,20 +55,21 @@ export default function ContributorAI({ contributorName, allCommits }) {
     setCopied(false);
 
     try {
-      const response = await fetch(ASK_ENDPOINT, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
+      const response = await API.post(
+        "/api/contributor/ask",
+        {
           contributorName,
           question: trimmed,
           allCommits,
-        }),
-        signal: controller.signal,
-      });
+        },
+        {
+          signal: controller.signal,
+        }
+      );
 
-      const data = await response.json();
+      const data = response.data;
 
-      if (!response.ok || !data.success) {
+      if (!data.success) {
         throw new Error(data.message || "Failed to get AI response.");
       }
 
@@ -83,9 +77,11 @@ export default function ContributorAI({ contributorName, allCommits }) {
       setDuration(data.duration || 0);
       setStatus("idle");
     } catch (err) {
-      if (err.name === "AbortError") return;
+      if (err.name === "CanceledError" || err.name === "AbortError") return;
       console.error(err);
-      setErrorMessage(err.message || "Something went wrong. Please try again.");
+      setErrorMessage(
+        err.response?.data?.message || err.message || "Something went wrong. Please try again."
+      );
       setStatus("error");
     }
   }
@@ -182,7 +178,7 @@ export default function ContributorAI({ contributorName, allCommits }) {
         </span>
       </div>
 
-      {/* Everything below scrolls internally so this card stays h-full in the grid */}
+      {/* Internal Scroll Area */}
       <div className="flex-1 min-h-0 overflow-y-auto mt-3 pr-1 -mr-1">
         <div className="flex flex-wrap gap-1.5 mb-1">
           {SUGGESTIONS.map((suggestion) => (

@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import API from "../services/api";
+import { useAnalysis } from "../context/AnalysisContext";
 import {
   X,
   FileCode2,
@@ -139,6 +140,8 @@ function Bar({ label, value, color = "bg-slate-900" }) {
 }
 
 function HotspotDetails({ selectedHotspot, onClose, maxScore = 0 }) {
+  const { repositoryId } = useAnalysis();
+
   const [activeTab, setActiveTab] = useState("ai");
   const [copied, setCopied] = useState(false);
 
@@ -150,7 +153,7 @@ function HotspotDetails({ selectedHotspot, onClose, maxScore = 0 }) {
   const file = selectedHotspot?.file;
 
   useEffect(() => {
-    if (!file) return;
+    if (!file || !repositoryId) return;
 
     let cancelled = false;
     setLoadingHistory(true);
@@ -158,7 +161,12 @@ function HotspotDetails({ selectedHotspot, onClose, maxScore = 0 }) {
     setFileCommits(null);
     setCoupledFiles([]);
 
-    API.get(`/repository/hotspots/commits`, { params: { file } })
+    API.get(`/repository/hotspots/commits`, {
+      params: {
+        repositoryId,
+        file,
+      },
+    })
       .then((res) => {
         if (cancelled) return;
         setFileCommits(res.data?.data?.commits || []);
@@ -176,7 +184,7 @@ function HotspotDetails({ selectedHotspot, onClose, maxScore = 0 }) {
     return () => {
       cancelled = true;
     };
-  }, [file]);
+  }, [file, repositoryId]);
 
   const fileMetrics = useMemo(() => {
     if (!fileCommits || fileCommits.length === 0) return null;
@@ -469,10 +477,10 @@ function HotspotDetails({ selectedHotspot, onClose, maxScore = 0 }) {
           ) : (
             <EmptyTab
               icon={BarChart3}
-              title={historyError ? "Commit history endpoint not available yet" : "No metrics available"}
+              title={historyError ? "Error loading commit history" : "No metrics available"}
               hint={
                 historyError
-                  ? "GET /repository/hotspots/commits?file=... isn't implemented on the backend yet."
+                  ? "Failed to load details from the server."
                   : "No commit history found for this file."
               }
             />
@@ -501,10 +509,10 @@ function HotspotDetails({ selectedHotspot, onClose, maxScore = 0 }) {
           ) : (
             <EmptyTab
               icon={Activity}
-              title={historyError ? "Commit history endpoint not available yet" : "No timeline data"}
+              title={historyError ? "Error loading commit history" : "No timeline data"}
               hint={
                 historyError
-                  ? "GET /repository/hotspots/commits?file=... isn't implemented on the backend yet."
+                  ? "Failed to load details from the server."
                   : "No commit history found for this file."
               }
             />
@@ -532,10 +540,10 @@ function HotspotDetails({ selectedHotspot, onClose, maxScore = 0 }) {
           ) : (
             <EmptyTab
               icon={GitBranch}
-              title={historyError ? "Commit history endpoint not available yet" : "No coupled files found"}
+              title={historyError ? "Error loading commit history" : "No coupled files found"}
               hint={
                 historyError
-                  ? "GET /repository/hotspots/commits?file=... isn't implemented on the backend yet."
+                  ? "Failed to load details from the server."
                   : "This file hasn't consistently changed alongside others."
               }
             />
@@ -576,10 +584,10 @@ function HotspotDetails({ selectedHotspot, onClose, maxScore = 0 }) {
           ) : (
             <EmptyTab
               icon={History}
-              title={historyError ? "Commit history endpoint not available yet" : "No commits found"}
+              title={historyError ? "Error loading commit history" : "No commits found"}
               hint={
                 historyError
-                  ? "GET /repository/hotspots/commits?file=... isn't implemented on the backend yet."
+                  ? "Failed to load details from the server."
                   : "No commit history found for this file."
               }
             />

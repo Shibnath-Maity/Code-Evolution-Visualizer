@@ -15,14 +15,14 @@ const { calculateHotspots } = require("./hotspotService");
 const { analyzeLanguages } = require("./languageService");
 const { getCodeChurn } = require("./churnService");
 const { calculateProjectHealth } = require("./healthService");
+const { generateHotspotInsights } = require("./hotspotAIService");
+
 const {
-    generateHotspotInsights
-} = require("./hotspotAIService");
-// NEW
-const { setCurrentRepository } = require("./repositoryContext");
-const {
-  analyzeRepositoryFiles,
-} = require("./aiFileAnalysisService");
+  createAnalysisSession,
+  updateAnalysisSession,
+  getAnalysisSession,
+} = require("./sessionService");
+
 let stepCounter = 0;
 
 function logStep(message) {
@@ -30,69 +30,194 @@ function logStep(message) {
   console.log(`${stepCounter}️⃣ ${message}`);
 }
 
-function startBackgroundIndexing(repoPath, repositoryId) {
-  console.log("🔍 Starting background repository indexing...");
-  console.log("Repository:", repoPath);
-  console.log("Repository ID:", repositoryId);
+/**
+ * Single source of truth for background state initialization.
+ */
+function pendingBackgroundFields() {
+  return {
+    architecture: null,
+    architecturePending: true,
+    architectureError: null,
 
-  const indexingPromise = indexRepository(repoPath, repositoryId)
+    codeEvolution: null,
+    codeEvolutionPending: true,
+    codeEvolutionError: null,
+
+    hotspotInsights: null,
+    hotspotInsightsPending: true,
+    hotspotInsightsError: null,
+
+    vectorIndexingPending: true,
+    vectorIndexingError: null,
+
+    healthScorePending: true,
+    healthScoreError: null,
+  };
+}
+
+/**
+ * Runs vector/RAG indexing in the background asynchronously.
+ */
+function startBackgroundIndexing(repoPath, repositoryId) {
+  console.log("🔍 Starting background repository vector indexing...");
+
+  indexRepository(repoPath, repositoryId)
     .then(() => {
       console.log("✅ Background repository indexing completed!");
+      updateAnalysisSession(repositoryId, {
+        vectorIndexingPending: false,
+        vectorIndexingError: null,
+      });
     })
     .catch((error) => {
       console.error(
         "❌ Background repository indexing failed:",
         error.message
       );
-      throw error;
+      updateAnalysisSession(repositoryId, {
+        vectorIndexingPending: false,
+        vectorIndexingError: error.message,
+      });
     });
-
-  indexingPromise.catch(() => {});
-
-  return indexingPromise;
 }
 
+/**
+ * Fires off AI hotspot insights in the background.
+ */
+function startBackgroundAIWork(repositoryId, hotspots) {
+  setImmediate(async () => {
+    try {
+      const hotspotInsights = await generateHotspotInsights(
+        hotspots.hotspots
+      );
+      updateAnalysisSession(repositoryId, {
+        hotspotInsights,
+        hotspotInsightsPending: false,
+        hotspotInsightsError: null,
+      });
+      console.log("✅ AI Hotspot Insights completed");
+    } catch (err) {
+      console.error("❌ Hotspot Insight Error:", err.message);
+      updateAnalysisSession(repositoryId, {
+        hotspotInsightsPending: false,
+        hotspotInsightsError: err.message,
+      });
+    }
+  });
+}
+
+/**
+ * Runs Architecture parsing + Code Evolution (churn) in the background.
+ * Recalculates the final project health score once BOTH have landed.
+ */
+function startBackgroundArchitectureAndEvolution(
+  repoPath,
+  repositoryId,
+  fileAnalysis,
+  hotspots
+) {
+  const maybeFinalizeHealthScore = () => {
+    const session = getAnalysisSession(repositoryId);
+    if (!session) return;
+
+    if (session.architecturePending || session.codeEvolutionPending) return;
+
+    try {
+      const healthScore = calculateProjectHealth({
+        architecture: session.architecture,
+        fileAnalysis,
+        hotspots: hotspots.hotspots,
+        codeEvolution: session.codeEvolution,
+      });
+
+      updateAnalysisSession(repositoryId, {
+        healthScore,
+        healthScorePending: false,
+        healthScoreError: null,
+      });
+      console.log("❤️ PROJECT HEALTH (finalized):", healthScore);
+    } catch (err) {
+      console.error("❌ Final health score calculation failed:", err.message);
+      updateAnalysisSession(repositoryId, {
+        healthScorePending: false,
+        healthScoreError: err.message,
+      });
+    }
+  };
+
+  // Background Architecture job
+  setImmediate(async () => {
+    try {
+      const architecture = buildArchitecture(repoPath);
+      console.log(
+        "🏗️ ARCHITECTURE RESULT:",
+        architecture ? "Generated Successfully" : "Null/Undefined"
+      );
+
+      updateAnalysisSession(repositoryId, {
+        architecture,
+        architecturePending: false,
+        architectureError: null,
+      });
+      console.log("✅ Architecture Tree generated");
+    } catch (err) {
+      console.error("❌ Background architecture failed:", err.message);
+      updateAnalysisSession(repositoryId, {
+        architecturePending: false,
+        architectureError: err.message,
+      });
+    } finally {
+      maybeFinalizeHealthScore();
+    }
+  });
+
+  // Background Code Evolution job
+  setImmediate(async () => {
+    try {
+      const codeEvolution = await getCodeChurn(repoPath);
+      updateAnalysisSession(repositoryId, {
+        codeEvolution,
+        codeEvolutionPending: false,
+        codeEvolutionError: null,
+      });
+      console.log("✅ Code Evolution calculated");
+    } catch (err) {
+      console.error("❌ Background code evolution failed:", err.message);
+      updateAnalysisSession(repositoryId, {
+        codeEvolutionPending: false,
+        codeEvolutionError: err.message,
+      });
+    } finally {
+      maybeFinalizeHealthScore();
+    }
+  });
+}
+
+/**
+ * Main Repository Analysis Flow
+ */
 async function analyzeRepository(url, repositoryId) {
   if (typeof url !== "string" || !url.trim()) {
     throw new Error("analyzeRepository: 'url' must be a non-empty string");
   }
-
   if (!repositoryId) {
     throw new Error("analyzeRepository: 'repositoryId' is required");
   }
 
   stepCounter = 0;
 
+  createAnalysisSession(repositoryId, {
+    status: "processing",
+    url,
+    aiFileExplanations: {},
+    ...pendingBackgroundFields(),
+  });
+
   try {
-   // Clone Repository
-logStep("Cloning repository...");
-const repoPath = await cloneRepository(url);
+    logStep("Cloning repository...");
+    const repoPath = await cloneRepository(url);
 
-// Build Architecture
-logStep("Building repository architecture...");
-const architecture = buildArchitecture(repoPath);
-
-// Save repository AFTER architecture is available
-setCurrentRepository(
-  repositoryId,
-  repoPath,
-  architecture
-);
-    console.log("===== ARCHITECTURE =====");
-console.log("repoPath =", repoPath);
-console.log(architecture.dashboard);
-console.log(architecture.tree);
-console.log("Architecture:");
-console.log(JSON.stringify(architecture, null, 2));
-    // Background indexing
-    const indexingPromise = startBackgroundIndexing(
-      repoPath,
-      repositoryId
-    );
-
-    // Git Data
-    logStep("Gathering repository data...");
-
+    logStep("Gathering core repository data...");
     const [commits, contributors, branchData] = await Promise.all([
       getCommits(repoPath),
       getContributors(repoPath),
@@ -100,110 +225,91 @@ console.log(JSON.stringify(architecture, null, 2));
     ]);
 
     const stats = getCommitStats(commits);
-
     const commitStatistics = getCommitStatistics(commits);
 
-    const [fileAnalysis, codeEvolution] = await Promise.all([
+    logStep("Analyzing files and building timeline...");
+    const [fileAnalysis, timeline] = await Promise.all([
       getFileChanges(repoPath),
-      getCodeChurn(repoPath),
+      Promise.resolve(createTimeline(commits)),
     ]);
-    // AI File Analysis
-logStep("Analyzing repository files with AI...");
 
-const aiFileAnalysis =
-  await analyzeRepositoryFiles(fileAnalysis);
-
-    // Timeline
-    logStep("Building timeline...");
-    const timeline = createTimeline(commits);
-
-    // Languages
     logStep("Analyzing languages...");
     const languageAnalysis = analyzeLanguages(fileAnalysis);
 
-    // Hotspots
-   // Hotspots
-logStep("Calculating hotspots...");
+    logStep("Calculating hotspots...");
+    const hotspots = calculateHotspots(fileAnalysis, contributors);
 
-const hotspots = calculateHotspots(
-  fileAnalysis,
-  contributors
-);
-
-logStep("Generating AI hotspot insights...");
-
-let hotspotInsights = [];
-
-try {
-    hotspotInsights = await generateHotspotInsights(
-        hotspots.hotspots
-    );
-} catch (err) {
-    console.error("Hotspot Insight Error:");
-    console.error(err);
-}
-    // Health
-    logStep("Calculating project health...");
-
-    const healthScore = calculateProjectHealth({
-      architecture,
+    logStep("Calculating initial health score (provisional)...");
+    const provisionalHealthScore = calculateProjectHealth({
+      architecture: null,
       fileAnalysis,
       hotspots: hotspots.hotspots,
-      codeEvolution,
+      codeEvolution: null,
     });
 
-    console.log("❤️ PROJECT HEALTH:", healthScore);
+    updateAnalysisSession(repositoryId, {
+      status: "ready",
+      repoPath,
 
-    logStep("Analysis completed!");
+      stats,
+      commitStatistics,
+      contributors,
+      timeline,
+      fileAnalysis,
+      languageAnalysis,
+
+      hotspots: hotspots.hotspots,
+      allScoredHotspots: hotspots.allScored,
+
+      branches: branchData,
+
+      healthScore: provisionalHealthScore,
+
+      recentCommits: commits.slice(0, 5),
+      allCommits: commits,
+
+      ...pendingBackgroundFields(),
+    });
+
+    startBackgroundArchitectureAndEvolution(
+      repoPath,
+      repositoryId,
+      fileAnalysis,
+      hotspots
+    );
+    startBackgroundIndexing(repoPath, repositoryId);
+    startBackgroundAIWork(repositoryId, hotspots);
+
+    logStep("Dashboard response ready! (Background processing queued)");
 
     return {
       repoPath,
 
-      // Dashboard
       stats,
       commitStatistics,
-
-      // Contributors
       contributors,
-
-      // Timeline
       timeline,
-
-      // Files
       fileAnalysis,
-// AI File Analysis
-aiFileAnalysis,
-      // Languages
       languageAnalysis,
 
-      // Code Evolution
-      codeEvolution,
-
-      // Architecture
-      architecture,
-
-      // Hotspots
       hotspots: hotspots.hotspots,
       allScoredHotspots: hotspots.allScored,
-hotspotInsights,
-      // Branches
+
       branches: branchData,
 
-      // Health
-      healthScore,
+      healthScore: provisionalHealthScore,
 
-      // Commits
       recentCommits: commits.slice(0, 5),
       allCommits: commits,
 
-      // Background indexing
-      indexingPromise,
+      ...pendingBackgroundFields(),
     };
   } catch (error) {
-    console.error(
-      "❌ Repository analysis failed:",
-      error.message
-    );
+    console.error("❌ Repository analysis failed:", error.message);
+    updateAnalysisSession(repositoryId, {
+      status: "failed",
+      error: error.message,
+    });
     throw error;
   }
 }

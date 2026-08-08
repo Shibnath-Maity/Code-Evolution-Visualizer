@@ -2,81 +2,96 @@ const fs = require("fs");
 const path = require("path");
 
 const { generateJSON } = require("./llmService");
+const { buildFileRelations } = require("./fileDependencyService");
+
 const {
-  buildFileRelations,
-} = require("./fileDependencyService");
+  getAnalysisSession,
+  updateAnalysisSession,
+} = require("./sessionService");
+
 /* ==========================================================
    AI FILE EXPLANATION
 ========================================================== */
 
 async function explainFile(
-    repoPath,
-    filePath,
-    architecture = null
+  repoPath,
+  filePath,
+  architecture = null,
+  repositoryId = null
 ) {
+  /* ========================================================
+     1. CHECK CACHE FIRST
+  ======================================================== */
 
-  const absolutePath = path.join(
-    repoPath,
-    filePath
-  );
+  if (repositoryId) {
+    const session = getAnalysisSession(repositoryId);
+
+    const cached = session?.aiFileExplanations?.[filePath];
+
+    if (cached) {
+      console.log("⚡ Returning cached AI analysis:", filePath);
+      return cached;
+    }
+  }
+
+  console.log("🤖 Generating NEW AI analysis:", filePath);
+
+  /* ========================================================
+     2. READ FILE
+  ======================================================== */
+
+  const absolutePath = path.join(repoPath, filePath);
 
   if (!fs.existsSync(absolutePath)) {
     throw new Error("File not found.");
   }
 
+  const content = fs.readFileSync(absolutePath, "utf8");
 
-const content = fs.readFileSync(
-  absolutePath,
-  "utf8"
-);
+  /* ========================================================
+     3. FILE RELATIONSHIPS
+  ======================================================== */
 
-const relations =
-  buildFileRelations(
-    repoPath,
-    filePath
-  );
+  const relations = buildFileRelations(repoPath, filePath);
 
-const architectureSummary = architecture
-  ? JSON.stringify(
-      architecture.dashboard,
-      null,
-      2
-    )
-  : "Not available";
-// Get folder of current file
-const folder = path.dirname(absolutePath);
+  /* ========================================================
+     4. ARCHITECTURE
+  ======================================================== */
 
-// Files in same folder
-const nearbyFiles = fs
-  .readdirSync(folder)
-  .filter(file => file !== path.basename(filePath))
-  .map(file =>
-    path.relative(
-      repoPath,
-      path.join(folder, file)
-    )
-  )
-  .slice(0, 20);
+  const repositoryContext = architecture
+    ? JSON.stringify(architecture.dashboard || architecture, null, 2)
+    : "Not Available";
 
-// Extract imports
-const imports = (
-  content.match(
-    /(?:import.*?from\s+['"](.*?)['"]|require\(['"](.*?)['"]\))/g
-  ) || []
-).join("\n");
+  /* ========================================================
+     5. NEARBY FILES
+  ======================================================== */
 
-const repositoryContext = architecture
-  ? JSON.stringify(
-      architecture.dashboard || architecture,
-      null,
-      2
-    )
-  : "Not Available";
+  const folder = path.dirname(absolutePath);
 
- const prompt = `
+  const nearbyFiles = fs
+    .readdirSync(folder)
+    .filter((file) => file !== path.basename(filePath))
+    .map((file) => path.relative(repoPath, path.join(folder, file)))
+    .slice(0, 20);
+
+  /* ========================================================
+     6. IMPORTS
+  ======================================================== */
+
+  const imports = (
+    content.match(
+      /(?:import.*?from\s+['"](.*?)['"]|require\(['"](.*?)['"]\))/g
+    ) || []
+  ).join("\n");
+
+  /* ========================================================
+     7. AI PROMPT
+  ======================================================== */
+
+  const prompt = `
 You are a Principal Software Architect and Senior Code Reviewer.
 
-Analyze the following repository file as a Principal Software Architect.
+Analyze ONLY the following repository file.
 
 Focus on:
 
@@ -89,6 +104,7 @@ Focus on:
 - Architecture
 
 Avoid discussing syntax, formatting, or code metrics.
+
 FILE PATH
 
 ${filePath}
@@ -107,17 +123,15 @@ ${repositoryContext}
 
 FILE RELATIONSHIPS
 
-Imports
-
+Imports:
 ${JSON.stringify(relations.imports, null, 2)}
 
-Imported By
-
+Imported By:
 ${JSON.stringify(relations.importedBy, null, 2)}
 
 SOURCE CODE
 
-${content}
+${content.slice(0, 12000)}
 
 Return ONLY valid JSON.
 
@@ -143,6 +157,7 @@ Return ONLY valid JSON.
   "designPatterns": [],
   "dataFlow": [],
   "risks": [],
+  "risk": "",
   "improvements": [],
   "relatedFiles": [],
   "complexity": "",
@@ -152,17 +167,14 @@ Return ONLY valid JSON.
 
 Rules:
 
-Purpose
-- Explain WHY this file exists.
+Purpose:
+Explain WHY this file exists.
 
-Summary
-- Explain WHAT this file does.
+Summary:
+Explain WHAT this file does.
 
-Role
-
-Classify this file into exactly one category.
-
-Possible values:
+Role:
+Classify this file into exactly one category:
 
 - Controller
 - Service
@@ -175,62 +187,92 @@ Possible values:
 - Model
 - Helper
 
-Return only the best matching role.
+Responsibilities:
+List the primary responsibilities.
 
-Responsibilities
-- List the primary responsibilities of this file.
+Workflow:
+Explain execution flow through the file.
 
-Workflow
-- Explain how execution flows through the file from top to bottom.
+Components:
+List important classes, React components, exported objects or modules.
 
-Components
-- List important classes, React components, exported objects or modules.
+Important Functions:
+List important functions with short explanations.
 
-Important Functions
-- List the important functions with a short explanation of each.
+Dependencies:
+Mention imported libraries and why they are used.
 
-Dependencies
-- Mention imported libraries and explain why they are used.
+Design Patterns:
+Mention patterns that are clearly visible.
 
-Design Patterns
-- Mention patterns used such as MVC, Factory, Singleton, Repository, Hook, Service Layer, Observer, etc.
-- If none are obvious, return an empty array.
+Data Flow:
+Explain how data enters, is processed and leaves.
 
-Data Flow
-- Explain how data enters, is processed, and leaves this file.
+Related Files:
+Mention files this file interacts with based on the provided relationships/imports.
 
-Related Files
-- Mention files that this file is likely to interact with based on imports.
+Risks:
+Mention architectural or maintainability risks only.
 
-Risks
-- Mention architectural or maintainability risks only.
-- Ignore console.log, TODO comments, loop count, and metric counts.
+Risk:
+Classify the overall architectural/maintainability risk as exactly one of:
+- Low
+- Medium
+- High
 
-Improvements
-- Suggest practical improvements that would make the code cleaner or easier to maintain.
+Improvements:
+Suggest practical improvements.
 
-Complexity
-- Return one sentence describing the overall complexity.
+Complexity:
+One sentence.
 
-Maintainability
-- Return one sentence describing how maintainable the file is.
+Maintainability:
+One sentence.
 
-Best Practices
-- Mention engineering best practices already followed by this file.
+Best Practices:
+Mention engineering practices already followed.
 
-Do NOT:
+DO NOT:
+
 - Mention console.log count.
 - Mention TODO count.
 - Mention loop count.
 - Mention if statement count.
 - Mention code metrics.
-- Invent functions or files that do not exist.
+- Invent functions.
+- Invent files.
 
 Only use the provided source code.
+
 Return ONLY JSON.
 `;
 
-  return await generateJSON(prompt);
+  /* ========================================================
+     8. CALL AI
+  ======================================================== */
+
+  const result = await generateJSON(prompt);
+
+  /* ========================================================
+     9. SAVE RESULT IN SESSION CACHE
+  ======================================================== */
+
+  if (repositoryId) {
+    const session = getAnalysisSession(repositoryId);
+
+    const existingCache = session?.aiFileExplanations || {};
+
+    updateAnalysisSession(repositoryId, {
+      aiFileExplanations: {
+        ...existingCache,
+        [filePath]: result,
+      },
+    });
+
+    console.log("💾 Cached AI analysis:", filePath);
+  }
+
+  return result;
 }
 
 module.exports = {

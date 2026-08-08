@@ -16,8 +16,6 @@ const chroma = new ChromaClient({
 
 // ==========================================
 // Config: manifest files & scoring weights
-// (single source of truth, was duplicated
-// 3x in the original)
 // ==========================================
 
 const MANIFEST_FILES = new Set([
@@ -80,9 +78,6 @@ const WEIGHTS = {
   sourceCodeGeneric: 3,
   codeReviewSource: 30,
   codeReviewExtension: 20,
-  // Step 2: repository summaries are useful context for code-review
-  // questions too (they orient the LLM on architecture before it looks
-  // at individual files), so this is now a boost instead of a penalty.
   codeReviewSummaryBoost: 35,
 };
 
@@ -314,8 +309,7 @@ function scoreCandidate({ document, metadata, distance, queryWords, q, signals, 
     if (directory.includes(word)) score += WEIGHTS.keywordInDirectory;
   }
 
-  // Exact file targeting (single boost path — the original applied this
-  // twice: once for isSpecificFileQuestion, once again unconditionally)
+  // Exact file targeting
   if (possibleFileName && fileName === possibleFileName) {
     score += isSpecificFileQuestion
       ? WEIGHTS.exactFileNameMatch
@@ -401,8 +395,6 @@ function scoreCandidate({ document, metadata, distance, queryWords, q, signals, 
   if (isCodeReview) {
     if (type === "source") score += WEIGHTS.codeReviewSource;
     if (CODE_EXTENSIONS.has(extension)) score += WEIGHTS.codeReviewExtension;
-    // Step 2: boost (not penalize) repository summaries on code-review
-    // questions, so the LLM gets architecture context alongside source.
     if (type === "repository_summary") score += WEIGHTS.codeReviewSummaryBoost;
   }
 
@@ -446,25 +438,26 @@ async function searchDocuments(
     console.log("First 5:", queryEmbedding?.slice(0, 5));
 
     console.log("Calling ChromaDB query...");
-  let where;
 
-if (targetFile) {
-  where = {
-    $and: [
-      { repositoryId },
-      { fileName: targetFile }
-    ]
-  };
-} else {
-  where = {
-    repositoryId
-  };
-}
-    // Step 1: pull a wide candidate pool from Chroma and let our own
-    // scoring/ranking narrow it down, instead of asking Chroma for only
-    // `limit` (8) results up front — that starved the ranker of anything
-    // to rank. Targeted single-file lookups stay tight since there's
-    // nothing to rank there.
+    if (!repositoryId) {
+      throw new Error("repositoryId is undefined.");
+    }
+
+    let where;
+
+    if (targetFile) {
+      where = {
+        $and: [
+          { repositoryId: String(repositoryId) },
+          { fileName: targetFile }
+        ]
+      };
+    } else {
+      where = {
+        repositoryId: String(repositoryId)
+      };
+    }
+
     const results = await collection.query({
       queryEmbeddings: [queryEmbedding],
       nResults: targetFile ? 3 : CANDIDATE_POOL_SIZE,
@@ -516,10 +509,6 @@ if (targetFile) {
       })
       .sort((a, b) => b.score - a.score);
 
-    // Step 3: for repository-wide questions, guarantee the repository
-    // summary is present at the top even if its score didn't happen to
-    // win the ranking — the LLM needs that orienting context before
-    // diving into individual files.
     if (
       signals.isOverview ||
       signals.isArchitecture ||

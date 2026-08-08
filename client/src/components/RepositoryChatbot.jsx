@@ -11,7 +11,7 @@ import {
   Check,
 } from "lucide-react";
 
-const API_URL = "http://localhost:5000";
+const API_URL = import.meta.env.VITE_API_URL || "http://localhost:5000";
 
 const SUGGESTED_QUESTIONS = [
   "Give me a repository overview.",
@@ -21,12 +21,8 @@ const SUGGESTED_QUESTIONS = [
 ];
 
 // ==========================================
-// Render basic inline markdown: **bold** and
-// `inline code`. Code spans are matched first so
-// a code span containing literal asterisks isn't
-// mistaken for bold syntax.
+// Render basic inline markdown
 // ==========================================
-
 function renderInlineMarkdown(line, keyPrefix) {
   const parts = line.split(/(\*\*[^*]+\*\*|`[^`]+`)/g).filter(Boolean);
 
@@ -60,14 +56,8 @@ const HEADING_STYLES = {
 };
 
 // ==========================================
-// Fenced code block, e.g. ```python\n...\n```
-// Dark panel with a language label and a copy
-// button. This is the piece that was completely
-// missing before: a ``` fence just fell through
-// to plain-paragraph rendering with the backticks
-// printed literally.
+// Fenced code block
 // ==========================================
-
 function CodeBlock({ lang, code }) {
   const [copied, setCopied] = useState(false);
 
@@ -77,7 +67,7 @@ function CodeBlock({ lang, code }) {
       setCopied(true);
       setTimeout(() => setCopied(false), 1500);
     } catch {
-      // clipboard write failed silently — button just won't flip to "copied"
+      // Failed silently
     }
   };
 
@@ -105,11 +95,6 @@ function CodeBlock({ lang, code }) {
 // ==========================================
 // Format AI response
 // ==========================================
-
-// Splits the raw text into alternating prose / fenced-code segments
-// first, so code content never gets run through the heading/list/bold
-// parsing meant for prose (a "#" inside a Python comment shouldn't turn
-// into a heading, for example).
 function splitCodeSegments(text) {
   const segments = [];
   const pattern = /```(\w+)?\n?([\s\S]*?)```/g;
@@ -137,9 +122,8 @@ function splitCodeSegments(text) {
 
 function ProseBlocks({ text }) {
   const lines = text.split("\n");
-
   const blocks = [];
-  let currentList = null; // { type: "bullet" | "number", items: [] }
+  let currentList = null;
 
   const flushList = () => {
     if (currentList && currentList.items.length > 0) {
@@ -156,10 +140,6 @@ function ProseBlocks({ text }) {
       return;
     }
 
-    // Headings: "#", "##", "###", "####" — previously unhandled, so a
-    // line like "## Repository Overview" fell through to the plain
-    // paragraph branch and rendered as literal "## Repository Overview"
-    // text instead of a heading.
     const headingMatch = line.match(/^(#{1,4})\s+(.*)/);
     if (headingMatch) {
       flushList();
@@ -255,7 +235,6 @@ function FormattedMessage({ text }) {
 // ==========================================
 // Typing indicator
 // ==========================================
-
 function TypingIndicator() {
   return (
     <div className="flex items-center gap-1 px-1 py-1">
@@ -282,11 +261,6 @@ function RepositoryChatbot({ repositoryId: repositoryIdProp }) {
   const scrollRef = useRef(null);
   const textareaRef = useRef(null);
 
-  // The parent page (AIInsights.jsx) passes repositoryId as a prop, which
-  // was previously ignored entirely in favor of reading localStorage
-  // directly — meaning if the two ever disagreed, this component could
-  // show "no repository connected" even though the rest of the page had
-  // one loaded, or silently chat about the wrong repository.
   const repositoryId = repositoryIdProp || localStorage.getItem("repositoryId");
 
   useEffect(() => {
@@ -311,20 +285,27 @@ function RepositoryChatbot({ repositoryId: repositoryIdProp }) {
     }
 
     setMessages((prev) => [...prev, { role: "user", content: userQuestion }]);
-
     setQuestion("");
     setError("");
     setLoading(true);
 
     try {
-      // IMPORTANT:
-      // Backend route is /assistant/ask
-      const response = await axios.post(`${API_URL}/assistant/ask`, {
-        question: userQuestion,
-        repositoryId,
-      });
+      // 1. Fetch token from localStorage
+      const token = localStorage.getItem("token");
 
-      console.log("Assistant response:", response.data);
+      // 2. Attach Authorization header to request
+      const response = await axios.post(
+        `${API_URL}/assistant/ask`,
+        {
+          question: userQuestion,
+          repositoryId,
+        },
+        {
+          headers: {
+            Authorization: token ? `Bearer ${token}` : "",
+          },
+        }
+      );
 
       setMessages((prev) => [
         ...prev,
@@ -347,7 +328,11 @@ function RepositoryChatbot({ repositoryId: repositoryIdProp }) {
         },
       ]);
 
-      setError("The assistant didn't respond. Please try again.");
+      setError(
+        err.response?.status === 401
+          ? "Session expired or unauthorized. Please log in again."
+          : "The assistant didn't respond. Please try again."
+      );
     } finally {
       setLoading(false);
 

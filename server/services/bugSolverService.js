@@ -1,3 +1,4 @@
+const path = require("path");
 const { searchDocuments } = require("./ragService");
 const { getCurrentRepository } = require("./repositoryContext");
 const { getCommits, getCommitDiff } = require("./gitService");
@@ -16,42 +17,17 @@ const BUG_KEYWORDS = [
   "issue",
 ];
 
-// Word-boundary regexes built once at module load, not per-call. Plain
-// substring matching (message.includes("null")) also matched inside
-// unrelated words like "annulled" or "nullable-config", quietly padding
-// the related-commits list with noise that then gets fed to the LLM as
-// "evidence".
 const BUG_KEYWORD_PATTERNS = BUG_KEYWORDS.map(
   (keyword) => new RegExp(`\\b${keyword}\\b`, "i")
 );
 
 const MAX_RELATED_COMMITS = 3;
 const MAX_DOC_CHARS = 1000;
-// MAX_RELATED_COMMITS = 3;
 const MAX_DIFF_COMMITS = 1;
 const MAX_DIFF_CHARS = 700;
 const ALLOWED_SEVERITIES = ["Low", "Medium", "High", "Critical"];
 const PATCH_TYPES = ["modify", "insert", "delete"];
-// -----------------------------
-// Dynamic retrieval limit
-// -----------------------------
-// Wider error → more candidate documents pulled from ChromaDB, since
-// broad framework errors (React, Java) tend to touch more of the
-// codebase than a narrow one (a single markdown typo).
-//
-// Rewritten from a long inline if/else chain of raw substring checks
-// into a data-driven rule table using word-boundary regexes. Two
-// concrete problems that fixes:
-//
-// 1. `error.includes(".c")` also matched inside unrelated text like
-//    "database.config" or "eslint.cache" — a short, unanchored
-//    extension check like that will false-positive on anything
-//    containing those two characters in sequence. `/\.c\b/i` requires
-//    an actual word boundary right after the "c", so "database.config"
-//    no longer matches while "foo.c" and "foo.cpp" still correctly do
-//    (regex alternation backtracks to the longer "cpp" branch).
-// 2. The rule set is now a table instead of ~80 lines of inline
-//    branching inside solveBug(), and it's independently testable.
+
 const RETRIEVAL_LIMIT_RULES = [
   { limit: 5, pattern: /\.(jsx?|tsx?)\b|\breact\b/i, label: "js/ts/react" },
   { limit: 5, pattern: /\.java\b|nullpointerexception|\bspring\b/i, label: "java" },
@@ -71,18 +47,12 @@ const RETRIEVAL_LIMIT_RULES = [
 ];
 
 const DEFAULT_RETRIEVAL_LIMIT = 3;
-const EXACT_MATCH_RETRIEVAL_LIMIT = 1;
 
-// File/component names specific enough that, if mentioned, the answer is
-// almost certainly about that exact file — so a narrow, high-precision
-// retrieval beats a broad one.
 const FILE_REGEX =
-/[A-Za-z0-9_-]+\.(jsx?|tsx?|java|kt|py|cpp|c|cc|h|hpp|go|rs|php|cs|swift|html|css|scss|json|xml|yml|yaml|sql|md)/i;
-
+  /[A-Za-z0-9_-]+\.(jsx?|tsx?|java|kt|py|cpp|c|cc|h|hpp|go|rs|php|cs|swift|html|css|scss|json|xml|yml|yaml|sql|md)/i;
 
 function determineRetrievalLimit(error) {
   const normalized = error.toLowerCase();
-
   const fileMatch = normalized.match(FILE_REGEX);
 
   if (fileMatch) {
@@ -106,11 +76,11 @@ function determineRetrievalLimit(error) {
     reason: "default",
   };
 }
+
 function buildRepositoryContext(documents, metadatas) {
   return documents
     .map((doc, index) => {
       const meta = metadatas[index] || {};
-
       return `
 ====================================
 File: ${meta.file || "Unknown"}
@@ -136,7 +106,6 @@ async function loadCommitDiffs(repoPath, commits) {
   for (const commit of commits.slice(0, MAX_DIFF_COMMITS)) {
     try {
       const diff = await getCommitDiff(repoPath, commit.hash);
-
       diffs.push({
         hash: commit.hash,
         message: commit.message,
@@ -157,7 +126,6 @@ You are a Senior Software Debugging Engineer.
 Your job is to analyze bugs ONLY using the repository context below.
 
 IMPORTANT RULES
-
 - Use ONLY repository context.
 - Never invent files, code, commits, functions, or line numbers.
 - If the repository context does not clearly identify the bug, return:
@@ -175,6 +143,7 @@ patch.newCode: ""
 - NEVER guess another function.
 - NEVER guess code that is not present in the repository context.
 - Return ONLY valid JSON.
+
 ====================================
 USER ERROR
 ====================================
@@ -192,14 +161,11 @@ RELATED COMMITS (up to ${MAX_RELATED_COMMITS} shown; message/metadata only)
 ====================================
 
 ${commits
-  .map(
-    c =>
-      `${c.hash.substring(0,7)} | ${c.message} | ${c.date}`
-  )
+  .map((c) => `${c.hash.substring(0, 7)} | ${c.message} | ${c.date}`)
   .join("\n")}
 
 ====================================
-COMMIT DIFFS (full diff available for only the first ${MAX_DIFF_COMMITS} of the related commits above — do not assume diffs exist for the rest)
+COMMIT DIFFS (full diff available for only the first ${MAX_DIFF_COMMITS} of the related commits above)
 ====================================
 
 ${diffs.length ? diffs.map((d) => `# ${d.hash} — ${d.message}\n${d.diff}`).join("\n\n") : "(no diffs loaded)"}
@@ -209,34 +175,31 @@ ${diffs.length ? diffs.map((d) => `# ${d.hash} — ${d.message}\n${d.diff}`).joi
 Return EXACTLY this JSON structure:
 
 {
-   "bugType":"",
-  "severity":"Low | Medium | High | Critical",
-  "confidence":0,
-  "file":"",
-  "line":0,
-  "rootCause":"",
-  "affectedFiles":[],
-  "relatedCommits":[],
-  "fix":"",
-  "patch":{
-    "type":"modify",
-    "file":"",
-    "oldCode":"",
-    "newCode":""
+  "bugType": "",
+  "severity": "Low | Medium | High | Critical",
+  "confidence": 0,
+  "file": "",
+  "line": 0,
+  "rootCause": "",
+  "affectedFiles": [],
+  "relatedCommits": [],
+  "fix": "",
+  "patch": {
+    "type": "modify",
+    "file": "",
+    "oldCode": "",
+    "newCode": ""
   }
 }
 
-Rules:
-
-
-PATCH RULES
+PATCH RULES:
 - Generate the smallest fix.
 - Modify only one file.
 - oldCode must exist in repository context.
 - newCode is the corrected version.
 - Never generate an entire file.
 - Leave oldCode/newCode empty if evidence is insufficient.
-`
+`;
 }
 
 function clampConfidence(value) {
@@ -252,11 +215,19 @@ function normalizeSeverity(value) {
   return match || "Medium";
 }
 
-// The model is asked to return a strict shape, but nothing previously
-// checked that it actually did — a missing `affectedFiles` array, a
-// `confidence` of "high" instead of a number, or a made-up severity
-// string would all have flowed straight through to whatever calls
-// solveBug(). This guarantees the contract instead of hoping.
+function normalizePatch(patch) {
+  if (!patch || typeof patch !== "object") {
+    return { type: "modify", file: "", oldCode: "", newCode: "" };
+  }
+
+  return {
+    type: PATCH_TYPES.includes(patch.type) ? patch.type : "modify",
+    file: typeof patch.file === "string" ? patch.file : "",
+    oldCode: typeof patch.oldCode === "string" ? patch.oldCode : "",
+    newCode: typeof patch.newCode === "string" ? patch.newCode : "",
+  };
+}
+
 function normalizeBugReport(raw) {
   if (!raw || typeof raw !== "object") {
     throw new Error("LLM returned a non-object bug report");
@@ -278,35 +249,6 @@ function normalizeBugReport(raw) {
   };
 }
 
- function normalizePatch(patch) {
-  if (!patch || typeof patch !== "object") {
-    return {
-      type: "modify",
-      file: "",
-      oldCode: "",
-      newCode: "",
-    };
-  }
-
-  return {
-    type: PATCH_TYPES.includes(patch.type)
-      ? patch.type
-      : "modify",
-
-    file: typeof patch.file === "string"
-      ? patch.file
-      : "",
-
-    oldCode: typeof patch.oldCode === "string"
-      ? patch.oldCode
-      : "",
-
-    newCode: typeof patch.newCode === "string"
-      ? patch.newCode
-      : "",
-  };
-}
-  
 async function solveBug({ error, repoPath, repositoryId }) {
   try {
     console.log("\n========== BUG SOLVER ==========");
@@ -317,9 +259,8 @@ async function solveBug({ error, repoPath, repositoryId }) {
 
     if (!repoPath || !repositoryId) {
       const current = getCurrentRepository();
-
-      repoPath = current.repoPath;
-      repositoryId = current.repositoryId;
+      repoPath = current?.repoPath;
+      repositoryId = current?.repositoryId;
     }
 
     if (!repoPath || !repositoryId) {
@@ -329,45 +270,30 @@ async function solveBug({ error, repoPath, repositoryId }) {
     console.log("Repository ID:", repositoryId);
     console.log("Repository Path:", repoPath);
 
-    console.log("Searching ChromaDB...");
-
     const { limit, reason } = determineRetrievalLimit(error);
-    console.log(`📚 Retrieving top ${limit} documents (${reason})...`);
+    console.log(`📚 Searching ChromaDB (top ${limit} documents, reason: ${reason})...`);
 
-  const fileMatch = error.match(FILE_REGEX);
-
-const rag = await searchDocuments(
-  error,
-  repositoryId,
-  limit,
-  fileMatch ? fileMatch[0] : null
-);
-
-    console.log("✅ ChromaDB Search Success");
+    const fileMatch = error.match(FILE_REGEX);
+    const rag = await searchDocuments(
+      error,
+      repositoryId,
+      limit,
+      fileMatch ? fileMatch[0] : null
+    );
 
     const documents = rag.documents?.[0] || [];
     const metadatas = rag.metadatas?.[0] || [];
-
     console.log("Retrieved Documents:", documents.length);
 
     const repositoryContext = buildRepositoryContext(documents, metadatas);
 
     console.log("Loading commits...");
-
     const commits = await getCommits(repoPath);
-
-    console.log("Total Commits:", commits.length);
-
     const relatedCommits = findRelatedCommits(commits);
-
-    console.log("Related Commits:", relatedCommits.length);
+    const topRelatedCommits = relatedCommits.slice(0, MAX_RELATED_COMMITS);
 
     console.log("Loading commit diffs...");
-
-    const topRelatedCommits = relatedCommits.slice(0, MAX_RELATED_COMMITS);
     const commitDiffs = await loadCommitDiffs(repoPath, topRelatedCommits);
-
-    console.log("Loaded Diffs:", commitDiffs.length);
 
     const prompt = buildPrompt(
       error,
@@ -377,33 +303,24 @@ const rag = await searchDocuments(
     );
 
     console.log("Calling LLM...");
-const rawResult = await generateJSON(prompt);
+    const rawResult = await generateJSON(prompt);
+    const result = normalizeBugReport(rawResult);
 
-console.log("✅ LLM Success");
+    // Verify file ground truth against context using base path comparisons
+    if (result.file && !repositoryContext.includes(path.basename(result.file))) {
+      result.file = "";
+      result.line = 0;
+      result.rootCause = "Insufficient repository context.";
+      result.affectedFiles = [];
+      result.fix = "Not enough evidence.";
+      result.patch.oldCode = "";
+      result.patch.newCode = "";
+    }
 
-const result = normalizeBugReport(rawResult);
-
-// Prevent hallucinated file names
-if (
-  result.file &&
-  !repositoryContext.includes(result.file.split(/[\\/]/).pop())
-) {
-  result.file = "";
-  result.line = 0;
-  result.rootCause = "Insufficient repository context.";
-  result.affectedFiles = [];
-  result.fix = "Not enough evidence.";
-  result.patch.oldCode = "";
-  result.patch.newCode = "";
-}
-
-return result;
-    
+    return result;
   } catch (err) {
     console.error("\n❌ BUG SOLVER FAILED");
     console.error(err);
-    console.error(err.stack);
-
     throw err;
   }
 }

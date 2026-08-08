@@ -1,9 +1,6 @@
-const { analyzeFileWithAI } = require("./aiFileAnalysisService");
 const fs = require("fs");
 const path = require("path");
 const simpleGit = require("simple-git");
-
-const COMMIT_SEPARATOR = "###COMMIT###";
 
 /* ==========================================================
    DIRECTORIES TO IGNORE
@@ -64,7 +61,7 @@ const CODE_EXTENSIONS = new Set([
 ]);
 
 /* ==========================================================
-   HELPERS
+   HELPERS & PATH NORMALIZATION
 ========================================================== */
 
 function isIgnoredDirectory(name) {
@@ -76,9 +73,20 @@ function isIgnoredFile(name) {
 }
 
 function isCodeFile(filePath) {
-  return CODE_EXTENSIONS.has(
-    path.extname(filePath).toLowerCase()
-  );
+  return CODE_EXTENSIONS.has(path.extname(filePath).toLowerCase());
+}
+
+/**
+ * Normalizes Windows backslashes (\) to standard POSIX slashes (/),
+ * strips quotes, and removes leading './' references.
+ */
+function normalizeGitPath(filePath) {
+  if (!filePath) return "";
+
+  return filePath
+    .replace(/^"|"$/g, "")
+    .replace(/\\/g, "/")
+    .replace(/^\.\//, "");
 }
 
 /* ==========================================================
@@ -129,15 +137,16 @@ function scanRepository(rootPath) {
   const files = [];
 
   function walk(currentDirectory) {
-    const entries = fs.readdirSync(currentDirectory, {
-      withFileTypes: true,
-    });
+    let entries = [];
+    try {
+      entries = fs.readdirSync(currentDirectory, { withFileTypes: true });
+    } catch (err) {
+      console.warn(`⚠️ Warning: Could not read directory: ${currentDirectory}`);
+      return;
+    }
 
     for (const entry of entries) {
-      const fullPath = path.join(
-        currentDirectory,
-        entry.name
-      );
+      const fullPath = path.join(currentDirectory, entry.name);
 
       if (entry.isDirectory()) {
         if (isIgnoredDirectory(entry.name)) {
@@ -162,19 +171,17 @@ function scanRepository(rootPath) {
         continue;
       }
 
+      // Format relative path using POSIX slashes for Windows/Linux compatibility
+      const relativePath = path.relative(rootPath, fullPath);
+      const normalizedPath = normalizeGitPath(relativePath);
+
       files.push({
-        path: path.relative(rootPath, fullPath),
-
+        path: normalizedPath,
         name: entry.name,
-
         extension: path.extname(entry.name),
-
         size: source.size,
-
         lines: source.lines,
-
         content: source.content,
-
         isCodeFile: true,
       });
     }
@@ -186,68 +193,81 @@ function scanRepository(rootPath) {
 }
 
 /* ==========================================================
-   GIT HISTORY
+   GIT HISTORY ANALYZER
 ========================================================== */
 
 async function getGitHistory(repoPath) {
   const git = simpleGit(repoPath);
 
-  console.log("📜 Reading git history...");
-
-  const raw = await git.raw([
-    "log",
-    `--pretty=format:${COMMIT_SEPARATOR}`,
-    "--numstat",
-  ]);
+  console.log("📜 Reading complete git file history...");
 
   const fileMap = {};
 
-  const commits = raw.split(COMMIT_SEPARATOR);
+  try {
+    // --all ensures commits across all branches are evaluated
+    // --numstat provides addition and deletion line metrics per file
+    const raw = await git.raw([
+      "log",
+      "--all",
+      "--numstat",
+      "--format=COMMIT:%H|%an",
+    ]);
 
-  for (const commit of commits) {
-    if (!commit.trim()) continue;
+    const commits = raw.split(/^COMMIT:/m);
 
-    const lines = commit.split("\n");
+    for (const commit of commits) {
+      if (!commit.trim()) continue;
 
-    for (const line of lines) {
-      if (!line.trim()) continue;
+      const lines = commit.split(/\r?\n/);
+      const header = lines[0];
+      const author = header.includes("|") ? header.split("|")[1].trim() : null;
 
-      const parts = line.split("\t");
+      for (let i = 1; i < lines.length; i++) {
+        const line = lines[i].trim();
+        if (!line) continue;
 
-      if (parts.length !== 3) {
-        continue;
+        const parts = line.split("\t");
+
+        // Numstat layout: <additions> <deletions> <filename>
+        if (parts.length !== 3) continue;
+
+        let additions = parts[0];
+        let deletions = parts[1];
+        let filePath = normalizeGitPath(parts[2]);
+
+        if (!filePath || isIgnoredFile(path.basename(filePath))) {
+          continue;
+        }
+
+        // Handle binary or uncounted file markers ('-')
+        additions = additions === "-" ? 0 : Number.parseInt(additions, 10) || 0;
+        deletions = deletions === "-" ? 0 : Number.parseInt(deletions, 10) || 0;
+
+        if (!fileMap[filePath]) {
+          fileMap[filePath] = {
+            changes: 0,
+            additions: 0,
+            deletions: 0,
+            contributors: new Set(),
+          };
+        }
+
+        fileMap[filePath].changes += 1;
+        fileMap[filePath].additions += additions;
+        fileMap[filePath].deletions += deletions;
+
+        if (author) {
+          fileMap[filePath].contributors.add(author);
+        }
       }
-
-      const additions =
-        parts[0] === "-"
-          ? 0
-          : parseInt(parts[0], 10) || 0;
-
-      const deletions =
-        parts[1] === "-"
-          ? 0
-          : parseInt(parts[1], 10) || 0;
-
-      const file = parts[2];
-
-      if (!fileMap[file]) {
-        fileMap[file] = {
-          changes: 0,
-          additions: 0,
-          deletions: 0,
-        };
-      }
-
-      fileMap[file].changes++;
-
-      fileMap[file].additions += additions;
-
-      fileMap[file].deletions += deletions;
     }
+  } catch (err) {
+    console.warn("⚠️ Git history extraction failed or folder is not a valid Git repository:", err.message);
   }
 
   return fileMap;
 }
+
 /* ==========================================================
    MERGE GIT HISTORY + SOURCE FILES
 ========================================================== */
@@ -255,33 +275,40 @@ async function getGitHistory(repoPath) {
 function mergeRepositoryData(scannedFiles, gitHistory) {
   return scannedFiles
     .map((file) => {
-      const git =
-        gitHistory[file.path] || {
-          changes: 0,
-          additions: 0,
-          deletions: 0,
-        };
+      const normalizedPath = normalizeGitPath(file.path);
 
+      const git = gitHistory[normalizedPath] || {
+        changes: 0,
+        additions: 0,
+        deletions: 0,
+        contributors: new Set(),
+      };
+
+      const additions = Number(git.additions) || 0;
+      const deletions = Number(git.deletions) || 0;
+      const changes = Number(git.changes) || 0;
       const metrics = calculateFileMetrics(file);
 
       return {
         ...file,
-
-        changes: git.changes,
-
-        additions: git.additions,
-
-        deletions: git.deletions,
-
-        churn:
-          git.additions + git.deletions,
-
+        path: normalizedPath,
+        changes,
+        additions,
+        deletions,
+        churn: additions + deletions,
+        contributorCount: git.contributors ? git.contributors.size : 0,
         lastModified: null,
-
         metrics,
       };
     })
-    .sort((a, b) => b.changes - a.changes);
+    .sort((a, b) => {
+      // Primary sort: Change frequency
+      if (b.changes !== a.changes) {
+        return b.changes - a.changes;
+      }
+      // Secondary sort: Code churn (additions + deletions)
+      return b.churn - a.churn;
+    });
 }
 
 /* ==========================================================
@@ -293,29 +320,17 @@ function calculateFileMetrics(file) {
 
   return {
     imports: countImports(content),
-
     exports: countExports(content),
-
     functions: countFunctions(content),
-
     classes: countClasses(content),
-
     interfaces: countInterfaces(content),
-
     comments: countComments(content),
-
     todos: countTODOs(content),
-
     consoleLogs: countConsoleLogs(content),
-
     conditions: countConditions(content),
-
     loops: countLoops(content),
-
     switches: countSwitch(content),
-
     tryCatch: countTryCatch(content),
-
     asyncFunctions: countAsync(content),
   };
 }
@@ -329,38 +344,23 @@ function matchCount(regex, text) {
 }
 
 function countImports(content) {
-  return matchCount(
-    /^\s*import\s+/gm,
-    content
-  );
+  return matchCount(/^\s*import\s+/gm, content);
 }
 
 function countExports(content) {
-  return matchCount(
-    /^\s*export\s+/gm,
-    content
-  );
+  return matchCount(/^\s*export\s+/gm, content);
 }
 
 function countFunctions(content) {
-  return matchCount(
-    /\bfunction\b|=>/g,
-    content
-  );
+  return matchCount(/\bfunction\b|=>/g, content);
 }
 
 function countClasses(content) {
-  return matchCount(
-    /\bclass\s+/g,
-    content
-  );
+  return matchCount(/\bclass\s+/g, content);
 }
 
 function countInterfaces(content) {
-  return matchCount(
-    /\binterface\s+/g,
-    content
-  );
+  return matchCount(/\binterface\s+/g, content);
 }
 
 function countComments(content) {
@@ -371,24 +371,15 @@ function countComments(content) {
 }
 
 function countTODOs(content) {
-  return matchCount(
-    /TODO|FIXME/gi,
-    content
-  );
+  return matchCount(/TODO|FIXME/gi, content);
 }
 
 function countConsoleLogs(content) {
-  return matchCount(
-    /console\.(log|warn|error|info)/g,
-    content
-  );
+  return matchCount(/console\.(log|warn|error|info)/g, content);
 }
 
 function countConditions(content) {
-  return matchCount(
-    /\bif\s*\(/g,
-    content
-  );
+  return matchCount(/\bif\s*\(/g, content);
 }
 
 function countLoops(content) {
@@ -399,10 +390,7 @@ function countLoops(content) {
 }
 
 function countSwitch(content) {
-  return matchCount(
-    /\bswitch\s*\(/g,
-    content
-  );
+  return matchCount(/\bswitch\s*\(/g, content);
 }
 
 function countTryCatch(content) {
@@ -413,10 +401,7 @@ function countTryCatch(content) {
 }
 
 function countAsync(content) {
-  return matchCount(
-    /\basync\b/g,
-    content
-  );
+  return matchCount(/\basync\b/g, content);
 }
 
 /* ==========================================================
@@ -424,55 +409,40 @@ function countAsync(content) {
 ========================================================== */
 
 function buildRepositorySummary(files) {
-
   const summary = {
     totalFiles: files.length,
-
     totalLines: 0,
-
     totalSize: 0,
-
     totalChanges: 0,
-
     totalAdditions: 0,
-
     totalDeletions: 0,
-
     extensions: {},
-
     largestFiles: [],
-
     mostChangedFiles: [],
   };
 
   for (const file of files) {
-
     summary.totalLines += file.lines;
-
     summary.totalSize += file.size;
-
     summary.totalChanges += file.changes;
-
     summary.totalAdditions += file.additions;
-
     summary.totalDeletions += file.deletions;
 
     summary.extensions[file.extension] =
       (summary.extensions[file.extension] || 0) + 1;
   }
 
-  summary.largestFiles =
-    [...files]
-      .sort((a, b) => b.lines - a.lines)
-      .slice(0, 10);
+  summary.largestFiles = [...files]
+    .sort((a, b) => b.lines - a.lines)
+    .slice(0, 10);
 
-  summary.mostChangedFiles =
-    [...files]
-      .sort((a, b) => b.changes - a.changes)
-      .slice(0, 10);
+  summary.mostChangedFiles = [...files]
+    .sort((a, b) => b.changes - a.changes)
+    .slice(0, 10);
 
   return summary;
 }
+
 /* ==========================================================
    MAIN FILE ANALYZER
 ========================================================== */
@@ -481,80 +451,32 @@ async function getFileChanges(repoPath) {
   try {
     console.log("📂 Starting repository file analysis...");
 
-    const [scannedFiles, gitHistory] =
-      await Promise.all([
-        Promise.resolve(scanRepository(repoPath)),
-        getGitHistory(repoPath),
-      ]);
+    const [scannedFiles, gitHistory] = await Promise.all([
+      Promise.resolve(scanRepository(repoPath)),
+      getGitHistory(repoPath),
+    ]);
 
-    console.log(
-      `📄 Source files scanned: ${scannedFiles.length}`
-    );
+    console.log(`📄 Source files scanned: ${scannedFiles.length}`);
 
-    const allFiles = mergeRepositoryData(
-      scannedFiles,
-      gitHistory
-    );
-    console.log("🤖 Starting AI File Analysis...");
+    const allFiles = mergeRepositoryData(scannedFiles, gitHistory);
+    const summary = buildRepositorySummary(allFiles);
 
-const aiFiles = [];
-
-for (const file of allFiles) {
-  try {
-    const ai = await analyzeFileWithAI(file);
-
-    aiFiles.push({
-      ...file,
-      ai,
-    });
-
-    console.log("✅", file.path);
-  } catch (err) {
-    console.error("AI Error:", file.path);
-
-    aiFiles.push({
-      ...file,
-      ai: {
-        purpose: "Analysis failed",
-        summary: err.message,
-      },
-    });
-  }
-}
-
-const summary =
-  buildRepositorySummary(aiFiles);
-
-    console.log("✅ File analysis completed");
+    console.log("✅ File analysis completed successfully");
 
     return {
       totalFiles: summary.totalFiles,
-
       totalLines: summary.totalLines,
-
       totalSize: summary.totalSize,
-
       totalChanges: summary.totalChanges,
-
       totalAdditions: summary.totalAdditions,
-
       totalDeletions: summary.totalDeletions,
-
       languages: summary.extensions,
-
       largestFiles: summary.largestFiles,
-
-      mostChangedFiles:
-        summary.mostChangedFiles,
-
-      allFiles: aiFiles,
+      mostChangedFiles: summary.mostChangedFiles,
+      allFiles,
     };
   } catch (error) {
-    console.error(
-      "❌ File analysis failed:",
-      error
-    );
-
+    console.error("❌ File analysis failed:", error);
     throw error;
   }
 }
@@ -564,22 +486,20 @@ const summary =
 ========================================================== */
 
 function findFile(fileAnalysis, filename) {
+  const normalizedSearch = normalizeGitPath(filename);
   return (
     fileAnalysis.allFiles.find(
-      file =>
-        file.path === filename ||
-        file.name === filename
+      (file) =>
+        file.path === normalizedSearch || file.name === filename
     ) || null
   );
 }
 
 function searchFiles(fileAnalysis, query) {
-  query = query.toLowerCase();
+  const normalizedQuery = query.toLowerCase();
 
-  return fileAnalysis.allFiles.filter(file =>
-    file.path
-      .toLowerCase()
-      .includes(query)
+  return fileAnalysis.allFiles.filter((file) =>
+    file.path.toLowerCase().includes(normalizedQuery)
   );
 }
 
@@ -587,41 +507,20 @@ function searchFiles(fileAnalysis, query) {
    STATISTICS
 ========================================================== */
 
-function getRepositoryStatistics(
-  fileAnalysis
-) {
-  const files =
-    fileAnalysis.allFiles;
+function getRepositoryStatistics(fileAnalysis) {
+  const files = fileAnalysis.allFiles;
 
   return {
-
     totalFiles: files.length,
-
-    codeFiles: files.filter(
-      f => f.isCodeFile
-    ).length,
-
-    totalLines:
-      fileAnalysis.totalLines,
-
-    averageLines:
-      files.length
-        ? Math.round(
-            fileAnalysis.totalLines /
-              files.length
-          )
-        : 0,
-
-    averageFileSize:
-      files.length
-        ? Math.round(
-            fileAnalysis.totalSize /
-              files.length
-          )
-        : 0,
-
-    extensions:
-      fileAnalysis.languages,
+    codeFiles: files.filter((f) => f.isCodeFile).length,
+    totalLines: fileAnalysis.totalLines,
+    averageLines: files.length
+      ? Math.round(fileAnalysis.totalLines / files.length)
+      : 0,
+    averageFileSize: files.length
+      ? Math.round(fileAnalysis.totalSize / files.length)
+      : 0,
+    extensions: fileAnalysis.languages,
   };
 }
 
@@ -630,13 +529,8 @@ function getRepositoryStatistics(
 ========================================================== */
 
 module.exports = {
-
   getFileChanges,
-
   findFile,
-
   searchFiles,
-
   getRepositoryStatistics,
-
 };

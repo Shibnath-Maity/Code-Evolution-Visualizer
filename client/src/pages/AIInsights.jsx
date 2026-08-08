@@ -1,8 +1,8 @@
 import { useEffect, useState } from "react";
 import { useLocation } from "react-router-dom";
+import { useAnalysis } from "../context/AnalysisContext";
 import API from "../services/api";
 import RepositoryChatbot from "../components/RepositoryChatbot";
-import axios from "axios";
 import {
   Sparkles,
   Calendar,
@@ -19,11 +19,7 @@ import {
   FolderGit2,
 } from "lucide-react";
 
-const API_URL = "http://localhost:5000";
-
-// Maps the section headers the AI is asked to return (see the prompt in
-// generateAIAnalysis) to how they're displayed. Keeping this in one place
-// means the prompt and the UI can't silently drift apart.
+// Maps section headers to UI display metadata
 const SECTION_META = {
   SUMMARY: { title: "Summary", icon: Sparkles, accent: "bg-indigo-50 text-indigo-600" },
   DEVELOPMENT_ACTIVITY: { title: "Development Activity", icon: Clock, accent: "bg-blue-50 text-blue-600" },
@@ -36,12 +32,6 @@ const SECTION_META = {
 
 const SECTION_ORDER = Object.keys(SECTION_META);
 
-// Splits the AI's plain-text response into the labeled sections it was
-// asked to return. The model doesn't always format headers the same way
-// ("SUMMARY:" one time, "**SUMMARY**" the next), so this matches a header
-// sitting alone on its own line with either style, or no wrapping at all.
-// Falls back to showing the raw text if nothing matches, so we never
-// render nothing.
 function parseAnalysis(text) {
   if (!text) return [];
 
@@ -64,10 +54,6 @@ function parseAnalysis(text) {
   return sections;
 }
 
-// Turns the AI's lightweight markdown (**bold**, "* bullet" lists, blank
-// line = new paragraph) into real React elements. Deliberately hand-rolled
-// instead of dangerouslySetInnerHTML, since this is model-generated text
-// and shouldn't be treated as trusted HTML.
 function renderInlineMarkdown(line, keyPrefix) {
   const parts = line.split(/(\*\*[^*]+\*\*)/g).filter(Boolean);
   return parts.map((part, i) =>
@@ -145,8 +131,6 @@ function QuickFactCard({ icon: Icon, label, value, sub }) {
   );
 }
 
-// One card per section of the AI's response, instead of a single wall of
-// pre-wrapped text. This is the main "after analyze" readability fix.
 function AnalysisSectionCard({ sectionKey, content }) {
   const meta = SECTION_META[sectionKey] || { title: sectionKey, icon: Sparkles, accent: "bg-slate-100 text-slate-600" };
   const Icon = meta.icon;
@@ -164,8 +148,6 @@ function AnalysisSectionCard({ sectionKey, content }) {
   );
 }
 
-// Skeleton shown while the AI request is in flight, so the layout doesn't
-// jump from empty state -> spinner -> full grid of cards.
 function AnalysisSkeleton() {
   return (
     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -188,22 +170,40 @@ function AnalysisSkeleton() {
 
 function AIInsights() {
   const location = useLocation();
+  const { repositoryId, analysis: currentAnalysis } = useAnalysis();
 
   const [analysis, setAnalysis] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [lastAnalyzedAt, setLastAnalyzedAt] = useState(null);
+  const [repositoryData, setRepositoryData] = useState(null);
 
-  const [repositoryData, setRepositoryData] = useState(() => {
-    const saved = localStorage.getItem("repositoryAnalysis");
-    return saved ? JSON.parse(saved) : null;
-  });
+  // Sync state whenever the active repository in context updates
+  useEffect(() => {
+    if (!repositoryId || !currentAnalysis) {
+      setRepositoryData(null);
+      setAnalysis("");
+      setLastAnalyzedAt(null);
+      setError("");
+      return;
+    }
+
+    setRepositoryData({
+      ...currentAnalysis,
+      repositoryId,
+    });
+
+    // Clear stale AI analysis output from the previous repository
+    setAnalysis("");
+    setLastAnalyzedAt(null);
+    setError("");
+  }, [repositoryId, currentAnalysis]);
 
   const timeline = repositoryData?.timeline || [];
   const fileChanges = repositoryData?.fileChanges || [];
   const stats = repositoryData?.stats || {};
 
-  // Most active day
+  // Most active day calculation
   const mostActiveDay = (() => {
     if (!timeline.length) return "N/A";
     const days = {};
@@ -215,7 +215,7 @@ function AIInsights() {
     return result ? result[0] : "N/A";
   })();
 
-  // Most active hour
+  // Most active hour calculation
   const mostActiveHour = (() => {
     if (!timeline.length) return "N/A";
     const hours = {};
@@ -229,7 +229,7 @@ function AIInsights() {
     return `${hour}:00 – ${hour + 1}:00`;
   })();
 
-  // Most modified file
+  // Most modified file calculation
   const mostModifiedFile = (() => {
     if (!fileChanges.length) return "N/A";
     const files = {};
@@ -248,16 +248,8 @@ function AIInsights() {
     { icon: GitCommitHorizontal, label: "Total Commits", value: stats.totalCommits || 0, sub: "Repository history" },
   ];
 
-  useEffect(() => {
-    const analysis = JSON.parse(localStorage.getItem("repositoryAnalysis"));
-
-    if (analysis) {
-      setRepositoryData(analysis);
-    }
-  }, []);
-
   async function generateAIAnalysis() {
-    if (!repositoryData) {
+    if (!repositoryData || !repositoryId) {
       setError("Repository data is not available. Analyze a repository first.");
       return;
     }
@@ -266,13 +258,15 @@ function AIInsights() {
     setError("");
 
     try {
-      const response = await axios.post(`${API_URL}/ai/analyze-repository`, repositoryData);
+      const response = await API.post("/ai/analyze-repository", {
+        ...repositoryData,
+        repositoryId,
+      });
 
       setAnalysis(response.data.analysis);
       setLastAnalyzedAt(new Date());
     } catch (err) {
       console.error("AI analysis error:", err);
-
       setError(err.response?.data?.error || "Failed to generate AI analysis.");
     } finally {
       setLoading(false);
@@ -316,7 +310,7 @@ function AIInsights() {
         Get AI-powered insights about your repository.
       </p>
 
-      {/* No repository connected yet */}
+      {/* No repository connected state */}
       {!repositoryData && (
         <div className="bg-white rounded-2xl p-10 shadow-sm border border-slate-100 flex flex-col items-center text-center">
           <div className="h-12 w-12 rounded-xl bg-slate-50 flex items-center justify-center mb-4">
@@ -331,7 +325,7 @@ function AIInsights() {
 
       {repositoryData && (
         <div className="space-y-6">
-          {/* Error */}
+          {/* Error Banner */}
           {error && (
             <div className="flex items-start gap-2 p-4 rounded-xl border border-red-200 bg-red-50 text-red-600 text-sm">
               <AlertCircle className="h-4 w-4 mt-0.5 shrink-0" />
@@ -339,7 +333,7 @@ function AIInsights() {
             </div>
           )}
 
-          {/* AI Summary */}
+          {/* AI Summary Section */}
           <div className="bg-white rounded-2xl p-6 shadow-sm border border-slate-100">
             <div className="flex items-center justify-between flex-wrap gap-2">
               <div className="flex items-center gap-2">
@@ -376,7 +370,6 @@ function AIInsights() {
                       ))}
                     </div>
                   ) : (
-                    // Fallback if the model didn't return the expected section headers
                     <div className="bg-slate-50 rounded-xl p-5">
                       <FormattedText text={analysis} />
                     </div>
@@ -409,8 +402,8 @@ function AIInsights() {
             </div>
           </div>
 
-          {/* AI Assistant chat */}
-          <RepositoryChatbot repositoryId={repositoryData?.repositoryId} />
+          {/* AI Assistant Chatbot */}
+          <RepositoryChatbot repositoryId={repositoryId} />
         </div>
       )}
     </div>

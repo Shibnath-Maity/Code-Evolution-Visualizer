@@ -1,329 +1,188 @@
-import { useEffect, useState } from "react";
+import { useMemo, useState, useCallback, useRef, useEffect } from "react";
 import API from "../services/api";
-import TimelineChart from "../components/TimelineChart";
 import FileAnalysis from "../components/FileAnalysis";
 import RepositoryOverview from "../components/RepositoryOverview";
 import RepositoryArchitecture from "../components/RepositoryArchitecture";
-// import RepositoryInput from "../components/RepositoryInput";
 import StatCard from "../components/StatCard";
-// import Navbar from "../components/Navbar";
-import { useLocation, useNavigate } from "react-router-dom";
 import LanguageDistribution from "../components/LanguageDistribution";
 import ProjectHealthScore from "../components/ProjectHealthScore";
 import DownloadRepositoryReport from "../components/DownloadRepositoryReport";
-import AIFileAnalysis from "../components/AIFileAnalysis";
+import { useAnalysis } from "../context/AnalysisContext";
 
-function Board() {
+// ---- helpers -------------------------------------------------------------
 
-  const location = useLocation();
-  const navigate = useNavigate();
+const emptyFileAnalysis = { totalFiles: 0, mostChangedFiles: [], allFiles: [] };
+const emptyLanguageAnalysis = { totalFiles: 0, languages: [] };
 
-  const repoUrl =
-    location.state?.repoUrl ||
-    localStorage.getItem("repoUrl");
+function DiffLine({ line, index }) {
+  let color = "text-gray-200";
 
-  useEffect(() => {
-    if (repoUrl) {
-      localStorage.setItem("repoUrl", repoUrl);
-    }
-  }, [repoUrl]);
-
-useEffect(() => {
-  if (!repoUrl) return;
-
-  const savedRepo = localStorage.getItem("repoUrl");
-  const savedDashboard = localStorage.getItem("dashboardData");
-
-  // ✅ Already analyzed
-  if (savedRepo === repoUrl && savedDashboard) {
-    console.log("Loading dashboard from localStorage...");
-
-    const data = JSON.parse(savedDashboard);
-
-    setStats(data.stats || {});
-    setContributors(data.contributors || {});
-    setFileAnalysis(
-      data.fileAnalysis || {
-        totalFiles: 0,
-        mostChangedFiles: [],
-        allFiles: [],
-      }
-    );
-    setLanguageAnalysis(
-      data.languageAnalysis || {
-        totalFiles: 0,
-        languages: [],
-      }
-    );
-    setCodeEvolution(data.codeEvolution || []);
-    setBranches(data.branches || null);
-    setHotspots(
-      Array.isArray(data.hotspots)
-        ? data.hotspots
-        : data.hotspots?.hotspots || []
-    );
-    setRecentCommits(data.recentCommits || []);
-    setAllCommits(data.allCommits || []);
-    setArchitecture(data.architecture || null);
-    setAIFileAnalysis(data.aiFileAnalysis || null);
-
-    return;
+  if (line.startsWith("+")) {
+    color = "bg-green-900 text-green-300";
+  } else if (line.startsWith("-")) {
+    color = "bg-red-900 text-red-300";
+  } else if (line.startsWith("@@")) {
+    color = "text-blue-300";
   }
 
-  // ❌ New repository → analyze
-  const fetchRepositoryData = async () => {
-    try {
-      setLoading(true);
+  return (
+    <div className={`${color} px-2 flex`}>
+      <span className="w-12 text-gray-500 select-none">{index + 1}</span>
+      <span>{line}</span>
+    </div>
+  );
+}
 
-      const repositoryId = repoUrl
-        .replace("https://github.com/", "")
-        .replace(/\//g, "-");
+// ---- component ------------------------------------------------------------
 
-      const response = await API.post("/repository/analytics", {
-        url: repoUrl,
-        repositoryId,
-      });
-
-      const data = response.data;
-
-      localStorage.setItem("repoUrl", repoUrl);
-      localStorage.setItem(
-        "dashboardData",
-        JSON.stringify(data)
-      );
-
-      localStorage.setItem("repoPath", data.repoPath);
-      localStorage.setItem(
-        "repositoryId",
-        data.repositoryId
-      );
-
-      setStats(data.stats || {});
-      setContributors(data.contributors || {});
-      setFileAnalysis(data.fileAnalysis || {});
-      setLanguageAnalysis(data.languageAnalysis || {});
-      setCodeEvolution(data.codeEvolution || []);
-      setBranches(data.branches || null);
-      setHotspots(data.hotspots || []);
-      setRecentCommits(data.recentCommits || []);
-      setAllCommits(data.allCommits || []);
-      setArchitecture(data.architecture || null);
-      setAIFileAnalysis(data.aiFileAnalysis || null);
-
-    } catch (err) {
-      console.error(err);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  fetchRepositoryData();
-
-}, [repoUrl]);
-  const [stats, setStats] = useState({
-    commits: 0,
-    contributors: 0,
-    hotspots: 0,
-  });
-
-  const [recentCommits, setRecentCommits] = useState([]);
-  const [contributors, setContributors] = useState({});
-
-  const [languageAnalysis, setLanguageAnalysis] = useState({
-    totalFiles: 0,
-    languages: [],
-  });
-  const [architecture, setArchitecture] = useState(null);
-  const [aiFileAnalysis, setAIFileAnalysis] = useState(null);
-  const [codeEvolution, setCodeEvolution] = useState([]);
-  const [branches, setBranches] = useState(null);
+function Board() {
+  const { analysis, loading, repositoryId } = useAnalysis();
 
   const [selectedCommit, setSelectedCommit] = useState(null);
   const [commitDiff, setCommitDiff] = useState("");
+  const [loadingCommit, setLoadingCommit] = useState(false);
   const [loadingDiff, setLoadingDiff] = useState(false);
-  const [fileAnalysis, setFileAnalysis] = useState({
-    totalFiles: 0,
-    mostChangedFiles: [],
-    allFiles: [],
-  });
-  const [hotspots, setHotspots] = useState([]);
   const [searchTerm, setSearchTerm] = useState("");
-  const [allCommits, setAllCommits] = useState([]);
-  const [repoInfo, setRepoInfo] = useState(null);
-  const [loading, setLoading] = useState(false);
+  const [commitError, setCommitError] = useState("");
 
-  const copyDiff = () => {
-    navigator.clipboard.writeText(commitDiff);
-    alert("Diff copied!");
-  };
+  // Tracks the most recently requested commit hash so that responses
+  // for stale/out-of-order requests (e.g. rapid clicking) are ignored.
+  const activeRequestRef = useRef(null);
 
-  useEffect(() => {
-    console.log("Calling backend...");
-
-    API.get("/")
-      .then((res) => {
-        console.log("✅ Backend response:", res.data);
-      })
-      .catch((err) => {
-        console.log("❌ Backend error:", err);
-      });
-  }, []);
-
-  const analyzeRepository = async () => {
-
-    if (!repoUrl.trim()) {
-      alert("Please enter a GitHub repository URL.");
+  const copyDiff = useCallback(async () => {
+    try {
+      await navigator.clipboard.writeText(commitDiff);
+    } catch (error) {
+      console.error("Clipboard Error:", error);
+      alert("Couldn't copy diff to clipboard.");
       return;
     }
-    try {
-      const repositoryId = repoUrl
-        .replace("https://github.com/", "")
-        .replace(/\//g, "-");
+    alert("Diff copied!");
+  }, [commitDiff]);
 
-      const res = await API.post("/repository/analytics", {
-        url: repoUrl,
-        repositoryId,
-      });
-
-      localStorage.setItem(
-        "repositoryAnalysis",
-        JSON.stringify(res.data)
-      );
-      localStorage.setItem("repositoryId", repositoryId);
-      localStorage.setItem("repoUrl", repoUrl);
-
-      setRepositoryData(res.data);
-
-      const data = res.data;
-
-      console.log("FULL ANALYSIS:", data);
-      console.log("Recent:", data.recentCommits?.length);
-      console.log("All:", data.allCommits?.length);
-
-      setStats(data.stats || {});
-
-      setContributors(data.contributors || {});
-
-      setFileAnalysis(data.fileAnalysis || {
-        totalFiles: 0,
-        mostChangedFiles: [],
-        allFiles: [],
-      });
-
-      setLanguageAnalysis(data.languageAnalysis || {
-        totalFiles: 0,
-        languages: [],
-      });
-
-      setCodeEvolution(data.codeEvolution || []);
-
-      setBranches(data.branches || null);
-
-      setHotspots(
-        Array.isArray(data.hotspots)
-          ? data.hotspots
-          : data.hotspots?.hotspots || []
-      );
-
-      setRecentCommits(data.recentCommits || []);
-
-      setAllCommits(data.allCommits || []);
-
-      // ⭐ IMPORTANT
-      setArchitecture(data.architecture || null);
-      setAIFileAnalysis(data.aiFileAnalysis || null);
-
-      navigate("/ai-insights", {
-        state: {
-          analysis: data,
-        },
-      });
-
-    } catch (err) {
-      console.error("Analysis failed:", err);
-
-      const message =
-        err.response?.data?.message || "Analysis failed";
-
-      alert(message);
-    }
-  };
-
-  const fetchCommitDetails = async (hash) => {
-    try {
-      const response = await API.get(`/repository/commit/${hash}`);
-
-      console.log("Commit details:", response.data);
-
-      setSelectedCommit(response.data.data);
-    } catch (error) {
-      console.error("Commit Fetch Error:", error);
-      console.error("Status:", error.response?.status);
-      console.error("Data:", error.response?.data);
-
-      alert("Failed to load commit details.");
-    }
-  };
-
-  const fetchCommitDiff = async (hash) => {
-    try {
-      setLoadingDiff(true);
-
-      const response = await API.get(`/repository/commit/${hash}/diff`);
-
-      console.log("Diff:", response.data);
-
-      setCommitDiff(response.data.data);
-    } catch (error) {
-      console.error("Diff Fetch Error:", error);
-    } finally {
-      setLoadingDiff(false);
-    }
-  };
-
-  const displayedCommits =
-    searchTerm.trim() === ""
-      ? recentCommits
-      : allCommits.filter((commit) => {
-          const search = searchTerm.toLowerCase();
-
-          return (
-            (commit.message || "")
-              .toLowerCase()
-              .includes(search) ||
-
-            (commit.author_name || "")
-              .toLowerCase()
-              .includes(search) ||
-
-            (commit.hash || "")
-              .toLowerCase()
-              .includes(search)
-          );
-        });
-
-  const downloadDiff = () => {
+  const downloadDiff = useCallback(() => {
     const blob = new Blob([commitDiff], { type: "text/plain" });
-
     const url = window.URL.createObjectURL(blob);
 
     const a = document.createElement("a");
     a.href = url;
     a.download = "commit.patch";
-
     a.click();
 
     window.URL.revokeObjectURL(url);
-  };
+  }, [commitDiff]);
 
-  console.log("Search:", searchTerm);
-  console.log("Commits:", recentCommits);
+  const handleSelectCommit = useCallback(
+    async (hash) => {
+      if (!hash) return;
+
+      // Mark this hash as the latest request; any earlier in-flight
+      // requests will check this ref before applying their results.
+      activeRequestRef.current = hash;
+
+      setLoadingCommit(true);
+      setLoadingDiff(true);
+      setCommitError("");
+      setSelectedCommit(null);
+      setCommitDiff("");
+
+      const [detailsResult, diffResult] = await Promise.allSettled([
+        API.get(`/repository/commit/${hash}?repositoryId=${repositoryId}`),
+        API.get(`/repository/commit/${hash}/diff?repositoryId=${repositoryId}`),
+      ]);
+
+      // Ignore results if a newer commit was selected in the meantime.
+      if (activeRequestRef.current !== hash) return;
+
+      if (detailsResult.status === "fulfilled") {
+        setSelectedCommit(detailsResult.value.data.data);
+      } else {
+        console.error("Commit Fetch Error:", detailsResult.reason);
+        setCommitError("Failed to load commit details.");
+      }
+
+      if (diffResult.status === "fulfilled") {
+        setCommitDiff(diffResult.value.data.data);
+      } else {
+        console.error("Diff Fetch Error:", diffResult.reason);
+      }
+
+      setLoadingCommit(false);
+      setLoadingDiff(false);
+    },
+    [repositoryId]
+  );
+
+  // Fallback defaults so destructuring never throws when analysis is null
+  const {
+    stats = {},
+    contributors = {},
+    fileAnalysis = emptyFileAnalysis,
+    languageAnalysis = emptyLanguageAnalysis,
+    architecture = null,
+    recentCommits = [],
+    allCommits = [],
+    hotspots = [],
+    codeEvolution = [],
+    repoInfo = null,
+    repoUrl = "",
+  } = analysis || {};
+
+  const displayedCommits = useMemo(() => {
+    const search = searchTerm.trim().toLowerCase();
+    if (!search) return recentCommits;
+
+    return allCommits.filter((commit) => {
+      return (
+        (commit.message || "").toLowerCase().includes(search) ||
+        (commit.author_name || "").toLowerCase().includes(search) ||
+        (commit.hash || "").toLowerCase().includes(search)
+      );
+    });
+  }, [searchTerm, recentCommits, allCommits]);
+
+  const contributorEntries = useMemo(
+    () => Object.entries(contributors || {}),
+    [contributors]
+  );
+
+  const diffLines = useMemo(
+    () => (commitDiff ? commitDiff.split("\n") : []),
+    [commitDiff]
+  );
+
+  // Reset any selected commit/diff state when the underlying analysis
+  // changes (e.g. a new repository is analyzed) to avoid showing stale data.
+  useEffect(() => {
+    setSelectedCommit(null);
+    setCommitDiff("");
+    setCommitError("");
+    activeRequestRef.current = null;
+  }, [repositoryId]);
+
+  if (loading) {
+    return (
+      <div className="p-8 text-center">
+        <h2 className="text-2xl font-bold">Analyzing repository…</h2>
+        <p className="text-gray-500 mt-2">This may take a moment.</p>
+      </div>
+    );
+  }
+
+  if (!analysis) {
+    return (
+      <div className="p-8 text-center">
+        <h2 className="text-2xl font-bold">No repository analyzed yet</h2>
+        <p className="text-gray-500 mt-2">
+          Go to the Home page and analyze a GitHub repository.
+        </p>
+      </div>
+    );
+  }
 
   return (
     <div className="bg-gray-100 min-h-screen">
-
       <div className="max-w-7xl mx-auto px-8 py-8">
-
         {/* Repository Header */}
         <div className="mb-8 flex justify-between items-start">
           <div>
@@ -352,13 +211,10 @@ useEffect(() => {
         </div>
 
         {/* Repository Overview */}
-        {repoInfo && (
-          <RepositoryOverview repo={repoInfo} />
-        )}
+        {repoInfo && <RepositoryOverview repo={repoInfo} />}
 
         {/* Stats Cards */}
         <div className="grid grid-cols-1 sm:grid-cols-4 gap-6 mb-8">
-
           <StatCard
             title="Total Commits"
             value={stats?.totalCommits || 0}
@@ -369,7 +225,7 @@ useEffect(() => {
 
           <StatCard
             title="Contributors"
-            value={Object.keys(contributors || {}).length}
+            value={contributorEntries.length}
             type="contributors"
             color="bg-gradient-to-br from-emerald-500 to-emerald-700"
             trend="from last analysis"
@@ -404,29 +260,18 @@ useEffect(() => {
           />
         </div>
 
-        {/* AI File Analysis */}
-        
-{aiFileAnalysis && (
-  <div className="mb-8">
-    <AIFileAnalysis
-      aiFileAnalysis={aiFileAnalysis}
-    />
-  </div>
-)}
         {/* Repository Architecture */}
         <div className="mb-8">
-          <RepositoryArchitecture
-    architecture={architecture?.tree}
+     <RepositoryArchitecture
+  architecture={architecture?.tree || architecture}
 />
         </div>
 
         <div className="mb-8">
-          <LanguageDistribution
-            languageAnalysis={languageAnalysis}
-          />
+          <LanguageDistribution languageAnalysis={languageAnalysis} />
         </div>
 
-        {/* search box */}
+        {/* Search Box */}
         <div className="mb-6 relative max-w-xs">
           <label htmlFor="commit-search" className="sr-only">
             Search commits
@@ -472,30 +317,28 @@ useEffect(() => {
 
         {/* Recent Commits */}
         <div className="mt-10 bg-white rounded-lg shadow p-6">
-          <h2 className="text-2xl font-bold mb-4">
-            Recent Commits
-          </h2>
+          <h2 className="text-2xl font-bold mb-4">Recent Commits</h2>
 
           {displayedCommits.length === 0 ? (
-            <p>No commits found.</p>
+            <p className="text-gray-500">No commits found.</p>
           ) : (
-            displayedCommits.map((commit, index) => (
+            displayedCommits.map((commit) => (
               <div
-                key={index}
-                className="border-b py-3 cursor-pointer hover:bg-gray-100 rounded px-2"
-                onClick={() => {
-                  console.log(commit);
-                  fetchCommitDetails(commit.hash);
-                  fetchCommitDiff(commit.hash);
+                key={commit.hash || `${commit.author_name}-${commit.date}`}
+                role="button"
+                tabIndex={0}
+                className="border-b py-3 cursor-pointer hover:bg-gray-100 rounded px-2 transition-colors"
+                onClick={() => handleSelectCommit(commit.hash)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" || e.key === " ") {
+                    e.preventDefault();
+                    handleSelectCommit(commit.hash);
+                  }
                 }}
               >
-                <p className="font-semibold">{commit.message}</p>
-
-                <p className="text-gray-600">
-                  {commit.author_name}
-                </p>
-
-                <p className="text-gray-500 text-sm">
+                <p className="font-semibold text-slate-800">{commit.message}</p>
+                <p className="text-gray-600 text-sm">{commit.author_name}</p>
+                <p className="text-gray-400 text-xs mt-1">
                   {new Date(commit.date).toLocaleString()}
                 </p>
               </div>
@@ -503,138 +346,121 @@ useEffect(() => {
           )}
         </div>
 
-        {/* File Analysis */}
-        <FileAnalysis fileAnalysis={fileAnalysis} />
+        {/* Unified File Analysis with On-Demand AI */}
+        <div className="mt-10">
+        <FileAnalysis
+  fileAnalysis={fileAnalysis}
+  repositoryId={repositoryId}
+/>
+        </div>
 
         {/* Commit Details */}
-        {selectedCommit && (
+        {(loadingCommit || selectedCommit || commitError) && (
           <div className="mt-10 bg-white rounded-lg shadow p-6">
-            <h2 className="text-2xl font-bold mb-6">
-              Commit Details
-            </h2>
+            <h2 className="text-2xl font-bold mb-6">Commit Details</h2>
 
-            <div className="space-y-4">
+            {loadingCommit && (
+              <p className="text-gray-500 italic">Loading commit details...</p>
+            )}
 
-              <div>
-                <p className="font-semibold">Commit Hash</p>
-                <p className="text-gray-600 break-all">
-                  {selectedCommit.hash}
-                </p>
-              </div>
+            {!loadingCommit && commitError && (
+              <p className="text-red-600">{commitError}</p>
+            )}
 
-              <div>
-                <p className="font-semibold">Author</p>
-                <p>{selectedCommit.author}</p>
-              </div>
-
-              <div>
-                <p className="font-semibold">Commit Date</p>
-                <p>{selectedCommit.date}</p>
-              </div>
-
-              <div>
-                <p className="font-semibold">Message</p>
-                <p>{selectedCommit.message}</p>
-              </div>
-
-              <div>
-                <p className="font-semibold">Files Changed</p>
-
-                <ul className="list-disc ml-6">
-                  {selectedCommit.files.map((file, index) => (
-                    <li key={index}>{file}</li>
-                  ))}
-                </ul>
-              </div>
-
-              <div>
-                <p className="font-semibold">Changes</p>
-                <p>{selectedCommit.summary}</p>
-              </div>
-
-              <div className="mt-6">
-                <div className="flex justify-between items-center mb-3">
-                  <p className="font-semibold text-lg">
-                    Commit Diff
-                  </p>
-
-                  <button
-                    onClick={copyDiff}
-                    className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700"
-                  >
-                    Copy Diff
-                  </button>
-                  <button
-                    onClick={downloadDiff}
-                    className="bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700"
-                  >
-                    Download Patch
-                  </button>
+            {!loadingCommit && selectedCommit && (
+              <div className="space-y-4">
+                <div>
+                  <p className="font-semibold text-gray-700">Commit Hash</p>
+                  <p className="text-gray-600 break-all font-mono text-sm">{selectedCommit.hash}</p>
                 </div>
 
-                {loadingDiff ? (
-                  <p>Loading diff...</p>
-                ) : (
-                  <pre className="bg-gray-900 rounded-lg p-4 overflow-x-auto text-sm">
-                    {commitDiff.split("\n").map((line, index) => {
-                      let color = "text-gray-200";
+                <div>
+                  <p className="font-semibold text-gray-700">Author</p>
+                  <p className="text-gray-800">{selectedCommit.author}</p>
+                </div>
 
-                      if (line.startsWith("+")) {
-                        color = "bg-green-900 text-green-300";
-                      } else if (line.startsWith("-")) {
-                        color = "bg-red-900 text-red-300";
-                      } else if (line.startsWith("@@")) {
-                        color = "text-blue-300";
-                      }
+                <div>
+                  <p className="font-semibold text-gray-700">Commit Date</p>
+                  <p className="text-gray-800">{selectedCommit.date}</p>
+                </div>
 
-                      return (
-                        <div
-                          key={index}
-                          className={`${color} px-2 flex`}
-                        >
-                          <span className="w-12 text-gray-500 select-none">
-                            {index + 1}
-                          </span>
+                <div>
+                  <p className="font-semibold text-gray-700">Message</p>
+                  <p className="text-gray-800">{selectedCommit.message}</p>
+                </div>
 
-                          <span>{line}</span>
-                        </div>
-                      );
-                    })}
-                  </pre>
-                )}
+                <div>
+                  <p className="font-semibold text-gray-700">Files Changed</p>
+                  <ul className="list-disc ml-6 text-slate-700 text-sm">
+                    {(selectedCommit.files || []).map((file) => (
+                      <li key={file}>{file}</li>
+                    ))}
+                  </ul>
+                </div>
+
+                <div>
+                  <p className="font-semibold text-gray-700">Changes Summary</p>
+                  <p className="text-gray-800">{selectedCommit.summary}</p>
+                </div>
+
+                <div className="mt-6">
+                  <div className="flex justify-between items-center mb-3">
+                    <p className="font-semibold text-lg text-slate-900">Commit Diff</p>
+
+                    <div className="flex gap-2">
+                      <button
+                        onClick={copyDiff}
+                        disabled={loadingDiff || !commitDiff}
+                        className="bg-blue-600 text-white text-sm px-4 py-2 rounded hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                      >
+                        Copy Diff
+                      </button>
+                      <button
+                        onClick={downloadDiff}
+                        disabled={loadingDiff || !commitDiff}
+                        className="bg-green-600 text-white text-sm px-4 py-2 rounded hover:bg-green-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                      >
+                        Download Patch
+                      </button>
+                    </div>
+                  </div>
+
+                  {loadingDiff ? (
+                    <p className="text-gray-500 italic">Loading diff...</p>
+                  ) : (
+                    <pre className="bg-gray-900 rounded-lg p-4 overflow-x-auto text-sm font-mono leading-relaxed">
+                      {diffLines.map((line, index) => (
+                        <DiffLine key={index} line={line} index={index} />
+                      ))}
+                    </pre>
+                  )}
+                </div>
               </div>
-            </div>
+            )}
           </div>
         )}
 
         {/* Contributors List */}
         <div className="mt-10 bg-white rounded-lg shadow p-6">
-          <h2 className="text-2xl font-bold mb-4">
-            Contributors
-          </h2>
+          <h2 className="text-2xl font-bold mb-4">Contributors</h2>
 
-          {Object.keys(contributors).length === 0 ? (
-            <p>No contributors found.</p>
+          {contributorEntries.length === 0 ? (
+            <p className="text-gray-500">No contributors found.</p>
           ) : (
-            Object.entries(contributors).map(([name, contributor]) => (
+            contributorEntries.map(([name, contributor]) => (
               <div
                 key={name}
                 className="flex justify-between items-center border-b py-3"
               >
-                <span className="font-medium">
-                  {contributor.name || name}
-                </span>
-
-                <span className="text-blue-600 font-semibold">
+                <span className="font-medium text-slate-800">{contributor.name || name}</span>
+                <span className="text-blue-600 font-semibold text-sm">
                   {contributor.commits || 0} commits
                 </span>
               </div>
             ))
           )}
         </div>
-
       </div>
-
     </div>
   );
 }

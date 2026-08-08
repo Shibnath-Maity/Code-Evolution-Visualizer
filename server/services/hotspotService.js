@@ -71,7 +71,7 @@ function calculateHotspots(fileAnalysis) {
     );
 
     return {
-      file: file.file,
+      file: file.path,
       changes,
       additions: file.additions || 0,
       deletions: file.deletions || 0,
