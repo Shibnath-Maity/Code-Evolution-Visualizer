@@ -266,7 +266,7 @@ function extractQueryWords(q) {
 }
 
 const FILE_EXTENSION_PATTERN =
-  /\.(js|jsx|ts|tsx|java|py|c|cpp|h|hpp|html|css|scss|json|md|xml|yml|yaml|sql)$/;
+/\.(js|jsx|ts|tsx|java|py|c|cpp|h|hpp|html|css|scss|json|md|xml|yml|yaml|sql)$/i;
 
 function findMentionedFileName(queryWords) {
   return queryWords.find((word) => FILE_EXTENSION_PATTERN.test(word));

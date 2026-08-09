@@ -258,7 +258,7 @@ export default function DebugCenter() {
       }
 
       setFailMsg(message);
-    } fontFinally: {
+    } finally {
       setLoading(false);
       abortControllerRef.current = null;
     }
@@ -343,30 +343,32 @@ export default function DebugCenter() {
     CATEGORY_ICONS[resData?.bugType] || { icon: AlertTriangle, color: "text-indigo-500 bg-indigo-50" };
   const CategoryIcon = categoryMeta.icon;
 
-  const confidenceReasons = resData?.confidenceReasons || [
-    "Matched call stack against active file index",
-    "Identified null pointer boundary in recent changes",
-    "High AST symbol alignment with root cause",
-  ];
+  // Only render evidence the backend actually returned — never
+  // fabricate stack frames, confidence reasons, risk data, or stats.
+  const confidenceReasons = Array.isArray(resData?.confidenceReasons)
+    ? resData.confidenceReasons
+    : [];
 
-  const stackBreakdown = resData?.stackBreakdown || [
-    { file: resData?.file || "App.jsx", line: resData?.line || 44, functionName: "renderDashboard" },
-    { file: "Dashboard.jsx", line: 91, functionName: "fetchUserData" },
-    { file: "repositoryService.js", line: 112, functionName: "getBugAnalysis" },
-  ];
+  const stackBreakdown = Array.isArray(resData?.stackBreakdown)
+    ? resData.stackBreakdown
+    : [];
 
   const patchStats = resData?.patchStats || {
-    filesModified: resData?.affectedFiles?.length || 1,
-    linesAdded: resData?.patch?.newCode?.split("\n").length || 8,
-    linesDeleted: resData?.patch?.oldCode?.split("\n").length || 3,
-    functionsChanged: 1,
+    filesModified: resData?.patch?.file ? 1 : 0,
+    linesAdded: resData?.patch?.newCode
+      ? resData.patch.newCode.split("\n").length
+      : 0,
+    linesDeleted: resData?.patch?.oldCode
+      ? resData.patch.oldCode.split("\n").length
+      : 0,
+    functionsChanged: 0,
   };
 
-  const riskAssessment = resData?.riskAssessment || {
-    level: "Low",
-    reason: "Patch modifies a localized null guard. No API signature changes.",
-    rollbackChance: "Low (< 5%)",
-  };
+  const riskAssessment = resData?.riskAssessment || null;
+
+  // Backend returns "whyThisFixWorks" and "learning" — not "explanation".
+  const learnExplanation = resData?.whyThisFixWorks || resData?.explanation || "";
+  const learnTakeaway = resData?.learning || "";
 
   const generateFullReportMarkdown = () => {
     if (!resData) return "";
@@ -394,7 +396,10 @@ ${resData.patch?.newCode?.split("\n").map((l) => `+ ${l}`).join("\n")}
 \`\`\`
 
 ## Why This Fix Works
-${resData.explanation || "Applies boundary safe-checking."}
+${learnExplanation || "Not available."}
+
+## Learning
+${learnTakeaway || "Not available."}
 `.trim();
   };
 
@@ -593,7 +598,7 @@ ${resData.explanation || "Applies boundary safe-checking."}
                 />
                 <MetricCard
                   title="AI Confidence"
-                  value={`${resData.confidence || 85}%`}
+                  value={`${resData.confidence ?? 0}%`}
                   subtext="Certainty Score"
                   icon={ShieldCheck}
                   colorClass="text-emerald-600 bg-emerald-50"
@@ -693,29 +698,47 @@ ${resData.explanation || "Applies boundary safe-checking."}
                       <h3 className="font-semibold text-sm text-slate-900 mb-3 flex items-center gap-1.5">
                         <Info size={16} className="text-indigo-600" /> Confidence Breakdown
                       </h3>
-                      <div className="space-y-2">
-                        {confidenceReasons.map((reason, idx) => (
-                          <div key={idx} className="flex items-start gap-2 text-xs text-slate-600">
-                            <Check size={14} className="text-emerald-500 shrink-0 mt-0.5" />
-                            <span>{reason}</span>
-                          </div>
-                        ))}
-                      </div>
+                      {confidenceReasons.length > 0 ? (
+                        <div className="space-y-2">
+                          {confidenceReasons.map((reason, idx) => (
+                            <div key={idx} className="flex items-start gap-2 text-xs text-slate-600">
+                              <Check size={14} className="text-emerald-500 shrink-0 mt-0.5" />
+                              <span>{reason}</span>
+                            </div>
+                          ))}
+                        </div>
+                      ) : (
+                        <p className="text-xs text-slate-500">
+                          No additional confidence evidence was returned.
+                        </p>
+                      )}
                     </div>
 
                     <div className="pt-4 border-t border-slate-100">
                       <h3 className="font-semibold text-sm text-slate-900 mb-2">Fix Risk Assessment</h3>
-                      <div className="bg-slate-50 p-3 rounded-lg ring-1 ring-slate-900/5 text-xs space-y-1.5">
-                        <div className="flex justify-between font-medium">
-                          <span className="text-slate-600">Risk Level:</span>
-                          <span className="text-emerald-600 font-bold">🟢 {riskAssessment.level}</span>
+                      {riskAssessment ? (
+                        <div className="bg-slate-50 p-3 rounded-lg ring-1 ring-slate-900/5 text-xs space-y-1.5">
+                          <div className="flex justify-between font-medium">
+                            <span className="text-slate-600">Risk Level:</span>
+                            <span className="text-slate-800 font-bold">
+                              {riskAssessment.level || "Unknown"}
+                            </span>
+                          </div>
+                          <div className="flex justify-between font-medium">
+                            <span className="text-slate-600">Rollback Chance:</span>
+                            <span className="text-slate-800">
+                              {riskAssessment.rollbackChance || "Unknown"}
+                            </span>
+                          </div>
+                          <p className="text-slate-500 pt-1 leading-normal">
+                            {riskAssessment.reason || "No risk assessment available."}
+                          </p>
                         </div>
-                        <div className="flex justify-between font-medium">
-                          <span className="text-slate-600">Rollback Chance:</span>
-                          <span className="text-slate-800">{riskAssessment.rollbackChance}</span>
-                        </div>
-                        <p className="text-slate-500 pt-1 leading-normal">{riskAssessment.reason}</p>
-                      </div>
+                      ) : (
+                        <p className="text-xs text-slate-500 bg-slate-50 p-3 rounded-lg">
+                          Risk assessment is not available from the supplied repository evidence.
+                        </p>
+                      )}
                     </div>
                   </div>
                 </div>
@@ -729,34 +752,40 @@ ${resData.explanation || "Applies boundary safe-checking."}
                     <p className="text-slate-500 text-xs">Visual execution flow leading to the exception frame.</p>
                   </div>
 
-                  <div className="space-y-3 relative before:absolute before:left-[19px] before:top-3 before:bottom-3 before:w-0.5 before:bg-slate-200">
-                    {stackBreakdown.map((frame, idx) => {
-                      const isErrorFrame = idx === stackBreakdown.length - 1;
-                      return (
-                        <div key={idx} className="relative flex items-center gap-4 pl-10">
-                          <div
-                            className={`absolute left-2.5 w-4 h-4 rounded-full border-2 bg-white flex items-center justify-center ${
-                              isErrorFrame ? "border-rose-500 bg-rose-50" : "border-indigo-500"
-                            }`}
-                          />
-                          <div
-                            className={`flex-1 p-3.5 rounded-lg border text-xs font-mono flex items-center justify-between ${
-                              isErrorFrame
-                                ? "bg-rose-50/50 border-rose-200 text-rose-900"
-                                : "bg-slate-50 border-slate-200 text-slate-700"
-                            }`}
-                          >
-                            <div className="flex items-center gap-2">
-                              <span className="font-bold">{frame.functionName || "anonymous"}</span>
-                              <span className="text-slate-400">in</span>
-                              <span className="underline">{frame.file}</span>
+                  {stackBreakdown.length > 0 ? (
+                    <div className="space-y-3 relative before:absolute before:left-[19px] before:top-3 before:bottom-3 before:w-0.5 before:bg-slate-200">
+                      {stackBreakdown.map((frame, idx) => {
+                        const isErrorFrame = idx === stackBreakdown.length - 1;
+                        return (
+                          <div key={idx} className="relative flex items-center gap-4 pl-10">
+                            <div
+                              className={`absolute left-2.5 w-4 h-4 rounded-full border-2 bg-white flex items-center justify-center ${
+                                isErrorFrame ? "border-rose-500 bg-rose-50" : "border-indigo-500"
+                              }`}
+                            />
+                            <div
+                              className={`flex-1 p-3.5 rounded-lg border text-xs font-mono flex items-center justify-between ${
+                                isErrorFrame
+                                  ? "bg-rose-50/50 border-rose-200 text-rose-900"
+                                  : "bg-slate-50 border-slate-200 text-slate-700"
+                              }`}
+                            >
+                              <div className="flex items-center gap-2">
+                                <span className="font-bold">{frame.functionName || "anonymous"}</span>
+                                <span className="text-slate-400">in</span>
+                                <span className="underline">{frame.file}</span>
+                              </div>
+                              <span className="font-semibold text-slate-500">Line {frame.line || "?"}</span>
                             </div>
-                            <span className="font-semibold text-slate-500">Line {frame.line}</span>
                           </div>
-                        </div>
-                      );
-                    })}
-                  </div>
+                        );
+                      })}
+                    </div>
+                  ) : (
+                    <div className="bg-slate-50 rounded-lg p-4 text-sm text-slate-500">
+                      Stack trace breakdown is not available from the supplied evidence.
+                    </div>
+                  )}
                 </div>
               )}
 
@@ -782,7 +811,7 @@ ${resData.explanation || "Applies boundary safe-checking."}
                     </div>
                   </div>
 
-                  {resData.patch && (
+                  {resData.patch && (resData.patch.oldCode || resData.patch.newCode) ? (
                     <div className="bg-slate-900 rounded-xl overflow-hidden shadow-lg border border-slate-800 font-mono text-xs">
                       <div className="bg-slate-800/80 px-4 py-3 flex items-center justify-between border-b border-slate-700 text-slate-300">
                         <span className="font-semibold flex items-center gap-2">
@@ -812,6 +841,10 @@ ${resData.explanation || "Applies boundary safe-checking."}
                         )}
                       </div>
                     </div>
+                  ) : (
+                    <div className="bg-slate-50 rounded-lg p-4 text-sm text-slate-500">
+                      No verified code patch is available for this diagnosis.
+                    </div>
                   )}
                 </div>
               )}
@@ -838,14 +871,26 @@ ${resData.explanation || "Applies boundary safe-checking."}
 
               {/* TAB 5: AI INSIGHTS & LEARN */}
               {resultTab === "learn" && (
-                <div className="bg-white rounded-xl ring-1 ring-slate-900/5 p-6 space-y-4">
-                  <h2 className="font-semibold text-slate-900 text-base flex items-center gap-2">
-                    <BookOpen size={18} className="text-indigo-600" />
-                    Why This Fix Works
-                  </h2>
-                  <p className="text-slate-600 text-sm leading-relaxed whitespace-pre-line">
-                    {resData.explanation || "No educational explanation available for this diagnostic patch."}
-                  </p>
+                <div className="bg-white rounded-xl ring-1 ring-slate-900/5 p-6 space-y-6">
+                  <div>
+                    <h2 className="font-semibold text-slate-900 text-base flex items-center gap-2 mb-2">
+                      <BookOpen size={18} className="text-indigo-600" />
+                      Why This Fix Works
+                    </h2>
+                    <p className="text-slate-600 text-sm leading-relaxed whitespace-pre-line">
+                      {learnExplanation || "No educational explanation available for this diagnostic patch."}
+                    </p>
+                  </div>
+
+                  <div className="pt-4 border-t border-slate-100">
+                    <h2 className="font-semibold text-slate-900 text-base flex items-center gap-2 mb-2">
+                      <HelpCircle size={18} className="text-indigo-600" />
+                      Key Takeaway
+                    </h2>
+                    <p className="text-slate-600 text-sm leading-relaxed whitespace-pre-line">
+                      {learnTakeaway || "No takeaway available for this diagnostic patch."}
+                    </p>
+                  </div>
                 </div>
               )}
             </div>

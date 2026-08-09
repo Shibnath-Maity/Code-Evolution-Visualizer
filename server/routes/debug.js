@@ -4,19 +4,25 @@ const router = express.Router();
 const protect = require("../middleware/authMiddleware");
 
 const { solveBug } = require("../services/bugSolverService");
-const { getCurrentRepository } = require("../services/repositoryContext");
+const { getAnalysisSession } = require("../services/sessionService");
 
 router.post("/bug-solver", protect, async (req, res) => {
   try {
     const { error, repositoryId } = req.body;
 
-    if (!error?.trim()) {
+    // ------------------------------------------
+    // Validate error
+    // ------------------------------------------
+    if (typeof error !== "string" || !error.trim()) {
       return res.status(400).json({
         success: false,
         message: "Error message is required.",
       });
     }
 
+    // ------------------------------------------
+    // Validate repositoryId
+    // ------------------------------------------
     if (!repositoryId) {
       return res.status(400).json({
         success: false,
@@ -24,31 +30,48 @@ router.post("/bug-solver", protect, async (req, res) => {
       });
     }
 
-    const repoPath = getCurrentRepository(repositoryId);
+    // ------------------------------------------
+    // Get repository session
+    // ------------------------------------------
+    const session = getAnalysisSession(repositoryId);
 
-    if (!repoPath) {
+    if (!session || !session.repoPath) {
       return res.status(400).json({
         success: false,
-        message: "Repository not analyzed yet.",
+        message: "Repository not analyzed yet, or session has expired.",
       });
     }
 
+    const repoPath = session.repoPath;
+
+    console.log("\n========== BUG SOLVER ROUTE ==========");
+    console.log("Repository ID:", repositoryId);
+    console.log("Repository Path:", repoPath);
+
+    // ------------------------------------------
+    // Solve
+    // ------------------------------------------
     const result = await solveBug({
       error,
       repoPath,
       repositoryId,
     });
 
-    res.json({
+    // ------------------------------------------
+    // Response
+    // ------------------------------------------
+    return res.json({
       success: true,
       data: result,
+      processingTimeMs: result?.processingTimeMs || null,
+      model: result?.model || "Gemini",
     });
   } catch (err) {
     console.error("❌ Bug Solver Error:", err);
 
-    res.status(500).json({
+    return res.status(500).json({
       success: false,
-      message: err.message,
+      message: err.message || "Bug analysis failed.",
     });
   }
 });
