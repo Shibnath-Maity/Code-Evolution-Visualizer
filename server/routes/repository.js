@@ -20,6 +20,7 @@ const {
   getRepositoryInfo,
   getRepositoryIssues,
   getRepositoryIssue,
+    getRepositoryPullRequests,
 } = require("../services/githubService");
 const { indexRepository } = require("../services/vectorService");
 const { getAnalysisSession } = require("../services/sessionService");
@@ -476,6 +477,35 @@ router.get("/hotspots/commits", protect, async (req, res) => {
     res.status(500).json({
       success: false,
       message: error.message,
+    });
+  }
+});
+// ==========================================
+// Get Repository Pull Requests
+// ==========================================
+router.get("/pull-requests", async (req, res) => {
+  try {
+    const { owner, repo } = req.query;
+
+    if (!owner || !repo) {
+      return res.status(400).json({
+        success: false,
+        message: "owner and repo are required",
+      });
+    }
+
+    const pullRequests = await getRepositoryPullRequests(owner, repo);
+
+    res.json({
+      success: true,
+      pullRequests,
+    });
+  } catch (error) {
+    console.error("Pull request error:", error.message);
+
+    res.status(500).json({
+      success: false,
+      message: error.message || "Failed to fetch pull requests",
     });
   }
 });

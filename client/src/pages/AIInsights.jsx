@@ -258,10 +258,44 @@ function AIInsights() {
     setError("");
 
     try {
-      const response = await API.post("/ai/analyze-repository", {
-        ...repositoryData,
+      // Send lightweight payload to prevent 413 Payload Too Large
+      const aiPayload = {
         repositoryId,
-      });
+        repoUrl: repositoryData.repoUrl,
+        repository: repositoryData.repository
+          ? {
+              name: repositoryData.repository.name,
+              description: repositoryData.repository.description,
+              language: repositoryData.repository.language,
+              stars: repositoryData.repository.stars,
+              forks: repositoryData.repository.forks,
+            }
+          : null,
+        stats: repositoryData.stats || {},
+
+        // Capped commit summary
+        timeline: (repositoryData.timeline || [])
+          .slice(0, 100)
+          .map((commit) => ({
+            hash: commit.hash,
+            message: commit.message,
+            author: commit.author,
+            date: commit.date,
+            type: commit.type,
+          })),
+
+        // Capped file change summary
+        fileChanges: (repositoryData.fileChanges || [])
+          .slice(0, 100)
+          .map((file) => ({
+            file: file.file || file.path || file.filename,
+            additions: file.additions || 0,
+            deletions: file.deletions || 0,
+            changes: file.changes || 0,
+          })),
+      };
+
+      const response = await API.post("/ai/analyze-repository", aiPayload);
 
       setAnalysis(response.data.analysis);
       setLastAnalyzedAt(new Date());
@@ -352,7 +386,7 @@ function AIInsights() {
                 <>
                   <div className="flex items-center gap-3 text-slate-500 pb-4">
                     <Loader2 className="h-5 w-5 animate-spin text-indigo-600" />
-                    <span>Llama 3.2 is analyzing your repository...</span>
+                    <span>AI is analyzing your repository...</span>
                   </div>
                   <AnalysisSkeleton />
                 </>
@@ -360,7 +394,7 @@ function AIInsights() {
                 <div>
                   <div className="flex items-center gap-2 mb-4">
                     <Bot className="h-5 w-5 text-indigo-600" />
-                    <span className="font-medium text-slate-900">Llama 3.2 Analysis</span>
+                    <span className="font-medium text-slate-900">AI Repository Analysis</span>
                   </div>
 
                   {sections.length > 0 ? (

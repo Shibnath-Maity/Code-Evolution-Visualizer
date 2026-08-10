@@ -1,21 +1,19 @@
 import { useEffect, useRef, useState } from "react";
-import { Sparkles, Send, AlertCircle, Loader2, Copy, Download, Check } from "lucide-react";
+import { Sparkles, Send, AlertCircle, Loader2, Copy, Download, Check, MessageSquareText, CornerDownLeft } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import API from "../services/api";
 
 const MAX_QUESTION_LENGTH = 300;
 
 const SUGGESTIONS = [
-  "Summarize this contributor's overall impact",
-  "What features did they contribute the most?",
-  "Which parts of the codebase do they own?",
-  "What are this contributor's strongest technical skills?",
-  "Explain their most important recent commits",
-  "What coding patterns or practices do they commonly follow?",
-  "Which files are modified most frequently by this contributor?",
-  "Have they worked on bug fixes or new features?",
-  "What potential risks or improvement areas do you notice?",
-  "Give an overall performance review.",
+  "Summarize overall impact",
+  "Top feature contributions",
+  "Codebase ownership & files",
+  "Strongest technical skills",
+  "Recent key commits",
+  "Patterns & practices",
+  "Potential risks & improvements",
+  "Overall performance review",
 ];
 
 export default function ContributorAI({ contributorName, allCommits }) {
@@ -28,7 +26,6 @@ export default function ContributorAI({ contributorName, allCommits }) {
   const abortRef = useRef(null);
   const textareaRef = useRef(null);
 
-  // Reset conversation state when switching contributors so stale answers don't linger
   useEffect(() => {
     setQuestion("");
     setAnswer("");
@@ -41,8 +38,9 @@ export default function ContributorAI({ contributorName, allCommits }) {
 
   useEffect(() => () => abortRef.current?.abort(), []);
 
-  async function askAI() {
-    const trimmed = question.trim();
+  async function askAI(queryToSubmit) {
+    const targetQuestion = typeof queryToSubmit === "string" ? queryToSubmit : question;
+    const trimmed = targetQuestion.trim();
     if (!trimmed || status === "loading") return;
 
     abortRef.current?.abort();
@@ -62,13 +60,10 @@ export default function ContributorAI({ contributorName, allCommits }) {
           question: trimmed,
           allCommits,
         },
-        {
-          signal: controller.signal,
-        }
+        { signal: controller.signal }
       );
 
       const data = response.data;
-
       if (!data.success) {
         throw new Error(data.message || "Failed to get AI response.");
       }
@@ -119,135 +114,163 @@ export default function ContributorAI({ contributorName, allCommits }) {
   const isLoading = status === "loading";
 
   return (
-    <div className="bg-white rounded-2xl shadow-sm p-4 h-full flex flex-col overflow-hidden">
-      <div className="mb-3 shrink-0">
-        <div className="flex items-center gap-2 min-w-0">
-          <Sparkles className="text-indigo-600 shrink-0" size={18} />
-          <h2 className="text-sm font-bold text-slate-900 truncate">
-            Ask AI About {contributorName}
-          </h2>
-          <span className="text-[10px] bg-indigo-100 text-indigo-700 px-1.5 py-0.5 rounded-full font-medium shrink-0">
-            Gemini
+    <div className="bg-slate-900/50 backdrop-blur-xl border border-slate-800 rounded-2xl shadow-xl p-5 h-full flex flex-col overflow-hidden text-slate-100">
+      {/* Header */}
+      <div className="mb-4 shrink-0 flex items-center justify-between border-b border-slate-800/80 pb-3">
+        <div className="flex items-center gap-2.5 min-w-0">
+          <div className="p-2 rounded-xl bg-indigo-500/10 border border-indigo-500/20 text-indigo-400 shrink-0">
+            <Sparkles size={18} />
+          </div>
+          <div className="min-w-0">
+            <h2 className="text-sm font-semibold text-slate-100 truncate flex items-center gap-2">
+              Contributor Intelligence
+              <span className="text-[10px] uppercase tracking-wider bg-gradient-to-r from-indigo-500/20 to-purple-500/20 border border-indigo-500/30 text-indigo-300 px-2 py-0.5 rounded-full font-medium">
+                Gemini
+              </span>
+            </h2>
+            <p className="text-[11px] text-slate-400 truncate">
+              Insights tailored for <span className="text-slate-200 font-medium">{contributorName || "Contributor"}</span>
+            </p>
+          </div>
+        </div>
+      </div>
+
+      {/* Input Box Container */}
+      <div className="relative shrink-0 rounded-xl border border-slate-800 bg-slate-950/60 transition-all focus-within:border-indigo-500/50 focus-within:ring-2 focus-within:ring-indigo-500/20">
+        <textarea
+          id="contributor-ai-question"
+          ref={textareaRef}
+          rows={2}
+          value={question}
+          onChange={(e) => setQuestion(e.target.value.slice(0, MAX_QUESTION_LENGTH))}
+          onKeyDown={handleKeyDown}
+          placeholder={`Ask about ${contributorName || "this contributor"}'s contributions...`}
+          disabled={isLoading}
+          className="w-full bg-transparent p-3 text-xs text-slate-200 placeholder-slate-500 outline-none resize-none disabled:opacity-50"
+        />
+
+        {/* Textarea Toolbar */}
+        <div className="flex items-center justify-between px-3 pb-2.5 pt-1 border-t border-slate-800/40">
+          <span className={`text-[10px] ${remaining < 20 ? "text-rose-400 font-medium" : "text-slate-500"}`}>
+            {remaining} left
           </span>
-        </div>
-        <p className="mt-1 text-[11px] text-gray-500">
-          Answers are generated only from this contributor's commit history.
-        </p>
-      </div>
 
-      <label htmlFor="contributor-ai-question" className="sr-only">
-        Ask a question about {contributorName || "this contributor"}
-      </label>
-      <textarea
-        id="contributor-ai-question"
-        ref={textareaRef}
-        rows={2}
-        value={question}
-        onChange={(e) => setQuestion(e.target.value.slice(0, MAX_QUESTION_LENGTH))}
-        onKeyDown={handleKeyDown}
-        placeholder={`Ask anything about ${contributorName || "this contributor"}...`}
-        disabled={isLoading}
-        className="w-full border border-gray-200 rounded-lg p-2.5 text-sm outline-none focus:border-indigo-400 focus:ring-4 focus:ring-indigo-100 disabled:bg-gray-50 disabled:text-gray-400 shrink-0"
-      />
-
-      <div className="flex items-center justify-between mt-1.5 shrink-0">
-        <span
-          className={`text-[10px] shrink-0 ${
-            remaining < 20 ? "text-red-500" : "text-gray-400"
-          }`}
-        >
-          {remaining} characters left
-        </span>
-      </div>
-
-      <div className="flex items-center gap-3 mt-2 shrink-0">
-        <button
-          onClick={askAI}
-          disabled={isLoading || !question.trim()}
-          className="flex items-center gap-2 bg-indigo-600 text-white px-4 py-1.5 rounded-lg text-sm font-medium hover:bg-indigo-700 transition disabled:opacity-50 disabled:cursor-not-allowed"
-        >
-          {isLoading ? (
-            <Loader2 size={14} className="animate-spin" aria-hidden="true" />
-          ) : (
-            <Send size={14} aria-hidden="true" />
-          )}
-          {isLoading ? "Analyzing..." : "Ask AI"}
-        </button>
-        <span className="text-[11px] text-gray-400 hidden sm:inline">
-          Enter to send, Shift+Enter for a new line
-        </span>
-      </div>
-
-      {/* Internal Scroll Area */}
-      <div className="flex-1 min-h-0 overflow-y-auto mt-3 pr-1 -mr-1">
-        <div className="flex flex-wrap gap-1.5 mb-1">
-          {SUGGESTIONS.map((suggestion) => (
+          <div className="flex items-center gap-2">
+            <span className="text-[10px] text-slate-500 hidden sm:flex items-center gap-1">
+              Press <CornerDownLeft size={10} /> to send
+            </span>
             <button
-              key={suggestion}
-              type="button"
-              onClick={() => {
-                setQuestion(suggestion);
-                textareaRef.current?.focus();
-              }}
-              disabled={isLoading}
-              className="text-[11px] text-indigo-600 bg-indigo-50 hover:bg-indigo-100 px-2 py-1 rounded-full transition disabled:opacity-50"
+              onClick={() => askAI()}
+              disabled={isLoading || !question.trim()}
+              className="flex items-center gap-1.5 bg-indigo-600 hover:bg-indigo-500 active:bg-indigo-700 text-white px-3 py-1.5 rounded-lg text-xs font-medium transition duration-150 disabled:opacity-40 disabled:cursor-not-allowed shadow-sm shadow-indigo-950"
             >
-              {suggestion}
+              {isLoading ? (
+                <Loader2 size={13} className="animate-spin" aria-hidden="true" />
+              ) : (
+                <Send size={13} aria-hidden="true" />
+              )}
+              <span>{isLoading ? "Analyzing..." : "Ask"}</span>
             </button>
-          ))}
+          </div>
         </div>
+      </div>
 
-        {status === "error" && (
-          <div
-            role="alert"
-            className="mt-3 flex items-start gap-2 bg-red-50 text-red-600 rounded-lg p-3 text-xs"
-          >
-            <AlertCircle size={14} className="mt-0.5 shrink-0" aria-hidden="true" />
-            <p>{errorMessage}</p>
+      {/* Main Content Area */}
+      <div className="flex-1 min-h-0 overflow-y-auto mt-4 pr-1 space-y-3 custom-scrollbar">
+        {/* Suggestion Chips */}
+        {!answer && !isLoading && status !== "error" && (
+          <div className="space-y-2">
+            <p className="text-[10px] font-medium uppercase tracking-wider text-slate-400 px-0.5">
+              Suggested Prompts
+            </p>
+            <div className="flex flex-wrap gap-1.5">
+              {SUGGESTIONS.map((suggestion) => (
+                <button
+                  key={suggestion}
+                  type="button"
+                  onClick={() => {
+                    setQuestion(suggestion);
+                    askAI(suggestion);
+                  }}
+                  disabled={isLoading}
+                  className="flex items-center gap-1.5 text-[11px] text-slate-300 bg-slate-800/60 hover:bg-slate-800 hover:text-indigo-300 border border-slate-700/50 hover:border-indigo-500/30 px-2.5 py-1.5 rounded-lg transition-all duration-150 disabled:opacity-50"
+                >
+                  <MessageSquareText size={11} className="text-slate-400" />
+                  {suggestion}
+                </button>
+              ))}
+            </div>
           </div>
         )}
 
+        {/* Loading State */}
+        {isLoading && (
+          <div className="rounded-xl border border-slate-800 bg-slate-950/40 p-4 space-y-3 animate-pulse">
+            <div className="flex items-center justify-between">
+              <div className="h-3 w-24 bg-slate-800 rounded"></div>
+              <div className="h-3 w-12 bg-slate-800 rounded"></div>
+            </div>
+            <div className="space-y-2 pt-1">
+              <div className="h-2.5 bg-slate-800/80 rounded w-full"></div>
+              <div className="h-2.5 bg-slate-800/80 rounded w-5/6"></div>
+              <div className="h-2.5 bg-slate-800/80 rounded w-4/6"></div>
+            </div>
+          </div>
+        )}
+
+        {/* Error State */}
+        {status === "error" && (
+          <div
+            role="alert"
+            className="flex items-start gap-2.5 bg-rose-500/10 border border-rose-500/20 text-rose-300 rounded-xl p-3.5 text-xs"
+          >
+            <AlertCircle size={15} className="mt-0.5 shrink-0 text-rose-400" aria-hidden="true" />
+            <p className="leading-relaxed">{errorMessage}</p>
+          </div>
+        )}
+
+        {/* Output Answer Block */}
         {answer && status !== "error" && (
           <div
             aria-live="polite"
-            className="mt-3 rounded-lg border border-indigo-100 bg-indigo-50 p-3"
+            className="rounded-xl border border-indigo-500/20 bg-gradient-to-b from-indigo-950/20 to-slate-950/40 p-4 backdrop-blur-sm"
           >
-            <div className="flex items-center justify-between gap-2 mb-2">
-              <div className="flex items-center gap-1.5 min-w-0">
-                <Sparkles size={14} className="text-indigo-600 shrink-0" aria-hidden="true" />
-                <h3 className="text-xs font-semibold text-slate-900">AI Review</h3>
+            <div className="flex items-center justify-between gap-2 pb-3 mb-3 border-b border-slate-800/60">
+              <div className="flex items-center gap-1.5">
+                <Sparkles size={14} className="text-indigo-400" aria-hidden="true" />
+                <h3 className="text-xs font-semibold text-slate-200">Analysis Summary</h3>
                 {duration > 0 && (
-                  <span className="text-[10px] text-gray-400 whitespace-nowrap">
+                  <span className="text-[10px] text-slate-500 font-mono">
                     · {(duration / 1000).toFixed(2)}s
                   </span>
                 )}
               </div>
 
-              <div className="flex items-center gap-1.5 shrink-0">
+              <div className="flex items-center gap-1">
                 <button
                   type="button"
                   onClick={copyAnswer}
-                  className="flex items-center gap-1 text-[11px] bg-white border border-indigo-100 px-2 py-1 rounded-md text-slate-600 hover:bg-indigo-100/50 transition"
+                  className="flex items-center gap-1 text-[11px] bg-slate-800/80 hover:bg-slate-700 text-slate-300 px-2 py-1 rounded-md transition border border-slate-700/50"
                 >
                   {copied ? (
-                    <Check size={12} aria-hidden="true" />
+                    <Check size={12} className="text-emerald-400" aria-hidden="true" />
                   ) : (
                     <Copy size={12} aria-hidden="true" />
                   )}
-                  {copied ? "Copied" : "Copy"}
+                  <span>{copied ? "Copied" : "Copy"}</span>
                 </button>
                 <button
                   type="button"
                   onClick={downloadReview}
-                  className="flex items-center gap-1 text-[11px] bg-white border border-indigo-100 px-2 py-1 rounded-md text-slate-600 hover:bg-indigo-100/50 transition"
+                  className="flex items-center gap-1 text-[11px] bg-slate-800/80 hover:bg-slate-700 text-slate-300 px-2 py-1 rounded-md transition border border-slate-700/50"
                 >
                   <Download size={12} aria-hidden="true" />
-                  Download
+                  <span>Download</span>
                 </button>
               </div>
             </div>
 
-            <div className="prose prose-sm max-w-none prose-indigo text-xs text-slate-700">
+            <div className="prose prose-invert prose-xs max-w-none text-slate-300 leading-relaxed">
               <ReactMarkdown>{answer}</ReactMarkdown>
             </div>
           </div>

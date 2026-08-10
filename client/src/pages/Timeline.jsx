@@ -1,9 +1,11 @@
 import { useMemo, useState, useEffect, memo } from "react";
-import { GitCommit, Clock, Copy, Check, History, ChevronDown } from "lucide-react";
+import { GitCommit, GitPullRequest, Clock, Copy, Check, History, ChevronDown } from "lucide-react";
 import CommitActivityGraph from "../components/CommitActivityGraph";
 import CommitCalendar from "../components/CommitCalendar";
+import PullRequestCard from "../components/PullRequestCard";
 import { TYPE_DOT } from "../constants/commitTypes";
 import { useAnalysis } from "../context/AnalysisContext";
+import API from "../services/api";
 
 const PAGE_SIZE = 10;
 
@@ -86,37 +88,93 @@ const CommitHash = memo(function CommitHash({ hash }) {
 export default function Timeline() {
   const { analysis } = useAnalysis();
   const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
+  const [pullRequests, setPullRequests] = useState([]);
+  const [prLoading, setPrLoading] = useState(false);
 
-  const timeline = analysis?.timeline ?? [];
+  const rawCommits = useMemo(() => analysis?.timeline ?? [], [analysis]);
 
-  // Reset pagination only when switching repositories
+  // Extract owner and repository from analysis object
+  const repoUrl =
+    analysis?.repoUrl ||
+    analysis?.repository?.htmlUrl ||
+    analysis?.repository?.url ||
+    "";
+
+  const repoInfo = useMemo(() => {
+    if (!repoUrl) return null;
+    try {
+      const cleanUrl = repoUrl.replace(/\.git$/, "").replace(/\/$/, "");
+      const parts = new URL(cleanUrl).pathname.split("/").filter(Boolean);
+      if (parts.length < 2) return null;
+      return { owner: parts[0], repo: parts[1] };
+    } catch {
+      return null;
+    }
+  }, [repoUrl]);
+
+  // Fetch pull requests when repository changes
+  useEffect(() => {
+    if (!repoInfo?.owner || !repoInfo?.repo) {
+      setPullRequests([]);
+      return;
+    }
+
+    const fetchPullRequests = async () => {
+      try {
+        setPrLoading(true);
+        const response = await API.get("/repository/pull-requests", {
+          params: {
+            owner: repoInfo.owner,
+            repo: repoInfo.repo,
+          },
+        });
+        setPullRequests(response.data?.pullRequests || []);
+      } catch (error) {
+        console.error("Failed to fetch pull requests:", error);
+        setPullRequests([]);
+      } finally {
+        setPrLoading(false);
+      }
+    };
+
+    fetchPullRequests();
+  }, [repoInfo?.owner, repoInfo?.repo]);
+
+  // Reset pagination on repository change
   useEffect(() => {
     setVisibleCount(PAGE_SIZE);
   }, [analysis?.repositoryId ?? analysis?.repoUrl]);
 
+  // Activity Graph mapping (commits by date)
   const graphTimeline = useMemo(
     () =>
-      timeline.reduce((acc, commit) => {
+      rawCommits.reduce((acc, commit) => {
         const date = commit.date?.slice(0, 10);
         if (!date) return acc;
         acc[date] = (acc[date] || 0) + 1;
         return acc;
       }, {}),
-    [timeline]
+    [rawCommits]
   );
 
-  const parsed = useMemo(
-    () =>
-      timeline.map((commit) => ({
+  // Commit-only timeline formatted & sorted chronologically
+  const commitTimeline = useMemo(() => {
+    return rawCommits
+      .map((commit) => ({
         ...commit,
         _date: commit.date ? new Date(commit.date) : null,
         initials: getInitials(commit.author),
-      })),
-    [timeline]
-  );
+      }))
+      .sort((a, b) => {
+        const dateA = a._date?.getTime() || 0;
+        const dateB = b._date?.getTime() || 0;
+        return dateB - dateA;
+      });
+  }, [rawCommits]);
 
-  const grouped = useMemo(() => {
-    const visible = parsed.slice(0, visibleCount);
+  // Group commits by day
+  const groupedCommits = useMemo(() => {
+    const visible = commitTimeline.slice(0, visibleCount);
     const groups = [];
     let currentKey = null;
 
@@ -130,35 +188,39 @@ export default function Timeline() {
       }
     }
     return groups;
-  }, [parsed, visibleCount]);
+  }, [commitTimeline, visibleCount]);
 
-  if (!timeline.length) {
+  if (!rawCommits.length && !pullRequests.length && !prLoading) {
     return (
       <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-8 text-center max-w-md mx-auto my-12">
         <History size={32} className="mx-auto mb-3 text-gray-300" />
-        <h2 className="text-lg font-semibold text-slate-800">No Commit History Found</h2>
+        <h2 className="text-lg font-semibold text-slate-800">No Activity Found</h2>
         <p className="text-sm text-gray-500 mt-2 leading-relaxed">
-          This repository doesn't contain enough commit history or the analysis hasn't finished yet.
+          This repository doesn't contain any activity yet, or the analysis hasn't finished.
         </p>
       </div>
     );
   }
 
-  const hasMore = visibleCount < parsed.length;
+  const hasMoreCommits = visibleCount < commitTimeline.length;
 
   return (
     <div className="space-y-6">
-      <CommitCalendar timeline={timeline} />
+      {/* Activity Overview Header Visualizations */}
+      <CommitCalendar timeline={rawCommits} />
       <CommitActivityGraph timeline={graphTimeline} />
 
+      {/* SECTION 1: Commit Timeline */}
       <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
         <div className="flex items-center justify-between mb-6">
           <h2 className="text-xl font-semibold text-slate-900">Commit Timeline</h2>
-          <span className="text-sm text-gray-400">{parsed.length} commits</span>
+          <span className="text-sm text-gray-400">
+            {commitTimeline.length} commits
+          </span>
         </div>
 
         <div>
-          {grouped.map((group) => (
+          {groupedCommits.map((group) => (
             <div key={group.key} className="mb-8 last:mb-0">
               <p className="text-xs font-semibold uppercase tracking-wide text-gray-400 mb-4">
                 {group.label}
@@ -219,15 +281,49 @@ export default function Timeline() {
           ))}
         </div>
 
-        {hasMore && (
+        {hasMoreCommits && (
           <button
             onClick={() =>
-              setVisibleCount((v) => Math.min(v + PAGE_SIZE, parsed.length))
+              setVisibleCount((v) => Math.min(v + PAGE_SIZE, commitTimeline.length))
             }
-            className="w-full flex items-center justify-center gap-1.5 py-2.5 rounded-xl border border-gray-200 text-sm font-medium text-gray-600 hover:bg-gray-50 transition-colors"
+            className="w-full flex items-center justify-center gap-1.5 py-2.5 rounded-xl border border-gray-200 text-sm font-medium text-gray-600 hover:bg-gray-50 transition-colors mt-4"
           >
             Show more <ChevronDown size={15} />
           </button>
+        )}
+      </div>
+
+      {/* SECTION 2: Standalone Pull Requests */}
+      <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
+        <div className="flex items-center justify-between mb-6">
+          <div className="flex items-center gap-2">
+            <GitPullRequest className="text-purple-600" size={20} />
+            <h2 className="text-xl font-semibold text-slate-900">Pull Requests</h2>
+          </div>
+          <span className="text-sm text-gray-400">
+            {pullRequests.length} PRs
+          </span>
+        </div>
+
+        {prLoading ? (
+          <div className="flex items-center justify-center py-10 text-sm text-gray-400">
+            <GitPullRequest size={16} className="mr-2 animate-pulse text-purple-500" />
+            Loading pull requests...
+          </div>
+        ) : pullRequests.length === 0 ? (
+          <div className="text-center py-10">
+            <GitPullRequest size={28} className="mx-auto text-gray-300 mb-3" />
+            <p className="text-sm font-medium text-gray-600">No pull requests found</p>
+            <p className="text-xs text-gray-400 mt-1">
+              This repository doesn't have any pull requests available.
+            </p>
+          </div>
+        ) : (
+          <div className="space-y-4">
+            {pullRequests.map((pr) => (
+              <PullRequestCard key={pr.id || pr.number} pullRequest={pr} />
+            ))}
+          </div>
         )}
       </div>
     </div>

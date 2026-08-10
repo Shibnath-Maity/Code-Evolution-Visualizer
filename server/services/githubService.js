@@ -90,6 +90,63 @@ async function getRepositoryIssues(owner, repo, state = "open") {
     throw new Error("Unable to fetch repository issues.");
   }
 }
+
+// ==========================================
+// Get Repository Pull Requests
+// ==========================================
+async function getRepositoryPullRequests(owner, repo, state = "all") {
+  try {
+    const response = await axios.get(
+      `${BASE_URL}/repos/${owner}/${repo}/pulls`,
+      {
+        headers,
+        params: {
+          state,
+          per_page: 50,
+          sort: "updated",
+          direction: "desc",
+        },
+      }
+    );
+
+    return response.data.map((pr) => ({
+      id: pr.id,
+      number: pr.number,
+      title: pr.title,
+      body: pr.body || "",
+      state: pr.state,
+      merged: pr.merged_at !== null,
+      author: pr.user?.login || "Unknown",
+      authorAvatar: pr.user?.avatar_url || null,
+
+      sourceBranch: pr.head?.ref || "",
+      targetBranch: pr.base?.ref || "",
+
+      createdAt: pr.created_at,
+      updatedAt: pr.updated_at,
+      closedAt: pr.closed_at,
+      mergedAt: pr.merged_at,
+
+      url: pr.html_url,
+
+      additions: pr.additions || 0,
+      deletions: pr.deletions || 0,
+      changedFiles: pr.changed_files || 0,
+    }));
+  } catch (err) {
+    if (err.response?.status === 404) {
+      throw new Error("Repository not found — check the owner/repo name.");
+    }
+
+    if (err.response?.status === 403) {
+      throw new Error(
+        "GitHub API rate limit hit. Add a GITHUB_TOKEN to your .env to raise the limit."
+      );
+    }
+
+    throw new Error("Unable to fetch repository pull requests.");
+  }
+}
  
 // ==========================================
 // Get Single Issue + Comments
@@ -141,6 +198,7 @@ async function getRepositoryIssue(owner, repo, issueNumber) {
 module.exports = {
   getRepositoryInfo,
   getRepositoryIssues,
+  getRepositoryPullRequests,
   getRepositoryIssue,
 };
  
