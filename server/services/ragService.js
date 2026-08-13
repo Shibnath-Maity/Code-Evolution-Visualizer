@@ -1,9 +1,19 @@
-const axios = require("axios");
+const { GoogleGenAI } = require("@google/genai");
 const { ChromaClient } = require("chromadb");
 
-const OLLAMA_URL = process.env.OLLAMA_URL || "http://localhost:11434";
 const COLLECTION_NAME = "repository_knowledge";
-const DEFAULT_INDEX_VERSION = "v2";
+
+// IMPORTANT:
+// This must be changed when the embedding model changes.
+// Existing Ollama embeddings must NOT be mixed with Gemini embeddings.
+const DEFAULT_INDEX_VERSION = "v3-gemini-embedding-2";
+
+const GEMINI_EMBEDDING_MODEL = "gemini-embedding-2";
+const GEMINI_EMBEDDING_DIMENSION = 768;
+
+const aiRag = new GoogleGenAI({
+  apiKey: process.env.GEMINI_API_RAG,
+});
 
 // ==========================================
 // Connect to ChromaDB
@@ -52,31 +62,41 @@ const WEIGHTS = {
   keywordInFile: 4,
   keywordInFileName: 5,
   keywordInDirectory: 3,
+
   exactFileNameMatch: 100,
   fileEndsWithName: 80,
   exactPathMentioned: 80,
   fileNameMentioned: 50,
+
   summaryOverview: 40,
   summaryTechnology: 35,
   summaryFileQuestion: 30,
   summaryArchitecture: 30,
   summaryGeneric: 5,
+
   readmeCore: 15,
   readmeDependency: 8,
+
   techSummaryBoost: 25,
   techManifestBoost: 30,
   techConfigExtBoost: 5,
+
   dependencyManifestBoost: 50,
   dependencyReadmeBoost: 10,
+
   apiPathMatch: 15,
   apiFileNameMatch: 15,
   apiExtensionMatch: 5,
+
   architectureSummary: 30,
   architectureCorePath: 10,
   architectureReadme: 15,
+
   fileQuestionSummary: 30,
   fileQuestionHasFileName: 3,
+
   sourceCodeGeneric: 3,
+
   codeReviewSource: 30,
   codeReviewExtension: 20,
   codeReviewSummaryBoost: 35,
@@ -86,29 +106,61 @@ const CANDIDATE_POOL_SIZE =
   Number(process.env.RAG_CANDIDATE_POOL_SIZE) || 30;
 
 // ==========================================
-// Create Embedding using Ollama
+// Task types Gemini expects for asymmetric retrieval.
+// DOCUMENT = content being indexed/stored.
+// QUERY    = the user's search text at retrieval time.
+// Mixing these up doesn't error — it just quietly degrades
+// retrieval quality, so every call site below is explicit.
 // ==========================================
 
-async function createEmbedding(text) {
+const TASK_TYPES = {
+  DOCUMENT: "RETRIEVAL_DOCUMENT",
+  QUERY: "RETRIEVAL_QUERY",
+};
+
+// ==========================================
+// Create Embedding using Gemini Embedding 2
+// ==========================================
+
+async function createEmbedding(text, taskType = TASK_TYPES.DOCUMENT) {
   if (!text || !text.trim()) {
     throw new Error("Cannot create embedding: empty text.");
   }
 
+  if (!process.env.GEMINI_API_RAG) {
+    throw new Error("GEMINI_API_RAG is not configured.");
+  }
+
   try {
-    const response = await axios.post(`${OLLAMA_URL}/api/embed`, {
-      model: "nomic-embed-text",
-      input: text,
+    const response = await aiRag.models.embedContent({
+      model: GEMINI_EMBEDDING_MODEL,
+      contents: text,
+      config: {
+        outputDimensionality: GEMINI_EMBEDDING_DIMENSION,
+        taskType,
+      },
     });
 
-    const embedding = response.data.embeddings?.[0];
+    const embedding = response.embeddings?.[0]?.values;
 
-    if (!embedding) {
-      throw new Error("Embedding not returned by Ollama.");
+    if (!embedding || embedding.length === 0) {
+      throw new Error("Embedding not returned by Gemini.");
+    }
+
+    if (embedding.length !== GEMINI_EMBEDDING_DIMENSION) {
+      throw new Error(
+        `Unexpected embedding dimension: ${embedding.length}. ` +
+        `Expected ${GEMINI_EMBEDDING_DIMENSION}.`
+      );
     }
 
     return embedding;
   } catch (error) {
-    console.error("Embedding Error:", error.response?.data || error.message);
+    console.error(
+      "❌ Gemini RAG Embedding Error:",
+      error.message || error
+    );
+
     throw error;
   }
 }
@@ -156,7 +208,11 @@ async function isRepositoryIndexed(
 
     return (results.ids || []).length > 0;
   } catch (error) {
-    console.error("❌ Failed to check repository index status:", error.message);
+    console.error(
+      "❌ Failed to check repository index status:",
+      error.message
+    );
+
     return false;
   }
 }
@@ -164,23 +220,50 @@ async function isRepositoryIndexed(
 // ==========================================
 // Add / Upsert Document to ChromaDB
 // ==========================================
+//
+// indexVersion is stamped automatically so a caller can never
+// forget it and silently write a chunk that searchDocuments'
+// strict indexVersion filter will then never return. Pass
+// { indexVersion: "..." } in metadata to override explicitly
+// (e.g. backfilling under a different version on purpose).
 
 async function addDocument(id, text, metadata = {}) {
   try {
-    const collection = await getCollection();
-    const embedding = await createEmbedding(text);
+    if (!metadata.repositoryId) {
+      throw new Error(
+        `addDocument(${id}): metadata.repositoryId is required ` +
+        `— searchDocuments always filters by repositoryId, so a ` +
+        `chunk stored without it can never be retrieved.`
+      );
+    }
 
-    // Using upsert instead of add prevents duplicate key errors
+    const collection = await getCollection();
+
+    const embedding = await createEmbedding(
+      text,
+      TASK_TYPES.DOCUMENT
+    );
+
+    const finalMetadata = {
+      indexVersion: DEFAULT_INDEX_VERSION,
+      embeddingModel: GEMINI_EMBEDDING_MODEL,
+      ...metadata,
+    };
+
     await collection.upsert({
       ids: [id],
       documents: [text],
       embeddings: [embedding],
-      metadatas: [metadata],
+      metadatas: [finalMetadata],
     });
 
     console.log(`✓ Stored chunk in ChromaDB: ${id}`);
   } catch (error) {
-    console.error(`ChromaDB Upsert Error [${id}]:`, error.message);
+    console.error(
+      `ChromaDB Upsert Error [${id}]:`,
+      error.message
+    );
+
     throw error;
   }
 }
@@ -190,7 +273,10 @@ async function addDocument(id, text, metadata = {}) {
 // ==========================================
 
 function normalizeQuery(query) {
-  return query.toLowerCase().replace(/\\/g, "/").trim();
+  return query
+    .toLowerCase()
+    .replace(/\\/g, "/")
+    .trim();
 }
 
 function includesAny(text, phrases) {
@@ -297,27 +383,51 @@ function classifyQuestion(q) {
 }
 
 function extractQueryWords(q) {
-  return q.split(/[^a-zA-Z0-9_.-]+/).filter((word) => word.length > 2);
+  return q
+    .split(/[^a-zA-Z0-9_.-]+/)
+    .filter((word) => word.length > 2);
 }
 
 const FILE_EXTENSION_PATTERN =
   /\.(js|jsx|ts|tsx|java|py|c|cpp|h|hpp|html|css|scss|json|md|xml|yml|yaml|sql)$/i;
 
 function findMentionedFileName(queryWords) {
-  return queryWords.find((word) => FILE_EXTENSION_PATTERN.test(word));
+  return queryWords.find((word) =>
+    FILE_EXTENSION_PATTERN.test(word)
+  );
 }
 
 // ==========================================
 // Scoring
 // ==========================================
 
-function scoreCandidate({ document, metadata, distance, queryWords, q, signals, possibleFileName }) {
+function scoreCandidate({
+  document,
+  metadata,
+  distance,
+  queryWords,
+  q,
+  signals,
+  possibleFileName,
+}) {
   const text = document.toLowerCase();
-  const file = (metadata.file || "").toLowerCase().replace(/\\/g, "/");
-  const fileName = (metadata.fileName || "").toLowerCase();
-  const directory = (metadata.directory || "").toLowerCase().replace(/\\/g, "/");
-  const extension = (metadata.extension || "").toLowerCase();
-  const type = (metadata.type || "").toLowerCase();
+
+  const file = (metadata.file || "")
+    .toLowerCase()
+    .replace(/\\/g, "/");
+
+  const fileName = (metadata.fileName || "")
+    .toLowerCase();
+
+  const directory = (metadata.directory || "")
+    .toLowerCase()
+    .replace(/\\/g, "/");
+
+  const extension = (metadata.extension || "")
+    .toLowerCase();
+
+  const type = (metadata.type || "")
+    .toLowerCase();
 
   const {
     isOverview,
@@ -332,89 +442,236 @@ function scoreCandidate({ document, metadata, distance, queryWords, q, signals, 
 
   let score = 0;
 
+  // ==========================================
   // Semantic similarity
+  // ==========================================
+
   const semanticSimilarity = Math.max(0, 1 - distance);
+
   score += semanticSimilarity * WEIGHTS.semantic;
 
+  // ==========================================
   // Keyword matching
+  // ==========================================
+
   for (const word of queryWords) {
-    if (text.includes(word)) score += WEIGHTS.keywordInText;
-    if (file.includes(word)) score += WEIGHTS.keywordInFile;
-    if (fileName.includes(word)) score += WEIGHTS.keywordInFileName;
-    if (directory.includes(word)) score += WEIGHTS.keywordInDirectory;
+    if (text.includes(word)) {
+      score += WEIGHTS.keywordInText;
+    }
+
+    if (file.includes(word)) {
+      score += WEIGHTS.keywordInFile;
+    }
+
+    if (fileName.includes(word)) {
+      score += WEIGHTS.keywordInFileName;
+    }
+
+    if (directory.includes(word)) {
+      score += WEIGHTS.keywordInDirectory;
+    }
   }
 
+  // ==========================================
   // Exact file targeting
+  // ==========================================
+
   if (possibleFileName && fileName === possibleFileName) {
     score += isSpecificFileQuestion
       ? WEIGHTS.exactFileNameMatch
       : WEIGHTS.exactFileNameMatch * 0.6;
-  } else if (isSpecificFileQuestion && possibleFileName && file.endsWith("/" + possibleFileName)) {
+  } else if (
+    isSpecificFileQuestion &&
+    possibleFileName &&
+    file.endsWith("/" + possibleFileName)
+  ) {
     score += WEIGHTS.fileEndsWithName;
   }
 
-  if (file && q.includes(file)) score += WEIGHTS.exactPathMentioned;
-  if (fileName && q.includes(fileName)) score += WEIGHTS.fileNameMentioned;
+  if (file && q.includes(file)) {
+    score += WEIGHTS.exactPathMentioned;
+  }
 
+  if (fileName && q.includes(fileName)) {
+    score += WEIGHTS.fileNameMentioned;
+  }
+
+  // ==========================================
   // Repository summary
-  if (type === "repository_summary") {
-    if (isOverview) score += WEIGHTS.summaryOverview;
-    if (isTechnology) score += WEIGHTS.summaryTechnology;
-    if (isFileQuestion) score += WEIGHTS.summaryFileQuestion;
-    if (isArchitecture) score += WEIGHTS.summaryArchitecture;
+  // ==========================================
 
-    if (!isOverview && !isTechnology && !isFileQuestion && !isArchitecture) {
+  if (type === "repository_summary") {
+    if (isOverview) {
+      score += WEIGHTS.summaryOverview;
+    }
+
+    if (isTechnology) {
+      score += WEIGHTS.summaryTechnology;
+    }
+
+    if (isFileQuestion) {
+      score += WEIGHTS.summaryFileQuestion;
+    }
+
+    if (isArchitecture) {
+      score += WEIGHTS.summaryArchitecture;
+    }
+
+    if (
+      !isOverview &&
+      !isTechnology &&
+      !isFileQuestion &&
+      !isArchitecture
+    ) {
       score += WEIGHTS.summaryGeneric;
     }
   }
 
+  // ==========================================
   // README boost
+  // ==========================================
+
   if (fileName === "readme.md") {
-    if (isOverview || isTechnology || isArchitecture) score += WEIGHTS.readmeCore;
-    if (isDependency) score += WEIGHTS.readmeDependency;
+    if (
+      isOverview ||
+      isTechnology ||
+      isArchitecture
+    ) {
+      score += WEIGHTS.readmeCore;
+    }
+
+    if (isDependency) {
+      score += WEIGHTS.readmeDependency;
+    }
   }
 
+  // ==========================================
   // Technology question
+  // ==========================================
+
   if (isTechnology) {
-    if (type === "repository_summary") score += WEIGHTS.techSummaryBoost;
-    if (MANIFEST_FILES.has(fileName)) score += WEIGHTS.techManifestBoost;
-    if (CONFIG_EXTENSIONS.has(extension)) score += WEIGHTS.techConfigExtBoost;
+    if (type === "repository_summary") {
+      score += WEIGHTS.techSummaryBoost;
+    }
+
+    if (MANIFEST_FILES.has(fileName)) {
+      score += WEIGHTS.techManifestBoost;
+    }
+
+    if (CONFIG_EXTENSIONS.has(extension)) {
+      score += WEIGHTS.techConfigExtBoost;
+    }
   }
 
+  // ==========================================
   // Dependency question
+  // ==========================================
+
   if (isDependency) {
-    if (MANIFEST_FILES.has(fileName)) score += WEIGHTS.dependencyManifestBoost;
-    if (fileName === "readme.md") score += WEIGHTS.dependencyReadmeBoost;
+    if (MANIFEST_FILES.has(fileName)) {
+      score += WEIGHTS.dependencyManifestBoost;
+    }
+
+    if (fileName === "readme.md") {
+      score += WEIGHTS.dependencyReadmeBoost;
+    }
   }
 
+  // ==========================================
   // API question
+  // ==========================================
+
   if (isApi) {
-    const pathHints = ["route", "routes", "controller", "controllers", "api", "server", "app"];
-    if (pathHints.some((hint) => file.includes(hint))) score += WEIGHTS.apiPathMatch;
+    const pathHints = [
+      "route",
+      "routes",
+      "controller",
+      "controllers",
+      "api",
+      "server",
+      "app",
+    ];
 
-    const nameHints = ["route", "controller", "server", "app"];
-    if (nameHints.some((hint) => fileName.includes(hint))) score += WEIGHTS.apiFileNameMatch;
+    if (
+      pathHints.some((hint) =>
+        file.includes(hint)
+      )
+    ) {
+      score += WEIGHTS.apiPathMatch;
+    }
 
-    if (CODE_EXTENSIONS.has(extension)) score += WEIGHTS.apiExtensionMatch;
+    const nameHints = [
+      "route",
+      "controller",
+      "server",
+      "app",
+    ];
+
+    if (
+      nameHints.some((hint) =>
+        fileName.includes(hint)
+      )
+    ) {
+      score += WEIGHTS.apiFileNameMatch;
+    }
+
+    if (CODE_EXTENSIONS.has(extension)) {
+      score += WEIGHTS.apiExtensionMatch;
+    }
   }
 
+  // ==========================================
   // Architecture question
+  // ==========================================
+
   if (isArchitecture) {
-    if (type === "repository_summary") score += WEIGHTS.architectureSummary;
+    if (type === "repository_summary") {
+      score += WEIGHTS.architectureSummary;
+    }
 
-    const corePaths = ["server", "app", "src", "controller", "controllers", "service", "services", "route", "routes"];
-    if (corePaths.some((hint) => file.includes(hint))) score += WEIGHTS.architectureCorePath;
+    const corePaths = [
+      "server",
+      "app",
+      "src",
+      "controller",
+      "controllers",
+      "service",
+      "services",
+      "route",
+      "routes",
+    ];
 
-    if (fileName === "readme.md") score += WEIGHTS.architectureReadme;
+    if (
+      corePaths.some((hint) =>
+        file.includes(hint)
+      )
+    ) {
+      score += WEIGHTS.architectureCorePath;
+    }
+
+    if (fileName === "readme.md") {
+      score += WEIGHTS.architectureReadme;
+    }
   }
 
+  // ==========================================
   // File / directory question
+  // ==========================================
+
   if (isFileQuestion) {
-    if (type === "repository_summary") score += WEIGHTS.fileQuestionSummary;
-    if (fileName) score += WEIGHTS.fileQuestionHasFileName;
+    if (type === "repository_summary") {
+      score += WEIGHTS.fileQuestionSummary;
+    }
+
+    if (fileName) {
+      score += WEIGHTS.fileQuestionHasFileName;
+    }
   }
 
-  // Plain source code, no special intent detected
+  // ==========================================
+  // Plain source code
+  // ==========================================
+
   if (
     type === "source" &&
     !isOverview &&
@@ -426,26 +683,48 @@ function scoreCandidate({ document, metadata, distance, queryWords, q, signals, 
     score += WEIGHTS.sourceCodeGeneric;
   }
 
+  // ==========================================
   // Code review question
+  // ==========================================
+
   if (isCodeReview) {
-    if (type === "source") score += WEIGHTS.codeReviewSource;
-    if (CODE_EXTENSIONS.has(extension)) score += WEIGHTS.codeReviewExtension;
-    if (type === "repository_summary") score += WEIGHTS.codeReviewSummaryBoost;
+    if (type === "source") {
+      score += WEIGHTS.codeReviewSource;
+    }
+
+    if (CODE_EXTENSIONS.has(extension)) {
+      score += WEIGHTS.codeReviewExtension;
+    }
+
+    if (type === "repository_summary") {
+      score += WEIGHTS.codeReviewSummaryBoost;
+    }
   }
 
   return score;
 }
 
+// ==========================================
+// Log Ranking
+// ==========================================
+
 function logRanking(finalResults) {
   console.log("\n🎯 Top Ranked RAG Candidates:");
-  finalResults.slice(0, 5).forEach((item, index) => {
-    const displayName =
-      item.metadata?.type === "repository_summary"
-        ? "REPOSITORY_SUMMARY"
-        : item.metadata?.file || "unknown";
 
-    console.log(` ${index + 1}. ${displayName} | Score: ${item.score.toFixed(2)} | Type: ${item.metadata?.type || "unknown"}`);
-  });
+  finalResults
+    .slice(0, 5)
+    .forEach((item, index) => {
+      const displayName =
+        item.metadata?.type === "repository_summary"
+          ? "REPOSITORY_SUMMARY"
+          : item.metadata?.file || "unknown";
+
+      console.log(
+        ` ${index + 1}. ${displayName} | ` +
+        `Score: ${item.score.toFixed(2)} | ` +
+        `Type: ${item.metadata?.type || "unknown"}`
+      );
+    });
 }
 
 // ==========================================
@@ -462,54 +741,102 @@ async function searchDocuments(
 ) {
   try {
     if (!repositoryId) {
-      throw new Error("repositoryId is required for RAG search.");
+      throw new Error(
+        "repositoryId is required for RAG search."
+      );
     }
 
     const collection = await getCollection();
-    const queryEmbedding = await createEmbedding(query);
 
+    // Gemini creates the query embedding using the QUERY task type,
+    // matching the DOCUMENT task type used when chunks were indexed.
+    const queryEmbedding = await createEmbedding(
+      query,
+      TASK_TYPES.QUERY
+    );
+
+    // ==========================================
     // Multi-tenant & scope filters
+    // ==========================================
+
     const filterConditions = [
-      { repositoryId: String(repositoryId) },
+      {
+        repositoryId: String(repositoryId),
+      },
     ];
 
     if (userId) {
-      filterConditions.push({ userId: String(userId) });
+      filterConditions.push({
+        userId: String(userId),
+      });
     }
 
     if (indexVersion) {
-      filterConditions.push({ indexVersion: String(indexVersion) });
+      filterConditions.push({
+        indexVersion: String(indexVersion),
+      });
     }
 
     if (targetFile) {
-      filterConditions.push({ fileName: String(targetFile) });
+      filterConditions.push({
+        fileName: String(targetFile),
+      });
     }
 
-    const where = filterConditions.length === 1
-      ? filterConditions[0]
-      : { $and: filterConditions };
+    const where =
+      filterConditions.length === 1
+        ? filterConditions[0]
+        : {
+            $and: filterConditions,
+          };
+
+    // ==========================================
+    // Vector search
+    // ==========================================
 
     const results = await collection.query({
       queryEmbeddings: [queryEmbedding],
-      nResults: targetFile ? 3 : CANDIDATE_POOL_SIZE,
+      nResults: targetFile
+        ? 3
+        : CANDIDATE_POOL_SIZE,
       where,
     });
 
-    const documents = results.documents?.[0] || [];
-    const metadatas = results.metadatas?.[0] || [];
-    const distances = results.distances?.[0] || [];
+    const documents =
+      results.documents?.[0] || [];
+
+    const metadatas =
+      results.metadatas?.[0] || [];
+
+    const distances =
+      results.distances?.[0] || [];
 
     if (documents.length === 0) {
-      return { documents: [[]], metadatas: [[]], distances: [[]] };
+      return {
+        documents: [[]],
+        metadatas: [[]],
+        distances: [[]],
+      };
     }
 
+    // ==========================================
+    // Query analysis
+    // ==========================================
+
     const q = normalizeQuery(query);
-    const questionType = classifyQuestion(q);
-    const queryWords = extractQueryWords(q);
-    const possibleFileName = findMentionedFileName(queryWords);
+
+    const questionType =
+      classifyQuestion(q);
+
+    const queryWords =
+      extractQueryWords(q);
+
+    const possibleFileName =
+      findMentionedFileName(queryWords);
 
     const signals = {
       ...questionType,
+
       isSpecificFileQuestion:
         !!possibleFileName ||
         q.includes("implementation of") ||
@@ -518,24 +845,43 @@ async function searchDocuments(
         q.includes("explain this file"),
     };
 
+    // ==========================================
+    // Rank candidates
+    // ==========================================
+
     const ranked = documents
       .map((document, index) => {
-        const metadata = metadatas[index] || {};
-        const distance = distances[index] ?? 1;
+        const metadata =
+          metadatas[index] || {};
 
-        const score = scoreCandidate({
+        const distance =
+          distances[index] ?? 1;
+
+        const score =
+          scoreCandidate({
+            document,
+            metadata,
+            distance,
+            queryWords,
+            q,
+            signals,
+            possibleFileName,
+          });
+
+        return {
           document,
           metadata,
           distance,
-          queryWords,
-          q,
-          signals,
-          possibleFileName,
-        });
-
-        return { document, metadata, distance, score };
+          score,
+        };
       })
-      .sort((a, b) => b.score - a.score);
+      .sort(
+        (a, b) => b.score - a.score
+      );
+
+    // ==========================================
+    // Prioritize repository summary
+    // ==========================================
 
     if (
       signals.isOverview ||
@@ -543,32 +889,73 @@ async function searchDocuments(
       signals.isTechnology ||
       signals.isCodeReview
     ) {
-      const summaryIndex = ranked.findIndex(
-        (r) => r.metadata.type === "repository_summary"
-      );
+      const summaryIndex =
+        ranked.findIndex(
+          (r) =>
+            r.metadata.type ===
+            "repository_summary"
+        );
 
       if (summaryIndex > 0) {
-        const [summary] = ranked.splice(summaryIndex, 1);
+        const [summary] =
+          ranked.splice(summaryIndex, 1);
+
         ranked.unshift(summary);
       }
     }
 
-    let finalLimit = limit;
-    if (signals.isOverview) finalLimit = 12;
-    if (signals.isCodeReview) finalLimit = 15;
-    if (signals.isArchitecture) finalLimit = 12;
+    // ==========================================
+    // Dynamic result limit
+    // ==========================================
 
-    const finalResults = ranked.slice(0, finalLimit);
+    let finalLimit = limit;
+
+    if (signals.isOverview) {
+      finalLimit = 12;
+    }
+
+    if (signals.isCodeReview) {
+      finalLimit = 15;
+    }
+
+    if (signals.isArchitecture) {
+      finalLimit = 12;
+    }
+
+    const finalResults =
+      ranked.slice(0, finalLimit);
 
     logRanking(finalResults);
 
+    // ==========================================
+    // Return results
+    // ==========================================
+
     return {
-      documents: [finalResults.map((item) => item.document)],
-      metadatas: [finalResults.map((item) => item.metadata)],
-      distances: [finalResults.map((item) => item.distance)],
+      documents: [
+        finalResults.map(
+          (item) => item.document
+        ),
+      ],
+
+      metadatas: [
+        finalResults.map(
+          (item) => item.metadata
+        ),
+      ],
+
+      distances: [
+        finalResults.map(
+          (item) => item.distance
+        ),
+      ],
     };
   } catch (error) {
-    console.error("ChromaDB Search Error:", error.message);
+    console.error(
+      "ChromaDB Search Error:",
+      error.message
+    );
+
     throw error;
   }
 }
@@ -579,10 +966,18 @@ async function searchDocuments(
 
 async function deleteCollection() {
   try {
-    await chroma.deleteCollection({ name: COLLECTION_NAME });
-    console.log("🗑️ Collection deleted");
+    await chroma.deleteCollection({
+      name: COLLECTION_NAME,
+    });
+
+    console.log(
+      "🗑️ Collection deleted"
+    );
   } catch (error) {
-    console.log("Collection delete error:", error.message);
+    console.log(
+      "Collection delete error:",
+      error.message
+    );
   }
 }
 
@@ -597,4 +992,5 @@ module.exports = {
   addDocument,
   searchDocuments,
   deleteCollection,
+  TASK_TYPES,
 };

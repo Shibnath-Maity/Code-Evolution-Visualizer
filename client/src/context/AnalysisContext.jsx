@@ -97,11 +97,13 @@ export function AnalysisProvider({ children }) {
               status.codeEvolutionPending ?? prev.codeEvolutionPending,
             codeEvolutionError:
               status.codeEvolutionError ?? prev.codeEvolutionError,
-
-            hotspotInsights:
-              status.hotspotInsights !== undefined
-                ? status.hotspotInsights
-                : prev.hotspotInsights,
+hotspotInsights:
+  status.hotspotInsights !== undefined
+    ? status.hotspotInsights
+    : status.hotspotInsight !== undefined
+    ? status.hotspotInsight
+    : prev.hotspotInsights,
+           
             hotspotInsightsPending:
               status.hotspotInsightsPending ?? prev.hotspotInsightsPending,
             hotspotInsightsError:

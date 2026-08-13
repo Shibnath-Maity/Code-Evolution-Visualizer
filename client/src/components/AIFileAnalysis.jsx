@@ -3,6 +3,7 @@ import React, {
   useState,
   useCallback,
   useRef,
+  useEffect,
 } from "react";
 
 import API from "../services/api";
@@ -40,6 +41,38 @@ function badgeColor(risk) {
   }
 }
 
+// Safely coerce any AI-returned value (string, number, array, or
+// {name, description}-shaped object) into renderable text.
+function safeText(value) {
+  if (value == null) return "";
+
+  if (typeof value === "string" || typeof value === "number") {
+    return String(value);
+  }
+
+  if (Array.isArray(value)) {
+    return value.map(safeText).filter(Boolean).join(", ");
+  }
+
+  if (typeof value === "object") {
+    if (value.name && value.description) {
+      return `${value.name}: ${value.description}`;
+    }
+
+    if (value.name) {
+      return String(value.name);
+    }
+
+    if (value.description) {
+      return String(value.description);
+    }
+
+    return JSON.stringify(value);
+  }
+
+  return String(value);
+}
+
 /* ==========================================================
    COMPONENT
 ========================================================== */
@@ -61,6 +94,35 @@ export default function AIFileAnalysis() {
   // Track the active request path to avoid race conditions when clicking rapidly
   const activeRequestPathRef = useRef(null);
 
+  // Prevent duplicate concurrent requests for the same file
+  const pendingRequestsRef = useRef(new Set());
+
+  // Restores persistent session cache when switching repositories
+  useEffect(() => {
+    if (!repositoryId) {
+      setAiCache({});
+      return;
+    }
+
+    try {
+      const cacheKey = `aiFileAnalysis_${repositoryId}`;
+      const cached = sessionStorage.getItem(cacheKey);
+
+      if (cached) {
+        setAiCache(JSON.parse(cached));
+        console.log("♻️ Restored AI file cache:", repositoryId);
+      } else {
+        setAiCache({});
+      }
+    } catch (error) {
+      console.warn("⚠️ Failed to restore AI cache:", error);
+      setAiCache({});
+    }
+
+    setSelectedFile(null);
+    setAiResult(null);
+  }, [repositoryId]);
+
   // Normalize files array from static analysis
   const files = useMemo(() => {
     const list = Array.isArray(fileAnalysis)
@@ -75,84 +137,178 @@ export default function AIFileAnalysis() {
   const activeFile = selectedFile;
 
   /* ======================================================
-     LOAD AI ANALYSIS (ON CLICK + CACHED)
+     LOAD AI ANALYSIS (ON CLICK + CACHED & PERSISTED)
   ====================================================== */
 
   const analyzeFile = useCallback(
     async (file) => {
-      if (!file || !repositoryId) return;
-
-      const cacheKey = `${repositoryId}:${file.path}`;
-      activeRequestPathRef.current = file.path;
-
-      // 1. Check frontend memory cache synchronously via Ref
-      if (aiCacheRef.current[cacheKey]) {
-        setAiResult(aiCacheRef.current[cacheKey]);
-        setLoadingAI(false);
+      if (!file || !repositoryId) {
+        console.warn("⚠️ Missing file or repositoryId");
         return;
       }
+
+      const filePath = file.path;
+      const cacheKey = `${repositoryId}:${filePath}`;
+      const storageKey = `aiFileAnalysis_${repositoryId}`;
+
+      activeRequestPathRef.current = filePath;
+
+      // =====================================================
+      // 1. FRONTEND MEMORY CACHE
+      // =====================================================
+
+      const memoryCached = aiCacheRef.current[cacheKey];
+
+      if (memoryCached) {
+        console.log(`♻️ Frontend cache hit: ${filePath}`);
+
+        setAiResult(memoryCached);
+        setLoadingAI(false);
+
+        return;
+      }
+
+      // =====================================================
+      // 2. PREVENT DUPLICATE REQUESTS
+      // =====================================================
+
+      if (pendingRequestsRef.current.has(cacheKey)) {
+        console.log(`⏳ Already analyzing: ${filePath}`);
+        return;
+      }
+
+      pendingRequestsRef.current.add(cacheKey);
 
       try {
         setLoadingAI(true);
         setAiResult(null);
 
-        const response = await API.post("/repository/file-explanation", {
-          repositoryId,
-          filePath: file.path,
-        });
+        console.log(`🤖 Requesting AI analysis: ${filePath}`);
 
-        const data = response.data.data;
+        // =====================================================
+        // 3. BACKEND
+        // =====================================================
+
+        const response = await API.post(
+          "/repository/file-explanation",
+          {
+            repositoryId,
+            filePath,
+          }
+        );
+
+        const data = response.data?.data ?? response.data;
+
+        if (!data || typeof data !== "object") {
+          throw new Error("Invalid AI response received.");
+        }
+
+        // =====================================================
+        // 4. NORMALIZE AI RESPONSE
+        // =====================================================
 
         const normalize = (value) => {
-          if (!value) return [];
-          return Array.isArray(value) ? value : [value];
+          if (value == null) return [];
+
+          return Array.isArray(value)
+            ? value
+            : [value];
         };
 
         const result = {
           ...data,
-          responsibilities: normalize(data?.responsibilities),
-          workflow: normalize(data?.workflow),
-          components: normalize(data?.components),
-          importantFunctions: normalize(data?.importantFunctions),
-          dependencies: normalize(data?.dependencies),
-          designPatterns: normalize(data?.designPatterns),
-          dataFlow: normalize(data?.dataFlow),
-          risks: normalize(data?.risks),
-          improvements: normalize(data?.improvements),
-          relatedFiles: normalize(data?.relatedFiles),
-          bestPractices: normalize(data?.bestPractices),
+
+          responsibilities: normalize(data.responsibilities),
+          workflow: normalize(data.workflow),
+          components: normalize(data.components),
+          importantFunctions: normalize(data.importantFunctions),
+          dependencies: normalize(data.dependencies),
+          designPatterns: normalize(data.designPatterns),
+          dataFlow: normalize(data.dataFlow),
+          risks: normalize(data.risks),
+          improvements: normalize(data.improvements),
+          relatedFiles: normalize(data.relatedFiles),
+          bestPractices: normalize(data.bestPractices),
         };
 
-        // Update frontend cache state
-        setAiCache((prev) => ({
-          ...prev,
-          [cacheKey]: result,
-        }));
+        // =====================================================
+        // 5. UPDATE MEMORY CACHE
+        // =====================================================
 
-        // Ignore stale async response if user clicked another file while loading
-        if (activeRequestPathRef.current === file.path) {
+        setAiCache((prev) => {
+          const updatedCache = {
+            ...prev,
+            [cacheKey]: result,
+          };
+
+          // ===================================================
+          // 6. PERSIST CACHE FOR THIS REPOSITORY
+          // ===================================================
+
+          try {
+            sessionStorage.setItem(
+              storageKey,
+              JSON.stringify(updatedCache)
+            );
+
+            console.log(
+              `💾 Frontend AI cache saved: ${filePath}`
+            );
+          } catch (error) {
+            console.warn(
+              "⚠️ Could not save AI cache:",
+              error
+            );
+          }
+
+          return updatedCache;
+        });
+
+        // =====================================================
+        // 7. IGNORE OLD REQUEST
+        // =====================================================
+
+        if (activeRequestPathRef.current === filePath) {
           setAiResult(result);
         }
-      } catch (err) {
-        console.error("AI Analysis Error:", err);
+      } catch (error) {
+        console.error(
+          `❌ AI Analysis Error: ${filePath}`,
+          error
+        );
 
-        if (activeRequestPathRef.current === file.path) {
+        if (activeRequestPathRef.current === filePath) {
           setAiResult({
             purpose: "Unable to analyze this file.",
-            summary: "AI analysis failed.",
+            role: "Unknown",
+            summary:
+              error.response?.data?.message ||
+              "AI analysis failed.",
+
             responsibilities: [],
-            improvements: [],
             workflow: [],
             components: [],
+            importantFunctions: [],
+            dependencies: [],
+            designPatterns: [],
+            dataFlow: [],
+            risks: [],
+            improvements: [],
+            relatedFiles: [],
+            complexity: "N/A",
+            maintainability: "N/A",
+            bestPractices: [],
           });
         }
       } finally {
-        if (activeRequestPathRef.current === file.path) {
+        pendingRequestsRef.current.delete(cacheKey);
+
+        if (activeRequestPathRef.current === filePath) {
           setLoadingAI(false);
         }
       }
     },
-    [repositoryId] // Clean dependencies: analyzeFile won't recreate on every cache hit
+    [repositoryId]
   );
 
   /* ======================================================
@@ -307,7 +463,7 @@ export default function AIFileAnalysis() {
                     </h4>
                     <div className="rounded-xl border bg-slate-50 p-5">
                       <p className="leading-8 text-slate-700">
-                        {aiResult?.purpose || "No purpose available."}
+                        {safeText(aiResult?.purpose) || "No purpose available."}
                       </p>
                     </div>
                   </div>
@@ -317,7 +473,7 @@ export default function AIFileAnalysis() {
                     <h4 className="text-lg font-bold mb-3">🏷️ File Role</h4>
                     <div className="rounded-xl border bg-indigo-50 p-5">
                       <span className="font-semibold">
-                        {aiResult?.role || "Unknown"}
+                        {safeText(aiResult?.role) || "Unknown"}
                       </span>
                     </div>
                   </div>
@@ -329,7 +485,7 @@ export default function AIFileAnalysis() {
                     </h4>
                     <div className="rounded-xl border bg-slate-50 p-5">
                       <p className="leading-8 text-slate-700">
-                        {aiResult?.summary || "No summary available."}
+                        {safeText(aiResult?.summary) || "No summary available."}
                       </p>
                     </div>
                   </div>
@@ -346,7 +502,7 @@ export default function AIFileAnalysis() {
                           className="flex items-start gap-3 border rounded-xl p-4"
                         >
                           <div className="mt-1 h-2 w-2 rounded-full bg-indigo-600 shrink-0" />
-                          <p className="text-slate-700">{item}</p>
+                          <p className="text-slate-700">{safeText(item)}</p>
                         </div>
                       ))}
                     </div>
@@ -367,12 +523,12 @@ export default function AIFileAnalysis() {
                             <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-indigo-600 text-white font-bold">
                               {index + 1}
                             </div>
-                            <p className="text-slate-700 leading-7">{step}</p>
+                            <p className="text-slate-700 leading-7">{safeText(step)}</p>
                           </div>
                         ))
                       ) : (
                         <div className="rounded-xl border p-4 text-slate-500">
-                          {aiResult?.workflow || "No workflow available"}
+                          {safeText(aiResult?.workflow) || "No workflow available"}
                         </div>
                       )}
                     </div>
@@ -395,11 +551,14 @@ export default function AIFileAnalysis() {
                             className="rounded-xl border p-4 hover:border-indigo-300 transition"
                           >
                             <h5 className="font-semibold text-slate-900">
-                              {component.name}
+                              {safeText(component?.name || component)}
                             </h5>
-                            <p className="mt-2 text-sm leading-6 text-slate-600">
-                              {component.description}
-                            </p>
+
+                            {component?.description && (
+                              <p className="mt-2 text-sm leading-6 text-slate-600">
+                                {safeText(component.description)}
+                              </p>
+                            )}
                           </div>
                         ))}
                       </div>
@@ -413,10 +572,15 @@ export default function AIFileAnalysis() {
                     </h4>
                     {(aiResult?.importantFunctions || []).map((fn, index) => (
                       <div key={index} className="border rounded-xl p-4 mb-3">
-                        <div className="font-semibold">{fn.name}</div>
-                        <div className="text-slate-600 mt-2">
-                          {fn.description}
+                        <div className="font-semibold">
+                          {safeText(fn?.name || fn)}
                         </div>
+
+                        {fn?.description && (
+                          <div className="text-slate-600 mt-2">
+                            {safeText(fn.description)}
+                          </div>
+                        )}
                       </div>
                     ))}
                   </div>
@@ -437,7 +601,7 @@ export default function AIFileAnalysis() {
                             key={index}
                             className="rounded-full bg-indigo-100 text-indigo-700 px-4 py-2 text-sm font-medium"
                           >
-                            {item}
+                            {safeText(item)}
                           </span>
                         ))}
                       </div>
@@ -455,7 +619,7 @@ export default function AIFileAnalysis() {
                           key={index}
                           className="px-3 py-2 rounded-full bg-purple-100 text-purple-700 text-sm"
                         >
-                          {item}
+                          {safeText(item)}
                         </span>
                       ))}
                     </div>
@@ -477,7 +641,7 @@ export default function AIFileAnalysis() {
                             key={index}
                             className="rounded-xl border border-orange-200 bg-orange-50 p-4"
                           >
-                            <p className="text-slate-700">{risk}</p>
+                            <p className="text-slate-700">{safeText(risk)}</p>
                           </div>
                         ))}
                       </div>
@@ -493,7 +657,7 @@ export default function AIFileAnalysis() {
                           key={index}
                           className="px-3 py-2 rounded-full bg-slate-100 text-sm"
                         >
-                          {file}
+                          {safeText(file)}
                         </span>
                       ))}
                     </div>
@@ -503,11 +667,11 @@ export default function AIFileAnalysis() {
                   <div className="grid md:grid-cols-2 gap-5 mb-8">
                     <div className="rounded-xl border p-5">
                       <h4 className="font-bold mb-3">Complexity</h4>
-                      <p>{aiResult?.complexity || "N/A"}</p>
+                      <p>{safeText(aiResult?.complexity) || "N/A"}</p>
                     </div>
                     <div className="rounded-xl border p-5">
                       <h4 className="font-bold mb-3">Maintainability</h4>
-                      <p>{aiResult?.maintainability || "N/A"}</p>
+                      <p>{safeText(aiResult?.maintainability) || "N/A"}</p>
                     </div>
                   </div>
 
@@ -527,7 +691,7 @@ export default function AIFileAnalysis() {
                             key={index}
                             className="rounded-xl border bg-emerald-50 p-4 text-emerald-800"
                           >
-                            {item}
+                            {safeText(item)}
                           </div>
                         ))}
                       </div>
@@ -553,7 +717,7 @@ export default function AIFileAnalysis() {
                             <div className="w-8 h-8 rounded-full bg-indigo-600 text-white flex items-center justify-center font-bold shrink-0">
                               {index + 1}
                             </div>
-                            <p className="leading-7 text-slate-700">{item}</p>
+                            <p className="leading-7 text-slate-700">{safeText(item)}</p>
                           </div>
                         ))}
                       </div>

@@ -47,6 +47,40 @@ function getFilePath(file) {
   );
 }
 
+// Safely coerce any AI-returned value (string, number, array, or
+// {name, description}-shaped object) into renderable text. Prevents
+// "Objects are not valid as a React child" crashes when the AI backend
+// returns structured objects instead of plain strings.
+function safeText(value) {
+  if (value == null) return "";
+
+  if (typeof value === "string" || typeof value === "number") {
+    return String(value);
+  }
+
+  if (Array.isArray(value)) {
+    return value.map(safeText).filter(Boolean).join(", ");
+  }
+
+  if (typeof value === "object") {
+    if (value.name && value.description) {
+      return `${value.name}: ${value.description}`;
+    }
+
+    if (value.name) {
+      return String(value.name);
+    }
+
+    if (value.description) {
+      return String(value.description);
+    }
+
+    return JSON.stringify(value);
+  }
+
+  return String(value);
+}
+
 function riskLevel(churn, maxChurn) {
   if (maxChurn === 0) {
     return {
@@ -95,9 +129,7 @@ function BulletList({ items }) {
       {items.map((item, index) => (
         <li key={index} className="flex gap-2 text-sm text-slate-700">
           <span className="text-indigo-500 mt-1">•</span>
-          <span>
-            {typeof item === "string" ? item : JSON.stringify(item)}
-          </span>
+          <span>{safeText(item)}</span>
         </li>
       ))}
     </ul>
@@ -163,7 +195,7 @@ function AIExplanation({ explanation }) {
 
           {role && (
             <span className="ml-auto px-3 py-1 rounded-full bg-white border border-indigo-200 text-xs font-semibold text-indigo-600">
-              {role}
+              {safeText(role)}
             </span>
           )}
         </div>
@@ -174,7 +206,7 @@ function AIExplanation({ explanation }) {
         {purpose && (
           <div>
             <SectionTitle title="Purpose" />
-            <p className="text-sm text-slate-700 leading-relaxed">{purpose}</p>
+            <p className="text-sm text-slate-700 leading-relaxed">{safeText(purpose)}</p>
           </div>
         )}
 
@@ -183,7 +215,7 @@ function AIExplanation({ explanation }) {
           <div>
             <SectionTitle title="Overview" />
             <p className="text-sm text-slate-700 leading-relaxed whitespace-pre-wrap">
-              {summary}
+              {safeText(summary)}
             </p>
           </div>
         )}
@@ -206,7 +238,7 @@ function AIExplanation({ explanation }) {
                   <span className="flex-shrink-0 w-6 h-6 rounded-full bg-indigo-50 text-indigo-600 flex items-center justify-center text-xs font-bold">
                     {index + 1}
                   </span>
-                  <span className="pt-0.5">{item}</span>
+                  <span className="pt-0.5">{safeText(item)}</span>
                 </li>
               ))}
             </ol>
@@ -224,11 +256,13 @@ function AIExplanation({ explanation }) {
                   className="rounded-lg bg-slate-50 border border-slate-100 p-3"
                 >
                   <p className="font-semibold text-sm text-slate-800">
-                    {item.name}
+                    {safeText(item?.name || item)}
                   </p>
-                  <p className="text-sm text-slate-600 mt-1">
-                    {item.description}
-                  </p>
+                  {item?.description && (
+                    <p className="text-sm text-slate-600 mt-1">
+                      {safeText(item.description)}
+                    </p>
+                  )}
                 </div>
               ))}
             </div>
@@ -246,11 +280,13 @@ function AIExplanation({ explanation }) {
                   className="rounded-lg bg-purple-50/50 border border-purple-100 p-3"
                 >
                   <p className="font-semibold text-sm text-slate-800">
-                    {item.name}
+                    {safeText(item?.name || item)}
                   </p>
-                  <p className="text-sm text-slate-600 mt-1">
-                    {item.description}
-                  </p>
+                  {item?.description && (
+                    <p className="text-sm text-slate-600 mt-1">
+                      {safeText(item.description)}
+                    </p>
+                  )}
                 </div>
               ))}
             </div>
@@ -267,7 +303,7 @@ function AIExplanation({ explanation }) {
                   key={index}
                   className="px-3 py-1.5 rounded-lg bg-slate-100 text-slate-700 text-xs font-medium"
                 >
-                  {item}
+                  {safeText(item)}
                 </span>
               ))}
             </div>
@@ -290,7 +326,7 @@ function AIExplanation({ explanation }) {
               {dataFlow.map((item, index) => (
                 <li key={index} className="flex gap-3 text-sm text-slate-700">
                   <span className="text-indigo-600 font-bold">→</span>
-                  <span>{item}</span>
+                  <span>{safeText(item)}</span>
                 </li>
               ))}
             </ol>
@@ -303,21 +339,21 @@ function AIExplanation({ explanation }) {
             <SectionTitle title="Risk Analysis" />
             {risk && (
               <div className="flex items-center gap-2 mb-3">
-                {String(risk).toLowerCase() === "high" ? (
+                {String(safeText(risk)).toLowerCase() === "high" ? (
                   <AlertTriangle size={18} className="text-red-500" />
                 ) : (
                   <CheckCircle2 size={18} className="text-emerald-500" />
                 )}
                 <span
                   className={`px-3 py-1 rounded-full text-xs font-semibold ${
-                    String(risk).toLowerCase() === "high"
+                    String(safeText(risk)).toLowerCase() === "high"
                       ? "bg-red-50 text-red-600"
-                      : String(risk).toLowerCase() === "medium"
+                      : String(safeText(risk)).toLowerCase() === "medium"
                       ? "bg-amber-50 text-amber-600"
                       : "bg-emerald-50 text-emerald-600"
                   }`}
                 >
-                  {risk}
+                  {safeText(risk)}
                 </span>
               </div>
             )}
@@ -345,7 +381,7 @@ function AIExplanation({ explanation }) {
                   key={index}
                   className="px-3 py-1.5 rounded-lg bg-blue-50 text-blue-700 text-xs font-medium"
                 >
-                  {item}
+                  {safeText(item)}
                 </span>
               ))}
             </div>
@@ -360,7 +396,7 @@ function AIExplanation({ explanation }) {
                 <p className="text-xs font-semibold uppercase tracking-wide text-indigo-600 mb-2">
                   Complexity
                 </p>
-                <p className="text-sm text-slate-700">{complexity}</p>
+                <p className="text-sm text-slate-700">{safeText(complexity)}</p>
               </div>
             )}
 
@@ -369,7 +405,7 @@ function AIExplanation({ explanation }) {
                 <p className="text-xs font-semibold uppercase tracking-wide text-indigo-600 mb-2">
                   Maintainability
                 </p>
-                <p className="text-sm text-slate-700">{maintainability}</p>
+                <p className="text-sm text-slate-700">{safeText(maintainability)}</p>
               </div>
             )}
           </div>

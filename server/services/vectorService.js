@@ -3,7 +3,7 @@ const path = require("path");
 const { addDocument, isRepositoryIndexed } = require("./ragService");
 
 // Schema version for RAG indices
-const INDEX_VERSION = "v2";
+const INDEX_VERSION = "v3-gemini-embedding-2";
 
 // ==========================================
 // Directories to ignore

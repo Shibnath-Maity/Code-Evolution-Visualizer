@@ -4,7 +4,6 @@ import {
   Search,
   AlertTriangle,
   FileCode2,
-  GitCommit,
   ShieldCheck,
   Wrench,
   Copy,
@@ -18,18 +17,13 @@ import {
   RefreshCw,
   BookOpen,
   History,
-  Cpu,
   Layers,
-  ArrowRight,
   TrendingDown,
   Info,
-  ExternalLink,
   Code2,
   Activity,
   FileCheck2,
   HelpCircle,
-  BarChart2,
-  GitBranch,
 } from "lucide-react";
 import axios from "axios";
 import IssueSolver from "../components/IssueSolver";
@@ -37,22 +31,30 @@ import { useAnalysis } from "../context/AnalysisContext";
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || "http://localhost:5000";
 
+// ---------------------------------------------------------------------------
+// Design tokens
+// Panel: near-black instrument-console background, phosphor-amber accent
+// (instead of the usual acid-green), mono type for data, grotesk for UI copy.
+// Requires "JetBrains Mono" + "Inter" loaded (e.g. via a <link> in index.html
+// or @font-face) — falls back to system mono/sans if unavailable.
+// ---------------------------------------------------------------------------
+
 const SEVERITY_STYLES = {
-  Critical: "bg-rose-50 text-rose-700 ring-rose-600/20 border-rose-200",
-  High: "bg-red-50 text-red-700 ring-red-600/20 border-red-200",
-  Medium: "bg-amber-50 text-amber-700 ring-amber-600/20 border-amber-200",
-  Low: "bg-slate-100 text-slate-700 ring-slate-500/20 border-slate-200",
+  Critical: "bg-[#2A1216] text-[#FF6B6B] ring-[#FF6B6B]/30 border-[#3A181C]",
+  High: "bg-[#2A1710] text-[#FF8A5D] ring-[#FF8A5D]/30 border-[#3A1F14]",
+  Medium: "bg-[#2A2110] text-[#FFB020] ring-[#FFB020]/30 border-[#3A2C14]",
+  Low: "bg-[#161A24] text-[#8A93A8] ring-[#8A93A8]/20 border-[#232838]",
 };
 
 const CATEGORY_ICONS = {
-  "Runtime Error": { icon: AlertTriangle, color: "text-amber-500 bg-amber-50" },
-  "Null Pointer": { icon: Bug, color: "text-rose-500 bg-rose-50" },
-  "Syntax Error": { icon: Code2, color: "text-purple-500 bg-purple-50" },
-  "Build Error": { icon: Wrench, color: "text-indigo-500 bg-indigo-50" },
-  "Dependency Error": { icon: Layers, color: "text-blue-500 bg-blue-50" },
-  "Memory Leak": { icon: Activity, color: "text-red-500 bg-red-50" },
-  "Performance Issue": { icon: TrendingDown, color: "text-orange-500 bg-orange-50" },
-  "Security Issue": { icon: ShieldCheck, color: "text-emerald-500 bg-emerald-50" },
+  "Runtime Error": { icon: AlertTriangle, color: "text-[#FFB020] bg-[#2A2110]" },
+  "Null Pointer": { icon: Bug, color: "text-[#FF6B6B] bg-[#2A1216]" },
+  "Syntax Error": { icon: Code2, color: "text-[#C792FF] bg-[#1F1729]" },
+  "Build Error": { icon: Wrench, color: "text-[#6FA8FF] bg-[#111C2E]" },
+  "Dependency Error": { icon: Layers, color: "text-[#6FA8FF] bg-[#111C2E]" },
+  "Memory Leak": { icon: Activity, color: "text-[#FF6B6B] bg-[#2A1216]" },
+  "Performance Issue": { icon: TrendingDown, color: "text-[#FF8A5D] bg-[#2A1710]" },
+  "Security Issue": { icon: ShieldCheck, color: "text-[#5FD9A0] bg-[#0F241C]" },
 };
 
 const LOADING_STEPS = [
@@ -66,41 +68,96 @@ const LOADING_STEPS = [
   "Generating unified diff patch...",
 ];
 
+// One shared stylesheet for the panel's signature motion: a slow traveling
+// scan-line across the header trace, and a soft phosphor glow used on the
+// primary CTA and active tab indicator. Kept minimal and deliberate.
+function PanelStyles() {
+  return (
+    <style>{`
+      @keyframes dc-trace {
+        0% { stroke-dashoffset: 240; }
+        100% { stroke-dashoffset: 0; }
+      }
+      @keyframes dc-scan {
+        0% { transform: translateX(-100%); opacity: 0; }
+        10% { opacity: 1; }
+        90% { opacity: 1; }
+        100% { transform: translateX(100%); opacity: 0; }
+      }
+      @keyframes dc-blink {
+        0%, 100% { opacity: 1; }
+        50% { opacity: 0; }
+      }
+      .dc-trace-line {
+        stroke-dasharray: 6 6;
+        animation: dc-trace 6s linear infinite;
+      }
+      .dc-scan-sweep {
+        animation: dc-scan 2.4s ease-in-out infinite;
+      }
+      .dc-cursor {
+        animation: dc-blink 1s step-end infinite;
+      }
+      @media (prefers-reduced-motion: reduce) {
+        .dc-trace-line, .dc-scan-sweep, .dc-cursor { animation: none; }
+      }
+    `}</style>
+  );
+}
+
+function TraceDivider() {
+  return (
+    <svg viewBox="0 0 400 16" className="w-full h-4" preserveAspectRatio="none" aria-hidden="true">
+      <line
+        x1="0" y1="8" x2="400" y2="8"
+        stroke="#FFB020" strokeOpacity="0.35" strokeWidth="1"
+        className="dc-trace-line"
+      />
+    </svg>
+  );
+}
+
 function EmptyState() {
   return (
-    <div className="bg-white rounded-xl shadow-sm ring-1 ring-slate-900/5 p-10 text-center max-w-2xl mx-auto">
-      <div className="mx-auto w-14 h-14 rounded-full bg-indigo-50 flex items-center justify-center mb-4">
-        <Sparkles className="text-indigo-600" size={26} />
+    <div className="bg-[#0F1420] rounded-xl ring-1 ring-[#232838] p-10 text-center max-w-2xl mx-auto relative overflow-hidden">
+      <div className="mx-auto w-14 h-14 rounded-full bg-[#2A2110] flex items-center justify-center mb-4 ring-1 ring-[#FFB020]/20">
+        <Sparkles className="text-[#FFB020]" size={26} />
       </div>
-      <h3 className="text-slate-900 font-bold text-xl mb-2">AI Bug Solver & Diagnostic Center</h3>
-      <p className="text-slate-500 text-sm mb-6">
+      <p className="font-mono text-[10px] tracking-[0.2em] text-[#7C879C] uppercase mb-2">
+        debug://idle — awaiting input
+      </p>
+      <h3 className="text-[#E8ECF4] font-bold text-xl mb-2">AI Bug Solver &amp; Diagnostic Center</h3>
+      <p className="text-[#8891A6] text-sm mb-6">
         Paste an error trace, runtime exception, or build log to trigger deep repository analysis.
       </p>
 
       {/* Supported Tech Badges */}
       <div className="mb-6 flex flex-wrap justify-center gap-2">
         {["JavaScript", "TypeScript", "React", "Node.js", "Python", "Java", "Spring Boot", "C++", "Stack Traces", "Build Logs"].map((tech) => (
-          <span key={tech} className="bg-slate-100 text-slate-600 text-xs px-2.5 py-1 rounded-md font-medium">
+          <span
+            key={tech}
+            className="bg-[#161A24] text-[#8891A6] text-xs px-2.5 py-1 rounded-md font-mono ring-1 ring-[#232838]"
+          >
             {tech}
           </span>
         ))}
       </div>
 
-      <div className="bg-slate-50 rounded-lg p-5 text-left ring-1 ring-slate-900/5 grid sm:grid-cols-2 gap-4">
+      <div className="bg-[#0B0E14] rounded-lg p-5 text-left ring-1 ring-[#232838] grid sm:grid-cols-2 gap-4">
         <div>
-          <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">Automated Checks:</p>
-          <ul className="space-y-2 text-xs text-slate-700 font-medium">
-            <li className="flex items-center gap-2"><Check size={14} className="text-emerald-500" /> Root Cause & Call Stack Parsing</li>
-            <li className="flex items-center gap-2"><Check size={14} className="text-emerald-500" /> Vector Similarity against Past Bugs</li>
-            <li className="flex items-center gap-2"><Check size={14} className="text-emerald-500" /> Historical Git Commit Tracing</li>
+          <p className="text-[10px] font-mono font-semibold text-[#5FD9A0] uppercase tracking-[0.15em] mb-2">Automated Checks</p>
+          <ul className="space-y-2 text-xs text-[#C4CAD9] font-medium">
+            <li className="flex items-center gap-2"><Check size={14} className="text-[#5FD9A0]" /> Root Cause &amp; Call Stack Parsing</li>
+            <li className="flex items-center gap-2"><Check size={14} className="text-[#5FD9A0]" /> Vector Similarity against Past Bugs</li>
+            <li className="flex items-center gap-2"><Check size={14} className="text-[#5FD9A0]" /> Historical Git Commit Tracing</li>
           </ul>
         </div>
         <div>
-          <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">Fix Deliverables:</p>
-          <ul className="space-y-2 text-xs text-slate-700 font-medium">
-            <li className="flex items-center gap-2"><Check size={14} className="text-emerald-500" /> Unified Code Diff (.diff download)</li>
-            <li className="flex items-center gap-2"><Check size={14} className="text-emerald-500" /> Risk & Impact Assessment</li>
-            <li className="flex items-center gap-2"><Check size={14} className="text-emerald-500" /> "Why This Fix Works" Educational Guide</li>
+          <p className="text-[10px] font-mono font-semibold text-[#FFB020] uppercase tracking-[0.15em] mb-2">Fix Deliverables</p>
+          <ul className="space-y-2 text-xs text-[#C4CAD9] font-medium">
+            <li className="flex items-center gap-2"><Check size={14} className="text-[#5FD9A0]" /> Unified Code Diff (.diff download)</li>
+            <li className="flex items-center gap-2"><Check size={14} className="text-[#5FD9A0]" /> Risk &amp; Impact Assessment</li>
+            <li className="flex items-center gap-2"><Check size={14} className="text-[#5FD9A0]" /> "Why This Fix Works" Educational Guide</li>
           </ul>
         </div>
       </div>
@@ -108,13 +165,16 @@ function EmptyState() {
   );
 }
 
-function MetricCard({ title, value, subtext, icon: Icon, colorClass }) {
+function MetricCard({ title, value, subtext, icon: Icon, colorClass, ledClass }) {
   return (
-    <div className="bg-white rounded-xl shadow-sm ring-1 ring-slate-900/5 p-4 flex items-center justify-between">
+    <div className="bg-[#0F1420] rounded-xl ring-1 ring-[#232838] p-4 flex items-center justify-between">
       <div>
-        <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1">{title}</p>
-        <p className="text-xl font-bold text-slate-900">{value}</p>
-        {subtext && <p className="text-xs text-slate-500 mt-0.5">{subtext}</p>}
+        <p className="text-[10px] font-mono font-semibold text-[#7C879C] uppercase tracking-[0.15em] mb-1.5 flex items-center gap-1.5">
+          <span className={`w-1.5 h-1.5 rounded-full ${ledClass || "bg-[#5FD9A0]"}`} />
+          {title}
+        </p>
+        <p className="text-xl font-bold text-[#E8ECF4] font-mono">{value}</p>
+        {subtext && <p className="text-xs text-[#7C879C] mt-0.5">{subtext}</p>}
       </div>
       <div className={`p-3 rounded-lg ${colorClass}`}>
         <Icon size={22} />
@@ -340,7 +400,7 @@ export default function DebugCenter() {
 
   const resData = result?.data;
   const categoryMeta =
-    CATEGORY_ICONS[resData?.bugType] || { icon: AlertTriangle, color: "text-indigo-500 bg-indigo-50" };
+    CATEGORY_ICONS[resData?.bugType] || { icon: AlertTriangle, color: "text-[#FFB020] bg-[#2A2110]" };
   const CategoryIcon = categoryMeta.icon;
 
   // Only render evidence the backend actually returned — never
@@ -403,27 +463,42 @@ ${learnTakeaway || "Not available."}
 `.trim();
   };
 
+  const severityLed =
+    resData?.severity === "Critical" || resData?.severity === "High"
+      ? "bg-[#FF6B6B]"
+      : resData?.severity === "Low"
+      ? "bg-[#7C879C]"
+      : "bg-[#FFB020]";
+
   return (
-    <div className="min-h-screen bg-slate-50 p-6">
+    <div className="min-h-screen bg-[#0B0E14] p-6 font-sans" style={{ fontFamily: "'Inter', ui-sans-serif, system-ui, sans-serif" }}>
+      <PanelStyles />
+
       {/* Header */}
-      <div className="mb-8">
-        <h1 className="text-3xl font-bold flex items-center gap-3 text-slate-900">
-          <Bug className="text-red-500" size={32} />
+      <div className="mb-6">
+        <p className="font-mono text-[11px] tracking-[0.25em] text-[#FFB020] uppercase mb-2">
+          debug://root-cause-analysis
+        </p>
+        <h1 className="text-3xl font-bold flex items-center gap-3 text-[#E8ECF4]">
+          <span className="p-2 rounded-lg bg-[#2A1216] ring-1 ring-[#FF6B6B]/20">
+            <Bug className="text-[#FF6B6B]" size={26} />
+          </span>
           Debug Center
         </h1>
-        <p className="text-slate-600 mt-2">
+        <p className="text-[#8891A6] mt-2 text-sm">
           Autonomous root cause analysis, stack tracing, and patch generation.
         </p>
+        <TraceDivider />
       </div>
 
-      {/* Main Tabs */}
-      <div className="flex gap-4 mb-6">
+      {/* Main Tabs — segmented channel selector */}
+      <div className="inline-flex gap-1 mb-6 p-1 rounded-lg bg-[#0F1420] ring-1 ring-[#232838]">
         <button
           onClick={() => setActiveTab("bug")}
-          className={`px-5 py-2 rounded-lg font-medium transition ${
+          className={`px-5 py-2 rounded-md font-medium text-sm transition-colors font-mono ${
             activeTab === "bug"
-              ? "bg-indigo-600 text-white"
-              : "bg-white text-slate-700 border hover:bg-slate-50"
+              ? "bg-[#FFB020] text-[#0B0E14] shadow-[0_0_16px_rgba(255,176,32,0.35)]"
+              : "text-[#8891A6] hover:text-[#C4CAD9]"
           }`}
         >
           Bug Solver
@@ -431,10 +506,10 @@ ${learnTakeaway || "Not available."}
 
         <button
           onClick={() => setActiveTab("issue")}
-          className={`px-5 py-2 rounded-lg font-medium transition ${
+          className={`px-5 py-2 rounded-md font-medium text-sm transition-colors font-mono ${
             activeTab === "issue"
-              ? "bg-indigo-600 text-white"
-              : "bg-white text-slate-700 border hover:bg-slate-50"
+              ? "bg-[#FFB020] text-[#0B0E14] shadow-[0_0_16px_rgba(255,176,32,0.35)]"
+              : "text-[#8891A6] hover:text-[#C4CAD9]"
           }`}
         >
           GitHub Issue Solver
@@ -444,7 +519,7 @@ ${learnTakeaway || "Not available."}
       {activeTab === "bug" ? (
         <>
           {/* Main Input Box */}
-          <div className="bg-white rounded-xl shadow-sm ring-1 ring-slate-900/5 p-6 mb-6">
+          <div className="bg-[#0F1420] rounded-xl ring-1 ring-[#232838] p-6 mb-6">
             <div className="relative flex flex-col sm:flex-row gap-3 items-start">
               <div className="relative w-full">
                 <textarea
@@ -455,14 +530,14 @@ ${learnTakeaway || "Not available."}
                   onChange={handleInputChange}
                   onKeyDown={handleKeyDown}
                   placeholder="Paste stack traces, exception messages, runtime errors, or build logs... (Ctrl + Enter to analyze)"
-                  className="w-full border border-slate-300 rounded-lg pl-4 pr-10 py-3 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition-shadow font-mono text-sm resize-y disabled:bg-slate-100 disabled:text-slate-500"
+                  className="w-full bg-[#0B0E14] border border-[#232838] text-[#E8ECF4] placeholder:text-[#5A6376] rounded-lg pl-4 pr-10 py-3 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#FFB020] focus:border-[#FFB020] transition-shadow font-mono text-sm resize-y disabled:bg-[#0F1420] disabled:text-[#5A6376]"
                 />
 
                 {error && !loading && (
                   <button
                     onClick={handleClearAll}
                     title="Clear input and reset view"
-                    className="absolute top-3 right-3 text-slate-400 hover:text-slate-600 p-1 rounded-md transition-colors"
+                    className="absolute top-3 right-3 text-[#5A6376] hover:text-[#C4CAD9] p-1 rounded-md transition-colors"
                   >
                     <Trash2 size={16} />
                   </button>
@@ -472,7 +547,7 @@ ${learnTakeaway || "Not available."}
               <button
                 onClick={handleAnalyze}
                 disabled={loading || !error.trim()}
-                className="w-full sm:w-auto self-stretch sm:self-auto bg-indigo-600 hover:bg-indigo-700 disabled:bg-indigo-300 disabled:cursor-not-allowed text-white px-6 py-3 sm:py-0 rounded-lg flex items-center justify-center gap-2 font-medium transition-colors shrink-0"
+                className="w-full sm:w-auto self-stretch sm:self-auto bg-[#FFB020] hover:bg-[#FFC352] disabled:bg-[#3A2F1A] disabled:text-[#5A6376] disabled:cursor-not-allowed text-[#0B0E14] px-6 py-3 sm:py-0 rounded-lg flex items-center justify-center gap-2 font-semibold font-mono transition-colors shrink-0 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#FFB020] focus-visible:ring-offset-2 focus-visible:ring-offset-[#0F1420]"
               >
                 {loading ? (
                   <>
@@ -490,11 +565,11 @@ ${learnTakeaway || "Not available."}
 
             {/* Input dirty indicator */}
             {isDirty && result && !loading && (
-              <div className="mt-3 flex items-center justify-between text-xs text-amber-800 bg-amber-50 ring-1 ring-amber-500/20 rounded-lg px-3 py-2">
+              <div className="mt-3 flex items-center justify-between text-xs text-[#FFB020] bg-[#2A2110] ring-1 ring-[#FFB020]/20 rounded-lg px-3 py-2">
                 <span>Input trace changed. Re-analyze to refresh diagnosis.</span>
                 <button
                   onClick={handleAnalyze}
-                  className="font-semibold underline hover:text-amber-900 flex items-center gap-1"
+                  className="font-semibold underline hover:text-[#FFC352] flex items-center gap-1"
                 >
                   <RefreshCw size={12} /> Refresh
                 </button>
@@ -503,10 +578,10 @@ ${learnTakeaway || "Not available."}
 
             {/* Error Banner */}
             {failMsg && (
-              <div className="mt-3 flex items-center gap-2 text-sm text-red-700 bg-red-50 ring-1 ring-red-600/20 rounded-lg px-3 py-2">
+              <div className="mt-3 flex items-center gap-2 text-sm text-[#FF8A8A] bg-[#2A1216] ring-1 ring-[#FF6B6B]/20 rounded-lg px-3 py-2">
                 <AlertTriangle size={16} className="shrink-0" />
                 <span className="flex-1">{failMsg}</span>
-                <button onClick={() => setFailMsg("")} className="text-red-500 hover:text-red-700 p-1">
+                <button onClick={() => setFailMsg("")} className="text-[#FF8A8A] hover:text-[#FFB3B3] p-1">
                   <X size={14} />
                 </button>
               </div>
@@ -516,7 +591,7 @@ ${learnTakeaway || "Not available."}
           {/* Recent History Pills */}
           {history.length > 0 && (
             <div className="mb-6 flex items-center gap-2 overflow-x-auto pb-2 text-xs">
-              <span className="flex items-center gap-1 text-slate-400 font-semibold uppercase tracking-wider shrink-0">
+              <span className="flex items-center gap-1 text-[#5A6376] font-mono font-semibold uppercase tracking-wider shrink-0">
                 <History size={14} /> Recent:
               </span>
               {history.map((item) => (
@@ -525,8 +600,8 @@ ${learnTakeaway || "Not available."}
                   onClick={() => restoreFromHistory(item)}
                   className={`shrink-0 px-3 py-1.5 rounded-full border transition font-mono max-w-[200px] truncate ${
                     result?.id === item.id
-                      ? "bg-indigo-50 border-indigo-300 text-indigo-700 font-medium"
-                      : "bg-white border-slate-200 text-slate-600 hover:bg-slate-100"
+                      ? "bg-[#2A2110] border-[#FFB020]/40 text-[#FFB020] font-medium"
+                      : "bg-[#0F1420] border-[#232838] text-[#8891A6] hover:bg-[#161A24]"
                   }`}
                 >
                   {item.data.bugType || "Exception"} ({item.timestamp})
@@ -537,35 +612,47 @@ ${learnTakeaway || "Not available."}
 
           {!result && !loading && <EmptyState />}
 
-          {/* Progressive Reasoning Animation */}
+          {/* Progressive Reasoning Animation — terminal boot sequence */}
           {loading && (
-            <div className="bg-white rounded-xl shadow-sm ring-1 ring-slate-900/5 p-8 max-w-lg mx-auto">
-              <div className="flex items-center gap-3 mb-6">
-                <Loader2 className="animate-spin text-indigo-600 shrink-0" size={24} />
-                <h3 className="font-medium text-slate-800">AI Reasoning Steps</h3>
+            <div className="bg-[#0F1420] rounded-xl ring-1 ring-[#232838] p-8 max-w-lg mx-auto relative overflow-hidden">
+              <div className="flex items-center gap-3 mb-2">
+                <span className="w-2 h-2 rounded-full bg-[#FFB020] dc-cursor" />
+                <h3 className="font-mono text-sm text-[#C4CAD9] tracking-wide">AI REASONING SEQUENCE</h3>
               </div>
 
-              <div className="space-y-3">
+              {/* segmented progress trace synced to the active step */}
+              <div className="flex gap-1 mb-6 mt-4">
+                {LOADING_STEPS.map((_, idx) => (
+                  <div
+                    key={idx}
+                    className={`h-1 flex-1 rounded-full transition-colors duration-300 ${
+                      idx <= loadingStepIdx ? "bg-[#FFB020]" : "bg-[#232838]"
+                    }`}
+                  />
+                ))}
+              </div>
+
+              <div className="space-y-3 font-mono">
                 {LOADING_STEPS.map((step, idx) => {
                   const isDone = idx < loadingStepIdx;
                   const isCurrent = idx === loadingStepIdx;
 
                   return (
-                    <div key={step} className="flex items-center gap-3 text-sm">
+                    <div key={step} className="flex items-center gap-3 text-xs">
                       {isDone ? (
-                        <Check size={16} className="text-emerald-500 shrink-0" />
+                        <Check size={14} className="text-[#5FD9A0] shrink-0" />
                       ) : isCurrent ? (
-                        <Loader2 size={16} className="animate-spin text-indigo-500 shrink-0" />
+                        <Loader2 size={14} className="animate-spin text-[#FFB020] shrink-0" />
                       ) : (
-                        <div className="w-4 h-4 rounded-full border border-slate-200 shrink-0" />
+                        <div className="w-3.5 h-3.5 rounded-full border border-[#232838] shrink-0" />
                       )}
                       <span
                         className={
                           isDone
-                            ? "text-slate-400 line-through"
+                            ? "text-[#5A6376] line-through"
                             : isCurrent
-                            ? "text-indigo-600 font-medium"
-                            : "text-slate-400"
+                            ? "text-[#FFB020]"
+                            : "text-[#5A6376]"
                         }
                       >
                         {step}
@@ -574,12 +661,15 @@ ${learnTakeaway || "Not available."}
                   );
                 })}
               </div>
+
+              {/* ambient scanline sweeping the panel */}
+              <div className="pointer-events-none absolute inset-y-0 left-0 w-24 bg-gradient-to-r from-transparent via-[#FFB020]/5 to-transparent dc-scan-sweep" />
             </div>
           )}
 
           {/* Analysis Results View */}
           {result && !loading && resData && (
-            <div ref={resultRef} className="space-y-6 animate-in fade-in duration-300">
+            <div ref={resultRef} className="space-y-6">
               {/* TOP METRICS ROW */}
               <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                 <MetricCard
@@ -588,36 +678,44 @@ ${learnTakeaway || "Not available."}
                   subtext={resData.file ? `In ${resData.file.split("/").pop()}` : "Global Scope"}
                   icon={CategoryIcon}
                   colorClass={categoryMeta.color}
+                  ledClass="bg-[#6FA8FF]"
                 />
                 <MetricCard
                   title="Severity"
                   value={resData.severity || "Medium"}
                   subtext="Impact Score"
                   icon={AlertTriangle}
-                  colorClass={resData.severity === "Critical" ? "text-rose-600 bg-rose-50" : "text-amber-600 bg-amber-50"}
+                  colorClass={
+                    resData.severity === "Critical" || resData.severity === "High"
+                      ? "text-[#FF6B6B] bg-[#2A1216]"
+                      : "text-[#FFB020] bg-[#2A2110]"
+                  }
+                  ledClass={severityLed}
                 />
                 <MetricCard
                   title="AI Confidence"
                   value={`${resData.confidence ?? 0}%`}
                   subtext="Certainty Score"
                   icon={ShieldCheck}
-                  colorClass="text-emerald-600 bg-emerald-50"
+                  colorClass="text-[#5FD9A0] bg-[#0F241C]"
+                  ledClass="bg-[#5FD9A0]"
                 />
                 <MetricCard
                   title="Processing Time"
                   value={`${(responseTime / 1000).toFixed(1)}s`}
                   subtext={`Model: ${result.model}`}
                   icon={Zap}
-                  colorClass="text-indigo-600 bg-indigo-50"
+                  colorClass="text-[#FFB020] bg-[#2A2110]"
+                  ledClass="bg-[#FFB020]"
                 />
               </div>
 
               {/* ACTION TOOLBAR */}
-              <div className="bg-white rounded-xl p-4 ring-1 ring-slate-900/5 flex flex-wrap items-center justify-between gap-3 text-sm">
+              <div className="bg-[#0F1420] rounded-xl p-4 ring-1 ring-[#232838] flex flex-wrap items-center justify-between gap-3 text-sm">
                 <div className="flex items-center gap-2">
-                  <span className="font-semibold text-slate-800">Quick Actions:</span>
+                  <span className="font-mono font-semibold text-[#C4CAD9] text-xs uppercase tracking-wider">Quick Actions</span>
                   {copyStatus && (
-                    <span className="text-xs bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded font-medium animate-in fade-in">
+                    <span className="text-xs bg-[#0F241C] text-[#5FD9A0] px-2 py-0.5 rounded font-medium">
                       ✓ Copied {copyStatus}
                     </span>
                   )}
@@ -626,25 +724,25 @@ ${learnTakeaway || "Not available."}
                 <div className="flex flex-wrap items-center gap-2">
                   <button
                     onClick={() => handleCopyToClipboard(resData.fix || "", "Fix Description")}
-                    className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg font-medium text-xs flex items-center gap-1.5 transition"
+                    className="px-3 py-1.5 bg-[#161A24] hover:bg-[#1E2433] text-[#C4CAD9] rounded-lg font-medium text-xs flex items-center gap-1.5 transition ring-1 ring-[#232838]"
                   >
                     <Copy size={13} /> Copy Fix
                   </button>
                   <button
                     onClick={() => handleCopyToClipboard(resData.rootCause || "", "Root Cause")}
-                    className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg font-medium text-xs flex items-center gap-1.5 transition"
+                    className="px-3 py-1.5 bg-[#161A24] hover:bg-[#1E2433] text-[#C4CAD9] rounded-lg font-medium text-xs flex items-center gap-1.5 transition ring-1 ring-[#232838]"
                   >
                     <Copy size={13} /> Copy Root Cause
                   </button>
                   <button
                     onClick={() => handleCopyToClipboard(generateFullReportMarkdown(), "Full Report")}
-                    className="px-3 py-1.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 rounded-lg font-medium text-xs flex items-center gap-1.5 transition"
+                    className="px-3 py-1.5 bg-[#2A2110] hover:bg-[#3A2C14] text-[#FFB020] rounded-lg font-medium text-xs flex items-center gap-1.5 transition ring-1 ring-[#FFB020]/20"
                   >
                     <FileCheck2 size={13} /> Copy Full Markdown Report
                   </button>
                   <button
                     onClick={downloadPatchFile}
-                    className="px-3 py-1.5 bg-slate-900 hover:bg-slate-800 text-white rounded-lg font-medium text-xs flex items-center gap-1.5 transition"
+                    className="px-3 py-1.5 bg-[#FFB020] hover:bg-[#FFC352] text-[#0B0E14] rounded-lg font-semibold text-xs flex items-center gap-1.5 transition"
                   >
                     <Download size={13} /> Download Patch (.diff)
                   </button>
@@ -652,7 +750,7 @@ ${learnTakeaway || "Not available."}
               </div>
 
               {/* SECTION NAVIGATION TABS */}
-              <div className="border-b border-slate-200 flex gap-6 text-sm font-medium">
+              <div className="border-b border-[#232838] flex gap-6 text-sm font-medium font-mono overflow-x-auto">
                 {[
                   { id: "overview", label: "Overview & Causes" },
                   { id: "stack", label: "Stack Trace Breakdown" },
@@ -663,10 +761,10 @@ ${learnTakeaway || "Not available."}
                   <button
                     key={tab.id}
                     onClick={() => setResultTab(tab.id)}
-                    className={`pb-3 border-b-2 transition ${
+                    className={`pb-3 border-b-2 transition whitespace-nowrap ${
                       resultTab === tab.id
-                        ? "border-indigo-600 text-indigo-600 font-semibold"
-                        : "border-transparent text-slate-500 hover:text-slate-800"
+                        ? "border-[#FFB020] text-[#FFB020] font-semibold"
+                        : "border-transparent text-[#7C879C] hover:text-[#C4CAD9]"
                     }`}
                   >
                     {tab.label}
@@ -678,64 +776,64 @@ ${learnTakeaway || "Not available."}
               {resultTab === "overview" && (
                 <div className="grid lg:grid-cols-3 gap-6">
                   {/* Root Cause Card */}
-                  <div className="lg:col-span-2 bg-white rounded-xl ring-1 ring-slate-900/5 p-6">
-                    <h2 className="font-semibold text-lg text-slate-900 flex items-center gap-2 mb-4">
-                      <ShieldCheck className="text-emerald-600" size={20} /> Root Cause Analysis
+                  <div className="lg:col-span-2 bg-[#0F1420] rounded-xl ring-1 ring-[#232838] p-6">
+                    <h2 className="font-semibold text-lg text-[#E8ECF4] flex items-center gap-2 mb-4">
+                      <ShieldCheck className="text-[#5FD9A0]" size={20} /> Root Cause Analysis
                     </h2>
-                    <p className="text-slate-700 leading-relaxed text-sm whitespace-pre-line">
+                    <p className="text-[#C4CAD9] leading-relaxed text-sm whitespace-pre-line">
                       {resData.rootCause || "No root cause details provided."}
                     </p>
 
-                    <div className="mt-6 pt-6 border-t border-slate-100">
-                      <h3 className="font-medium text-sm text-slate-900 mb-2">Recommended Fix Action</h3>
-                      <p className="text-slate-600 text-sm leading-relaxed">{resData.fix}</p>
+                    <div className="mt-6 pt-6 border-t border-[#232838]">
+                      <h3 className="font-medium text-sm text-[#E8ECF4] mb-2">Recommended Fix Action</h3>
+                      <p className="text-[#8891A6] text-sm leading-relaxed">{resData.fix}</p>
                     </div>
                   </div>
 
                   {/* Confidence Breakdown Sidebar */}
-                  <div className="bg-white rounded-xl ring-1 ring-slate-900/5 p-6 space-y-6">
+                  <div className="bg-[#0F1420] rounded-xl ring-1 ring-[#232838] p-6 space-y-6">
                     <div>
-                      <h3 className="font-semibold text-sm text-slate-900 mb-3 flex items-center gap-1.5">
-                        <Info size={16} className="text-indigo-600" /> Confidence Breakdown
+                      <h3 className="font-semibold text-sm text-[#E8ECF4] mb-3 flex items-center gap-1.5">
+                        <Info size={16} className="text-[#FFB020]" /> Confidence Breakdown
                       </h3>
                       {confidenceReasons.length > 0 ? (
                         <div className="space-y-2">
                           {confidenceReasons.map((reason, idx) => (
-                            <div key={idx} className="flex items-start gap-2 text-xs text-slate-600">
-                              <Check size={14} className="text-emerald-500 shrink-0 mt-0.5" />
+                            <div key={idx} className="flex items-start gap-2 text-xs text-[#8891A6]">
+                              <Check size={14} className="text-[#5FD9A0] shrink-0 mt-0.5" />
                               <span>{reason}</span>
                             </div>
                           ))}
                         </div>
                       ) : (
-                        <p className="text-xs text-slate-500">
+                        <p className="text-xs text-[#5A6376]">
                           No additional confidence evidence was returned.
                         </p>
                       )}
                     </div>
 
-                    <div className="pt-4 border-t border-slate-100">
-                      <h3 className="font-semibold text-sm text-slate-900 mb-2">Fix Risk Assessment</h3>
+                    <div className="pt-4 border-t border-[#232838]">
+                      <h3 className="font-semibold text-sm text-[#E8ECF4] mb-2">Fix Risk Assessment</h3>
                       {riskAssessment ? (
-                        <div className="bg-slate-50 p-3 rounded-lg ring-1 ring-slate-900/5 text-xs space-y-1.5">
+                        <div className="bg-[#0B0E14] p-3 rounded-lg ring-1 ring-[#232838] text-xs space-y-1.5">
                           <div className="flex justify-between font-medium">
-                            <span className="text-slate-600">Risk Level:</span>
-                            <span className="text-slate-800 font-bold">
+                            <span className="text-[#8891A6]">Risk Level:</span>
+                            <span className="text-[#E8ECF4] font-bold font-mono">
                               {riskAssessment.level || "Unknown"}
                             </span>
                           </div>
                           <div className="flex justify-between font-medium">
-                            <span className="text-slate-600">Rollback Chance:</span>
-                            <span className="text-slate-800">
+                            <span className="text-[#8891A6]">Rollback Chance:</span>
+                            <span className="text-[#E8ECF4] font-mono">
                               {riskAssessment.rollbackChance || "Unknown"}
                             </span>
                           </div>
-                          <p className="text-slate-500 pt-1 leading-normal">
+                          <p className="text-[#7C879C] pt-1 leading-normal">
                             {riskAssessment.reason || "No risk assessment available."}
                           </p>
                         </div>
                       ) : (
-                        <p className="text-xs text-slate-500 bg-slate-50 p-3 rounded-lg">
+                        <p className="text-xs text-[#5A6376] bg-[#0B0E14] p-3 rounded-lg ring-1 ring-[#232838]">
                           Risk assessment is not available from the supplied repository evidence.
                         </p>
                       )}
@@ -746,43 +844,43 @@ ${learnTakeaway || "Not available."}
 
               {/* TAB 2: STACK TRACE BREAKDOWN */}
               {resultTab === "stack" && (
-                <div className="bg-white rounded-xl ring-1 ring-slate-900/5 p-6 space-y-6">
+                <div className="bg-[#0F1420] rounded-xl ring-1 ring-[#232838] p-6 space-y-6">
                   <div>
-                    <h2 className="font-semibold text-lg text-slate-900 mb-1">Parsed Call Stack</h2>
-                    <p className="text-slate-500 text-xs">Visual execution flow leading to the exception frame.</p>
+                    <h2 className="font-semibold text-lg text-[#E8ECF4] mb-1">Parsed Call Stack</h2>
+                    <p className="text-[#7C879C] text-xs">Visual execution flow leading to the exception frame.</p>
                   </div>
 
                   {stackBreakdown.length > 0 ? (
-                    <div className="space-y-3 relative before:absolute before:left-[19px] before:top-3 before:bottom-3 before:w-0.5 before:bg-slate-200">
+                    <div className="space-y-3 relative before:absolute before:left-[19px] before:top-3 before:bottom-3 before:w-0.5 before:bg-[#232838]">
                       {stackBreakdown.map((frame, idx) => {
                         const isErrorFrame = idx === stackBreakdown.length - 1;
                         return (
                           <div key={idx} className="relative flex items-center gap-4 pl-10">
                             <div
-                              className={`absolute left-2.5 w-4 h-4 rounded-full border-2 bg-white flex items-center justify-center ${
-                                isErrorFrame ? "border-rose-500 bg-rose-50" : "border-indigo-500"
+                              className={`absolute left-2.5 w-4 h-4 rounded-full border-2 bg-[#0F1420] flex items-center justify-center ${
+                                isErrorFrame ? "border-[#FF6B6B]" : "border-[#FFB020]"
                               }`}
                             />
                             <div
                               className={`flex-1 p-3.5 rounded-lg border text-xs font-mono flex items-center justify-between ${
                                 isErrorFrame
-                                  ? "bg-rose-50/50 border-rose-200 text-rose-900"
-                                  : "bg-slate-50 border-slate-200 text-slate-700"
+                                  ? "bg-[#2A1216]/60 border-[#3A181C] text-[#FF8A8A]"
+                                  : "bg-[#0B0E14] border-[#232838] text-[#C4CAD9]"
                               }`}
                             >
                               <div className="flex items-center gap-2">
                                 <span className="font-bold">{frame.functionName || "anonymous"}</span>
-                                <span className="text-slate-400">in</span>
+                                <span className="text-[#5A6376]">in</span>
                                 <span className="underline">{frame.file}</span>
                               </div>
-                              <span className="font-semibold text-slate-500">Line {frame.line || "?"}</span>
+                              <span className="font-semibold text-[#7C879C]">Line {frame.line || "?"}</span>
                             </div>
                           </div>
                         );
                       })}
                     </div>
                   ) : (
-                    <div className="bg-slate-50 rounded-lg p-4 text-sm text-slate-500">
+                    <div className="bg-[#0B0E14] rounded-lg p-4 text-sm text-[#7C879C] ring-1 ring-[#232838]">
                       Stack trace breakdown is not available from the supplied evidence.
                     </div>
                   )}
@@ -793,34 +891,34 @@ ${learnTakeaway || "Not available."}
               {resultTab === "patch" && (
                 <div className="space-y-6">
                   <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-                    <div className="bg-white p-4 rounded-xl ring-1 ring-slate-900/5 text-center">
-                      <p className="text-xs text-slate-500 uppercase font-medium">Modified Files</p>
-                      <p className="text-xl font-bold text-slate-800">{patchStats.filesModified}</p>
+                    <div className="bg-[#0F1420] p-4 rounded-xl ring-1 ring-[#232838] text-center">
+                      <p className="text-[10px] text-[#7C879C] uppercase font-mono font-medium tracking-wider">Modified Files</p>
+                      <p className="text-xl font-bold text-[#E8ECF4] font-mono mt-1">{patchStats.filesModified}</p>
                     </div>
-                    <div className="bg-white p-4 rounded-xl ring-1 ring-slate-900/5 text-center">
-                      <p className="text-xs text-slate-500 uppercase font-medium">Lines Added</p>
-                      <p className="text-xl font-bold text-emerald-600">+{patchStats.linesAdded}</p>
+                    <div className="bg-[#0F1420] p-4 rounded-xl ring-1 ring-[#232838] text-center">
+                      <p className="text-[10px] text-[#7C879C] uppercase font-mono font-medium tracking-wider">Lines Added</p>
+                      <p className="text-xl font-bold text-[#5FD9A0] font-mono mt-1">+{patchStats.linesAdded}</p>
                     </div>
-                    <div className="bg-white p-4 rounded-xl ring-1 ring-slate-900/5 text-center">
-                      <p className="text-xs text-slate-500 uppercase font-medium">Lines Deleted</p>
-                      <p className="text-xl font-bold text-rose-600">-{patchStats.linesDeleted}</p>
+                    <div className="bg-[#0F1420] p-4 rounded-xl ring-1 ring-[#232838] text-center">
+                      <p className="text-[10px] text-[#7C879C] uppercase font-mono font-medium tracking-wider">Lines Deleted</p>
+                      <p className="text-xl font-bold text-[#FF6B6B] font-mono mt-1">-{patchStats.linesDeleted}</p>
                     </div>
-                    <div className="bg-white p-4 rounded-xl ring-1 ring-slate-900/5 text-center">
-                      <p className="text-xs text-slate-500 uppercase font-medium">Functions Impacted</p>
-                      <p className="text-xl font-bold text-indigo-600">{patchStats.functionsChanged}</p>
+                    <div className="bg-[#0F1420] p-4 rounded-xl ring-1 ring-[#232838] text-center">
+                      <p className="text-[10px] text-[#7C879C] uppercase font-mono font-medium tracking-wider">Functions Impacted</p>
+                      <p className="text-xl font-bold text-[#FFB020] font-mono mt-1">{patchStats.functionsChanged}</p>
                     </div>
                   </div>
 
                   {resData.patch && (resData.patch.oldCode || resData.patch.newCode) ? (
-                    <div className="bg-slate-900 rounded-xl overflow-hidden shadow-lg border border-slate-800 font-mono text-xs">
-                      <div className="bg-slate-800/80 px-4 py-3 flex items-center justify-between border-b border-slate-700 text-slate-300">
+                    <div className="bg-[#0B0E14] rounded-xl overflow-hidden ring-1 ring-[#232838] font-mono text-xs">
+                      <div className="bg-[#0F1420] px-4 py-3 flex items-center justify-between border-b border-[#232838] text-[#C4CAD9]">
                         <span className="font-semibold flex items-center gap-2">
-                          <FileCode2 size={14} className="text-indigo-400" />
+                          <FileCode2 size={14} className="text-[#FFB020]" />
                           {resData.patch.file || "diff"}
                         </span>
                         <button
                           onClick={downloadPatchFile}
-                          className="hover:text-white flex items-center gap-1 text-slate-400 font-sans text-xs"
+                          className="hover:text-[#FFB020] flex items-center gap-1 text-[#7C879C] font-sans text-xs transition-colors"
                         >
                           <Download size={13} /> Save Diff
                         </button>
@@ -828,21 +926,21 @@ ${learnTakeaway || "Not available."}
 
                       <div className="p-4 overflow-x-auto space-y-1">
                         {resData.patch.oldCode && (
-                          <div className="bg-rose-950/30 text-rose-300 p-2 rounded border-l-2 border-rose-500 whitespace-pre">
-                            <span className="select-none text-rose-600 mr-2">-</span>
+                          <div className="bg-[#2A1216]/40 text-[#FF8A8A] p-2 rounded border-l-2 border-[#FF6B6B] whitespace-pre">
+                            <span className="select-none text-[#FF6B6B] mr-2">-</span>
                             {resData.patch.oldCode}
                           </div>
                         )}
                         {resData.patch.newCode && (
-                          <div className="bg-emerald-950/30 text-emerald-300 p-2 rounded border-l-2 border-emerald-500 whitespace-pre">
-                            <span className="select-none text-emerald-600 mr-2">+</span>
+                          <div className="bg-[#0F241C]/40 text-[#7EEAB8] p-2 rounded border-l-2 border-[#5FD9A0] whitespace-pre">
+                            <span className="select-none text-[#5FD9A0] mr-2">+</span>
                             {resData.patch.newCode}
                           </div>
                         )}
                       </div>
                     </div>
                   ) : (
-                    <div className="bg-slate-50 rounded-lg p-4 text-sm text-slate-500">
+                    <div className="bg-[#0B0E14] rounded-lg p-4 text-sm text-[#7C879C] ring-1 ring-[#232838]">
                       No verified code patch is available for this diagnosis.
                     </div>
                   )}
@@ -851,16 +949,16 @@ ${learnTakeaway || "Not available."}
 
               {/* TAB 4: IMPACT & SIMILARITY */}
               {resultTab === "impact" && (
-                <div className="bg-white rounded-xl ring-1 ring-slate-900/5 p-6 space-y-4">
-                  <h2 className="font-semibold text-slate-900 text-base">Impacted Files & Dependencies</h2>
-                  <div className="divide-y divide-slate-100">
+                <div className="bg-[#0F1420] rounded-xl ring-1 ring-[#232838] p-6 space-y-4">
+                  <h2 className="font-semibold text-[#E8ECF4] text-base">Impacted Files &amp; Dependencies</h2>
+                  <div className="divide-y divide-[#1E2433]">
                     {(resData.affectedFiles || [resData.file || "Unknown File"]).map((f, i) => (
                       <div key={i} className="py-3 flex items-center justify-between text-sm">
-                        <span className="font-mono text-slate-700 flex items-center gap-2">
-                          <FileCode2 size={16} className="text-indigo-500" />
+                        <span className="font-mono text-[#C4CAD9] flex items-center gap-2">
+                          <FileCode2 size={16} className="text-[#FFB020]" />
                           {f}
                         </span>
-                        <span className="text-xs bg-slate-100 text-slate-600 px-2 py-1 rounded font-medium">
+                        <span className="text-xs bg-[#161A24] text-[#8891A6] px-2 py-1 rounded font-mono ring-1 ring-[#232838]">
                           Direct Reference
                         </span>
                       </div>
@@ -871,23 +969,23 @@ ${learnTakeaway || "Not available."}
 
               {/* TAB 5: AI INSIGHTS & LEARN */}
               {resultTab === "learn" && (
-                <div className="bg-white rounded-xl ring-1 ring-slate-900/5 p-6 space-y-6">
+                <div className="bg-[#0F1420] rounded-xl ring-1 ring-[#232838] p-6 space-y-6">
                   <div>
-                    <h2 className="font-semibold text-slate-900 text-base flex items-center gap-2 mb-2">
-                      <BookOpen size={18} className="text-indigo-600" />
+                    <h2 className="font-semibold text-[#E8ECF4] text-base flex items-center gap-2 mb-2">
+                      <BookOpen size={18} className="text-[#FFB020]" />
                       Why This Fix Works
                     </h2>
-                    <p className="text-slate-600 text-sm leading-relaxed whitespace-pre-line">
+                    <p className="text-[#8891A6] text-sm leading-relaxed whitespace-pre-line">
                       {learnExplanation || "No educational explanation available for this diagnostic patch."}
                     </p>
                   </div>
 
-                  <div className="pt-4 border-t border-slate-100">
-                    <h2 className="font-semibold text-slate-900 text-base flex items-center gap-2 mb-2">
-                      <HelpCircle size={18} className="text-indigo-600" />
+                  <div className="pt-4 border-t border-[#232838]">
+                    <h2 className="font-semibold text-[#E8ECF4] text-base flex items-center gap-2 mb-2">
+                      <HelpCircle size={18} className="text-[#FFB020]" />
                       Key Takeaway
                     </h2>
-                    <p className="text-slate-600 text-sm leading-relaxed whitespace-pre-line">
+                    <p className="text-[#8891A6] text-sm leading-relaxed whitespace-pre-line">
                       {learnTakeaway || "No takeaway available for this diagnostic patch."}
                     </p>
                   </div>

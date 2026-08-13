@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import { useLocation, useParams } from "react-router-dom";
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
-import API from "../services/api"; // 1. Custom Axios instance with interceptors
+import API from "../services/api";
 import { useAnalysis } from "../context/AnalysisContext";
 import {
   Bug,
@@ -13,6 +13,12 @@ import {
   FileCode,
   CheckCircle2,
   GitCommit,
+  Star,
+  GitFork,
+  Circle,
+  ExternalLink,
+  Copy,
+  Check
 } from "lucide-react";
 import { FaGithub } from "react-icons/fa";
 
@@ -49,12 +55,10 @@ export default function IssueSolver() {
   const location = useLocation();
   const params = useParams();
 
-  // 2. Safely extract properties from AnalysisContext
   const { analysis, repositoryId } = useAnalysis();
   const contextRepoUrl = analysis?.repoUrl;
   const contextRepository = analysis?.repository;
 
-  // 3. Fallback strategy: Context -> sessionStorage -> Router Params/State
   const sessionRepoUrl = sessionStorage.getItem("repoUrl");
   const sessionRepoData = sessionStorage.getItem("repositoryData")
     ? JSON.parse(sessionStorage.getItem("repositoryData"))
@@ -75,8 +79,8 @@ export default function IssueSolver() {
   const [solving, setSolving] = useState(false);
   const [loadError, setLoadError] = useState("");
   const [solveError, setSolveError] = useState("");
+  const [copiedCode, setCopiedCode] = useState(false);
 
-  // Fetch Issues when repoUrl is available
   async function loadIssues() {
     setLoadError("");
     setSolveError("");
@@ -97,8 +101,6 @@ export default function IssueSolver() {
 
     try {
       setLoading(true);
-      
-      // Axios interceptor handles Authorization headers automatically
       const response = await API.post("/repository/issues", { repoUrl });
 
       if (response.data.repository) {
@@ -180,6 +182,12 @@ export default function IssueSolver() {
     doc.save(`Issue-${selectedIssue.number}-Solution.pdf`);
   };
 
+  const handleCopyCode = (text) => {
+    navigator.clipboard.writeText(text);
+    setCopiedCode(true);
+    setTimeout(() => setCopiedCode(false), 2000);
+  };
+
   function getLanguageColor(language) {
     const colors = {
       JavaScript: "#f1e05a",
@@ -193,348 +201,433 @@ export default function IssueSolver() {
       HTML: "#e34c26",
       CSS: "#563d7c",
     };
-    return colors[language] || "#6b7280";
+    return colors[language] || "#9ca3af";
   }
 
   return (
-    <div className="min-h-screen bg-[#0D1117] text-white">
-      {/* Header */}
-      <div className="border-b border-[#30363D] bg-[#161B22]">
-        <div className="max-w-7xl mx-auto px-8 py-6">
+    <div className="min-h-screen bg-gradient-to-b from-[#0B0F17] via-[#0D1117] to-[#010409] text-slate-100 font-sans antialiased selection:bg-indigo-500 selection:text-white">
+      {/* Dynamic Header */}
+      <header className="border-b border-slate-800/80 bg-[#161B22]/60 backdrop-blur-md sticky top-0 z-50">
+        <div className="max-w-7xl mx-auto px-6 py-5 flex items-center justify-between">
           <div className="flex items-center gap-4">
-            <div className="bg-green-600 p-3 rounded-xl">
-              <Bug size={30} />
+            <div className="p-3 bg-gradient-to-tr from-emerald-600 to-teal-500 rounded-2xl shadow-lg shadow-emerald-900/20 ring-1 ring-emerald-400/30">
+              <Bug className="w-6 h-6 text-white" />
             </div>
             <div>
-              <h1 className="text-3xl font-bold">AI GitHub Issue Solver</h1>
-              <p className="text-gray-400 mt-1">
+              <div className="flex items-center gap-2">
+                <h1 className="text-xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-white via-slate-200 to-slate-400">
+                  AI Issue Resolver
+                </h1>
+                <span className="text-[10px] font-semibold tracking-wide uppercase bg-indigo-500/10 text-indigo-400 border border-indigo-500/20 px-2 py-0.5 rounded-full">
+                  Powered by Gemini
+                </span>
+              </div>
+              <p className="text-xs text-slate-400 mt-0.5">
                 {repository
-                  ? `Issues for ${repository.owner}/${repository.name}, analyzed by Gemini.`
-                  : "Analyze GitHub repositories and let Gemini generate repository-aware solutions."}
+                  ? `Analyzing ${repository.owner}/${repository.name}`
+                  : "Context-aware automated codebase troubleshooting"}
               </p>
             </div>
           </div>
         </div>
-      </div>
+      </header>
 
-      {/* Main Content */}
-      <div className="max-w-7xl mx-auto p-8">
+      {/* Main Container */}
+      <main className="max-w-7xl mx-auto px-6 py-8 space-y-6">
+        {/* Banner Alert for Empty Repo Context */}
         {!repoUrl && (
-          <div className="bg-[#161B22] border border-[#30363D] rounded-2xl p-6 flex gap-3">
-            <AlertCircle className="text-yellow-500 shrink-0" />
-            <p className="text-gray-300">
-              No repository found in context or session. Please analyze a repository from the Home page first.
+          <div className="bg-amber-500/10 border border-amber-500/20 rounded-2xl p-4 flex items-center gap-3 text-amber-200 backdrop-blur-sm">
+            <AlertCircle className="text-amber-400 shrink-0 w-5 h-5" />
+            <p className="text-sm">
+              No active repository context found. Please analyze a repository from the dashboard to enable issue resolution.
             </p>
           </div>
         )}
 
+        {/* Load Error Alert */}
         {loadError && (
-          <div className="bg-red-500/10 border border-red-500 rounded-lg p-4 flex gap-3 mb-6">
-            <AlertCircle className="text-red-500 shrink-0" />
-            <p>{loadError}</p>
+          <div className="bg-rose-500/10 border border-rose-500/20 rounded-2xl p-4 flex items-center gap-3 text-rose-300 backdrop-blur-sm">
+            <AlertCircle className="text-rose-400 shrink-0 w-5 h-5" />
+            <p className="text-sm">{loadError}</p>
           </div>
         )}
 
-        {/* Repository Overview */}
+        {/* Repository Overview Card */}
         {repository && (
-          <div className="mt-2 bg-[#161B22] border border-[#30363D] rounded-2xl p-6">
-            <div className="flex justify-between items-start">
-              <div>
+          <section className="bg-[#161B22]/80 border border-slate-800 rounded-2xl p-6 shadow-xl relative overflow-hidden backdrop-blur-xl">
+            <div className="absolute top-0 right-0 w-96 h-96 bg-indigo-500/5 rounded-full blur-3xl pointer-events-none" />
+            <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 relative z-10">
+              <div className="space-y-2">
                 <div className="flex items-center gap-3">
-                  <FaGithub size={22} />
-                  <h2 className="text-2xl font-bold">
-                    {repository.owner}/{repository.name}
+                  <FaGithub className="w-6 h-6 text-slate-300" />
+                  <h2 className="text-2xl font-bold text-white tracking-tight">
+                    {repository.owner} <span className="text-slate-500">/</span> {repository.name}
                   </h2>
                 </div>
-                <p className="mt-3 text-gray-400">
-                  {repository.description || "No description provided."}
+                <p className="text-sm text-slate-400 max-w-2xl">
+                  {repository.description || "No repository description available."}
                 </p>
               </div>
               <img
                 src={repository.avatarUrl || "https://github.githubassets.com/images/modules/logos_page/GitHub-Mark.png"}
                 alt="Avatar"
-                className="w-16 h-16 rounded-full border border-[#30363D]"
+                className="w-14 h-14 rounded-xl ring-2 ring-slate-800 object-cover shadow-md"
               />
             </div>
 
-            <div className="flex gap-8 mt-6 text-sm">
-              <div>⭐ {repository.stars ?? 0}</div>
-              <div>forks {repository.forks ?? 0}</div>
-              <div>🐞 {issues.length} Issues</div>
+            {/* Repository Meta Tags */}
+            <div className="flex flex-wrap items-center gap-6 mt-6 pt-4 border-t border-slate-800/80 text-xs font-medium text-slate-400">
+              <div className="flex items-center gap-1.5">
+                <Star className="w-4 h-4 text-amber-400" />
+                <span className="text-slate-200">{repository.stars ?? 0}</span> stars
+              </div>
+              <div className="flex items-center gap-1.5">
+                <GitFork className="w-4 h-4 text-indigo-400" />
+                <span className="text-slate-200">{repository.forks ?? 0}</span> forks
+              </div>
+              <div className="flex items-center gap-1.5">
+                <Bug className="w-4 h-4 text-emerald-400" />
+                <span className="text-slate-200">{issues.length}</span> Issues loaded
+              </div>
               {repository.language && (
-                <div className="flex items-center gap-2">
-                  <div
-                    className="w-3 h-3 rounded-full"
-                    style={{ background: getLanguageColor(repository.language) }}
-                  />
-                  {repository.language}
+                <div className="flex items-center gap-1.5">
+                  <Circle className="w-2.5 h-2.5 fill-current" style={{ color: getLanguageColor(repository.language) }} />
+                  <span className="text-slate-200">{repository.language}</span>
                 </div>
               )}
             </div>
-          </div>
+          </section>
         )}
 
-        {/* Issues & Solution Panel */}
-        <div className="grid lg:grid-cols-5 gap-8 mt-8">
-          {/* Issues List */}
-          <div className="lg:col-span-2">
-            <div className="bg-[#161B22] border border-[#30363D] rounded-2xl p-5">
-              <h2 className="font-bold text-xl mb-5">Repository Issues</h2>
+        {/* Dashboard Grid View */}
+        <div className="grid lg:grid-cols-12 gap-8 items-start">
+          {/* Left Column: Issues List */}
+          <section className="lg:col-span-5 bg-[#161B22]/60 border border-slate-800/80 rounded-2xl p-5 backdrop-blur-xl shadow-lg flex flex-col h-[780px]">
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="font-semibold text-slate-200 flex items-center gap-2">
+                Repository Issues
+                <span className="bg-slate-800 text-slate-400 text-xs px-2 py-0.5 rounded-full font-mono">
+                  {issues.length}
+                </span>
+              </h2>
+            </div>
 
-              {loading && (
-                <div className="flex justify-center py-10">
-                  <Loader2 className="animate-spin text-green-500" size={40} />
+            {/* Skeleton Loading State */}
+            {loading && (
+              <div className="flex flex-col items-center justify-center flex-1 space-y-3">
+                <Loader2 className="animate-spin text-emerald-400 w-8 h-8" />
+                <p className="text-xs text-slate-400 font-medium">Fetching repository issues...</p>
+              </div>
+            )}
+
+            {/* Empty State */}
+            {!loading && repoUrl && issues.length === 0 && (
+              <div className="flex flex-col items-center justify-center flex-1 text-center p-6 space-y-3">
+                <div className="p-4 bg-slate-800/40 rounded-full">
+                  <CheckCircle2 className="w-8 h-8 text-emerald-400" />
                 </div>
-              )}
+                <h3 className="text-sm font-semibold text-slate-200">No Open Issues</h3>
+                <p className="text-xs text-slate-400 max-w-xs">
+                  This repository has no open issues that require resolution right now.
+                </p>
+              </div>
+            )}
 
-              {!loading && repoUrl && issues.length === 0 && (
-                <div className="text-center py-16">
-                  <Bug size={55} className="mx-auto text-gray-600" />
-                  <h3 className="mt-5 text-xl font-semibold">No Issues Found</h3>
-                  <p className="text-gray-500 mt-2">
-                    This repository doesn't have any open issues.
-                  </p>
-                </div>
-              )}
-
-              <div className="space-y-4">
-                {issues.map((issue) => (
+            {/* Scrollable Issue List */}
+            <div className="overflow-y-auto space-y-3 pr-1 flex-1 custom-scrollbar">
+              {issues.map((issue) => {
+                const isSelected = selectedIssue?.id === issue.id;
+                return (
                   <div
                     key={issue.id || issue.number}
-                    className={`rounded-xl border transition-all p-5 cursor-pointer ${
-                      selectedIssue?.id === issue.id
-                        ? "border-blue-500 bg-blue-500/10"
-                        : "border-[#30363D] hover:border-green-500 bg-[#0D1117]"
+                    className={`group relative rounded-xl border p-4 transition-all duration-200 cursor-pointer ${
+                      isSelected
+                        ? "border-indigo-500/80 bg-indigo-500/10 shadow-lg shadow-indigo-500/5 ring-1 ring-indigo-500/50"
+                        : "border-slate-800/80 hover:border-slate-700 bg-[#0D1117]/50 hover:bg-[#0D1117]"
                     }`}
                   >
-                    <div className="flex justify-between items-start">
-                      <div className="flex-1">
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="space-y-1.5 flex-1 min-w-0">
                         <div className="flex items-center gap-2">
-                          <span className="font-mono text-green-400">#{issue.number}</span>
+                          <span className="font-mono text-xs font-bold text-emerald-400">
+                            #{issue.number}
+                          </span>
                           <span
-                            className={`text-xs px-2 py-0.5 rounded-full capitalize ${
-                              issue.state === "open" ? "bg-green-600" : "bg-red-600"
+                            className={`text-[10px] font-semibold px-2 py-0.5 rounded-md capitalize ${
+                              issue.state === "open"
+                                ? "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20"
+                                : "bg-rose-500/10 text-rose-400 border border-rose-500/20"
                             }`}
                           >
                             {issue.state}
                           </span>
                         </div>
 
-                        <h3 className="font-semibold mt-3">{issue.title}</h3>
-                        <p className="text-gray-400 mt-2 text-sm line-clamp-3">
-                          {issue.body || "No description"}
+                        <h3 className="font-semibold text-sm text-slate-200 line-clamp-1 group-hover:text-indigo-300 transition-colors">
+                          {issue.title}
+                        </h3>
+
+                        <p className="text-xs text-slate-400 line-clamp-2 leading-relaxed">
+                          {issue.body || "No detailed description provided."}
                         </p>
-
-                        <div className="flex flex-wrap gap-2 mt-4">
-                          {(issue.labels || []).map((label, idx) => (
-                            <span
-                              key={idx}
-                              className="bg-[#21262D] text-xs px-3 py-1 rounded-full text-gray-300"
-                            >
-                              {typeof label === "object" ? label.name : label}
-                            </span>
-                          ))}
-                        </div>
-
-                        <div className="mt-4 text-xs text-gray-500">
-                          Opened by <span className="text-white">{issue.author || "Unknown"}</span>
-                        </div>
                       </div>
 
                       <button
-                        onClick={() => solveIssue(issue)}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          solveIssue(issue);
+                        }}
                         disabled={solving && selectedIssue?.id === issue.id}
-                        className="ml-4 bg-blue-600 hover:bg-blue-700 text-sm px-4 py-2 rounded-lg flex items-center gap-2 disabled:opacity-60 transition-colors"
+                        className="shrink-0 bg-indigo-600 hover:bg-indigo-500 active:scale-95 text-white text-xs font-semibold px-3 py-2 rounded-lg flex items-center gap-1.5 shadow-md shadow-indigo-600/20 disabled:opacity-50 transition-all"
                       >
                         {solving && selectedIssue?.id === issue.id ? (
-                          <>
-                            <Loader2 className="animate-spin" size={16} />
-                            Solving...
-                          </>
+                          <Loader2 className="animate-spin w-3.5 h-3.5" />
                         ) : (
-                          <>
-                            <Sparkles size={16} />
-                            Solve
-                          </>
+                          <Sparkles className="w-3.5 h-3.5 text-indigo-200" />
                         )}
+                        <span>{solving && selectedIssue?.id === issue.id ? "Solving" : "Solve"}</span>
                       </button>
                     </div>
+
+                    {/* Labels */}
+                    <div className="flex flex-wrap items-center gap-1.5 mt-3 pt-3 border-t border-slate-800/60">
+                      {(issue.labels || []).slice(0, 3).map((label, idx) => (
+                        <span
+                          key={idx}
+                          className="bg-slate-800/80 text-[10px] font-medium px-2 py-0.5 rounded text-slate-300 border border-slate-700/50"
+                        >
+                          {typeof label === "object" ? label.name : label}
+                        </span>
+                      ))}
+                      <span className="ml-auto text-[10px] text-slate-500">
+                        by <span className="text-slate-400">{issue.author || "Unknown"}</span>
+                      </span>
+                    </div>
                   </div>
-                ))}
-              </div>
+                );
+              })}
             </div>
-          </div>
+          </section>
 
-          {/* Solution Card */}
-          <div className="lg:col-span-3">
-            <div className="bg-[#161B22] border border-[#30363D] rounded-2xl p-6 min-h-[700px]">
-              <div className="flex items-center justify-between">
-                <h2 className="text-xl font-bold flex items-center gap-3">
-                  <Sparkles className="text-yellow-500" />
-                  AI Solution
-                </h2>
-                {solution && (
-                  <button
-                    onClick={downloadPDF}
-                    className="flex items-center gap-2 bg-[#21262D] hover:bg-[#30363D] border border-gray-700 px-3 py-1.5 rounded-lg text-sm transition-colors"
-                  >
-                    <Download size={16} />
-                    Export PDF
-                  </button>
-                )}
+          {/* Right Column: AI Solution Panel */}
+          <section className="lg:col-span-7 bg-[#161B22]/60 border border-slate-800/80 rounded-2xl p-6 backdrop-blur-xl shadow-lg min-h-[780px] flex flex-col">
+            <div className="flex items-center justify-between pb-4 border-b border-slate-800/80">
+              <div className="flex items-center gap-2.5">
+                <div className="p-2 bg-amber-500/10 rounded-lg border border-amber-500/20">
+                  <Sparkles className="w-5 h-5 text-amber-400" />
+                </div>
+                <div>
+                  <h2 className="text-base font-semibold text-slate-100">AI Generated Solution</h2>
+                  <p className="text-xs text-slate-400">Contextual root-cause analysis & patches</p>
+                </div>
               </div>
 
-              {!selectedIssue && !solution && !solving && (
-                <div className="flex flex-col items-center justify-center h-[500px] text-gray-500">
-                  <Sparkles size={60} />
-                  <h3 className="text-2xl font-semibold mt-5">Select an Issue</h3>
-                  <p className="mt-3 text-center">
-                    Click <b>Solve</b> on any GitHub issue to let Gemini generate a fix.
+              {solution && (
+                <button
+                  onClick={downloadPDF}
+                  className="bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 text-xs font-semibold px-3 py-2 rounded-xl flex items-center gap-1.5 transition-colors shadow-sm"
+                >
+                  <Download className="w-3.5 h-3.5" />
+                  <span>Export PDF</span>
+                </button>
+              )}
+            </div>
+
+            {/* Empty State */}
+            {!selectedIssue && !solution && !solving && (
+              <div className="flex flex-col items-center justify-center flex-1 text-center p-8 space-y-4">
+                <div className="p-4 bg-slate-800/30 rounded-2xl border border-slate-800">
+                  <Sparkles className="w-10 h-10 text-slate-600" />
+                </div>
+                <div className="space-y-1">
+                  <h3 className="text-base font-semibold text-slate-200">No Solution Active</h3>
+                  <p className="text-xs text-slate-400 max-w-sm leading-relaxed">
+                    Select an issue from the list and click <span className="text-indigo-400 font-semibold">Solve</span> to let Gemini analyze repository context and propose fixes.
                   </p>
                 </div>
-              )}
+              </div>
+            )}
 
-              <div className="mt-6">
-                {solving && (
-                  <div className="flex items-center gap-3 text-blue-400 bg-blue-500/10 p-4 rounded-xl border border-blue-500/20">
-                    <Loader2 className="animate-spin shrink-0" size={20} />
-                    <p className="text-sm leading-relaxed">
-                      AI is inspecting code context, reading commit histories, and writing solution patches...
-                    </p>
-                  </div>
-                )}
+            {/* Solving Loading Indicator */}
+            {solving && (
+              <div className="my-auto bg-indigo-500/10 border border-indigo-500/20 rounded-2xl p-6 text-indigo-300 flex items-center gap-4">
+                <Loader2 className="animate-spin w-6 h-6 text-indigo-400 shrink-0" />
+                <div className="space-y-1">
+                  <h4 className="text-sm font-semibold text-indigo-200">Analyzing Repository Context</h4>
+                  <p className="text-xs text-indigo-300/80 leading-relaxed">
+                    Reading code AST, cross-referencing commit logs, and formulating optimal solution...
+                  </p>
+                </div>
+              </div>
+            )}
 
-                {solveError && (
-                  <div className="bg-red-900/20 border border-red-700 rounded-lg p-4 text-red-300 mb-4">
-                    {solveError}
-                  </div>
-                )}
+            {/* Solution Error Message */}
+            {solveError && (
+              <div className="my-auto bg-rose-500/10 border border-rose-500/20 rounded-2xl p-4 text-rose-300 flex items-center gap-3">
+                <AlertCircle className="w-5 h-5 text-rose-400 shrink-0" />
+                <p className="text-sm">{solveError}</p>
+              </div>
+            )}
 
-                {solution && (
-                  <div className="space-y-6">
-                    <div>
-                      <h3 className="text-green-400 font-semibold mb-2">Summary</h3>
-                      <p className="text-gray-300 leading-relaxed">{solution.summary}</p>
+            {/* Render Solution Payload */}
+            {solution && !solving && (
+              <div className="mt-6 space-y-6 overflow-y-auto pr-1 flex-1 custom-scrollbar">
+                {/* Metrics Cards */}
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="bg-[#0D1117] p-4 rounded-xl border border-slate-800/80 space-y-2">
+                    <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Confidence Score</span>
+                    <div className="flex items-center justify-between">
+                      <span className="text-xl font-bold text-emerald-400">{solution.confidence}%</span>
+                      <span className="text-[10px] text-slate-500 font-mono">Precision Match</span>
                     </div>
+                    <div className="w-full bg-slate-800 rounded-full h-1.5 overflow-hidden">
+                      <div
+                        className="bg-emerald-500 h-full rounded-full transition-all duration-500"
+                        style={{ width: `${solution.confidence}%` }}
+                      />
+                    </div>
+                  </div>
 
-                    <div className="grid grid-cols-2 gap-4">
-                      <div className="bg-[#0D1117] p-4 rounded-xl border border-gray-800">
-                        <h3 className="text-blue-400 font-semibold mb-1 text-sm">Confidence</h3>
-                        <div className="w-full bg-gray-800 rounded-full h-2.5 mt-2">
-                          <div
-                            className="bg-green-500 h-2.5 rounded-full transition-all duration-500"
-                            style={{ width: `${solution.confidence}%` }}
-                          />
-                        </div>
-                        <p className="mt-2 text-xs text-gray-400">{solution.confidence}% Match</p>
-                      </div>
+                  <div className="bg-[#0D1117] p-4 rounded-xl border border-slate-800/80 space-y-2">
+                    <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Estimated Complexity</span>
+                    <div>
+                      <span className="inline-flex items-center text-xs font-semibold px-2.5 py-1 rounded-md bg-indigo-500/10 text-indigo-400 border border-indigo-500/20">
+                        {solution.complexity || "Medium"}
+                      </span>
+                    </div>
+                  </div>
+                </div>
 
-                      <div className="bg-[#0D1117] p-4 rounded-xl border border-gray-800">
-                        <h3 className="text-indigo-400 font-semibold mb-1 text-sm">Complexity</h3>
-                        <span className="inline-block mt-1 bg-indigo-600/30 text-indigo-300 text-xs px-2.5 py-1 rounded border border-indigo-500/30 font-medium">
-                          {solution.complexity || "Medium"}
+                {/* Executive Summary */}
+                <div className="space-y-2">
+                  <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider">Executive Summary</h3>
+                  <p className="text-sm text-slate-300 leading-relaxed bg-[#0D1117] p-4 rounded-xl border border-slate-800/80">
+                    {solution.summary}
+                  </p>
+                </div>
+
+                {/* Root Cause */}
+                <div className="space-y-2">
+                  <h3 className="text-xs font-bold text-rose-400 uppercase tracking-wider">Root Cause Analysis</h3>
+                  <div className="text-sm text-slate-300 leading-relaxed bg-[#0D1117] p-4 rounded-xl border border-slate-800/80 font-mono text-xs">
+                    {solution.rootCause}
+                  </div>
+                </div>
+
+                {/* Recommended Solution */}
+                <div className="space-y-2">
+                  <h3 className="text-xs font-bold text-amber-400 uppercase tracking-wider">Recommended Strategy</h3>
+                  <div className="text-sm text-slate-300 leading-relaxed bg-[#0D1117] p-4 rounded-xl border border-slate-800/80 whitespace-pre-wrap">
+                    {solution.solution}
+                  </div>
+                </div>
+
+                {/* Affected Files */}
+                {solution.affectedFiles?.length > 0 && (
+                  <div className="space-y-2">
+                    <h3 className="text-xs font-bold text-cyan-400 uppercase tracking-wider flex items-center gap-1.5">
+                      <FileCode className="w-4 h-4" /> Affected Files
+                    </h3>
+                    <div className="flex flex-wrap gap-2">
+                      {solution.affectedFiles.map((file, idx) => (
+                        <span
+                          key={idx}
+                          className="bg-[#0D1117] text-slate-300 font-mono text-xs px-3 py-1.5 rounded-lg border border-slate-800 flex items-center gap-1.5"
+                        >
+                          <FileCode className="w-3.5 h-3.5 text-cyan-400" />
+                          {file}
                         </span>
-                      </div>
+                      ))}
                     </div>
+                  </div>
+                )}
 
-                    <div>
-                      <h3 className="text-red-400 font-semibold mb-2">Root Cause</h3>
-                      <p className="text-gray-300 bg-[#0D1117] p-4 rounded-xl border border-gray-800 leading-relaxed">
-                        {solution.rootCause}
-                      </p>
-                    </div>
+                {/* Step-by-Step Implementation */}
+                {solution.implementationSteps?.length > 0 && (
+                  <div className="space-y-2">
+                    <h3 className="text-xs font-bold text-emerald-400 uppercase tracking-wider flex items-center gap-1.5">
+                      <CheckCircle2 className="w-4 h-4" /> Implementation Workflow
+                    </h3>
+                    <ol className="space-y-2">
+                      {solution.implementationSteps.map((step, i) => (
+                        <li key={i} className="flex gap-3 bg-[#0D1117] p-3 rounded-xl border border-slate-800/80 text-xs text-slate-300">
+                          <span className="font-mono text-emerald-400 font-bold shrink-0">{i + 1}.</span>
+                          <span className="leading-relaxed">{step}</span>
+                        </li>
+                      ))}
+                    </ol>
+                  </div>
+                )}
 
-                    <div>
-                      <h3 className="text-yellow-400 font-semibold mb-2">Recommended Solution</h3>
-                      <p className="text-gray-300 whitespace-pre-wrap bg-[#0D1117] p-4 rounded-xl border border-gray-800 leading-relaxed">
-                        {solution.solution}
-                      </p>
-                    </div>
-
-                    <div>
-                      <h3 className="text-cyan-400 font-semibold mb-2 flex items-center gap-2">
-                        <FileCode size={18} />
-                        Affected Files
-                      </h3>
-                      <div className="flex flex-wrap gap-2">
-                        {(solution.affectedFiles || []).map((file, idx) => (
-                          <span key={idx} className="bg-gray-800 px-3 py-1 rounded text-sm text-gray-300">
-                            {file}
-                          </span>
-                        ))}
-                      </div>
-                    </div>
-
-                    <div>
-                      <h3 className="text-green-400 font-semibold mb-2 flex items-center gap-2">
-                        <CheckCircle2 size={18} />
-                        Implementation Steps
-                      </h3>
-                      <ol className="list-decimal ml-6 space-y-2 text-gray-300">
-                        {(solution.implementationSteps || []).map((step, i) => (
-                          <li key={i} className="pl-1">{step}</li>
-                        ))}
-                      </ol>
-                    </div>
-
-                    {(solution.relatedCommits || []).length > 0 && (
-                      <div>
-                        <h3 className="text-purple-400 font-semibold mb-2 flex items-center gap-2">
-                          <GitCommit size={18} />
-                          Related Commits
-                        </h3>
-                        <div className="space-y-3">
-                          {solution.relatedCommits.map((commit, index) => (
-                            <div
-                              key={commit.hash || index}
-                              className="bg-[#0D1117] border border-gray-800 rounded-lg p-4"
-                            >
-                              <div className="font-mono text-green-400 text-xs">
-                                {commit.hash ? commit.hash.substring(0, 7) : "Commit"}
-                              </div>
-                              <div className="mt-1 text-white font-medium text-sm">
-                                {commit.message}
-                              </div>
-                              <div className="mt-2 text-xs text-gray-400">
-                                {commit.author} {commit.date ? `• ${new Date(commit.date).toLocaleString()}` : ""}
-                              </div>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                    )}
-
-                    {solution.patch?.file && (
-                      <div className="space-y-4 pt-4 border-t border-gray-800">
-                        <div>
-                          <h3 className="text-orange-400 font-semibold mb-2">Target File</h3>
-                          <div className="bg-[#0D1117] p-3 rounded-lg border border-gray-800 font-mono text-sm text-gray-300">
-                            {solution.patch.file}
+                {/* Related Commits */}
+                {solution.relatedCommits?.length > 0 && (
+                  <div className="space-y-2">
+                    <h3 className="text-xs font-bold text-purple-400 uppercase tracking-wider flex items-center gap-1.5">
+                      <GitCommit className="w-4 h-4" /> Contextual Commits
+                    </h3>
+                    <div className="space-y-2">
+                      {solution.relatedCommits.map((commit, index) => (
+                        <div key={commit.hash || index} className="bg-[#0D1117] border border-slate-800/80 rounded-xl p-3 text-xs space-y-1">
+                          <div className="flex items-center justify-between">
+                            <span className="font-mono text-purple-400 font-semibold">
+                              {commit.hash ? commit.hash.substring(0, 7) : "Commit"}
+                            </span>
+                            <span className="text-[10px] text-slate-500">
+                              {commit.date ? new Date(commit.date).toLocaleDateString() : ""}
+                            </span>
                           </div>
+                          <p className="text-slate-200 font-medium">{commit.message}</p>
+                          <p className="text-[10px] text-slate-400">By {commit.author}</p>
                         </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
 
-                        <div>
-                          <h3 className="text-red-400 font-semibold mb-2">Original Code</h3>
-                          <pre className="bg-black/80 p-4 rounded-lg overflow-x-auto text-sm text-red-300 border border-red-900/30">
-                            <code>{solution.patch.oldCode}</code>
-                          </pre>
-                        </div>
+                {/* Code Patch Differential */}
+                {solution.patch?.file && (
+                  <div className="space-y-3 pt-4 border-t border-slate-800/80">
+                    <div className="flex items-center justify-between">
+                      <h3 className="text-xs font-bold text-amber-400 uppercase tracking-wider">Proposed Patch</h3>
+                      <span className="font-mono text-xs text-slate-400 bg-[#0D1117] px-2.5 py-1 rounded-md border border-slate-800">
+                        {solution.patch.file}
+                      </span>
+                    </div>
 
-                        <div>
-                          <h3 className="text-green-400 font-semibold mb-2">Proposed Fix</h3>
-                          <pre className="bg-black/80 p-4 rounded-lg overflow-x-auto text-sm text-green-300 border border-green-900/30">
-                            <code>{solution.patch.newCode}</code>
-                          </pre>
-                        </div>
+                    {/* Diff Viewer Card */}
+                    <div className="bg-black/80 rounded-xl border border-slate-800 overflow-hidden font-mono text-xs">
+                      {/* Old Code Block */}
+                      <div className="p-3 bg-rose-500/5 border-b border-slate-800/80">
+                        <div className="text-[10px] font-bold text-rose-400 mb-1 uppercase tracking-wider">- Original Code</div>
+                        <pre className="text-rose-300/90 overflow-x-auto whitespace-pre-wrap leading-relaxed">
+                          {solution.patch.oldCode}
+                        </pre>
                       </div>
-                    )}
+
+                      {/* New Code Block */}
+                      <div className="p-3 bg-emerald-500/5 relative group">
+                        <div className="flex justify-between items-center mb-1">
+                          <span className="text-[10px] font-bold text-emerald-400 uppercase tracking-wider">+ Proposed Fix</span>
+                          <button
+                            onClick={() => handleCopyCode(solution.patch.newCode)}
+                            className="bg-slate-800 hover:bg-slate-700 text-slate-300 p-1.5 rounded-md transition-colors"
+                            title="Copy Fix"
+                          >
+                            {copiedCode ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
+                          </button>
+                        </div>
+                        <pre className="text-emerald-300/90 overflow-x-auto whitespace-pre-wrap leading-relaxed">
+                          {solution.patch.newCode}
+                        </pre>
+                      </div>
+                    </div>
                   </div>
                 )}
               </div>
-            </div>
-          </div>
+            )}
+          </section>
         </div>
-      </div>
+      </main>
     </div>
   );
 }

@@ -19,7 +19,9 @@ import {
   UserCheck, 
   MousePointerClick, 
   ChevronRight,
-  ShieldAlert
+  ShieldAlert,
+  ArrowRight,
+  BarChart3
 } from "lucide-react";
 
 function normalizeContributorName(value) {
@@ -319,41 +321,45 @@ function Contributors() {
   };
 
   return (
-    <div className="min-h-screen bg-slate-50/60 text-slate-900 antialiased selection:bg-indigo-500 selection:text-white pb-16">
+    <div className="min-h-screen bg-slate-950 text-slate-100 antialiased selection:bg-indigo-500/30 selection:text-indigo-200 pb-20 relative overflow-hidden">
+      {/* Background Glows & Patterns */}
       <div className="fixed inset-0 pointer-events-none overflow-hidden -z-10">
-        <div className="absolute -top-40 -right-40 w-96 h-96 bg-indigo-500/10 rounded-full blur-3xl" />
-        <div className="absolute top-1/3 -left-40 w-96 h-96 bg-blue-500/10 rounded-full blur-3xl" />
+        <div className="absolute -top-40 -right-40 w-[600px] h-[600px] bg-indigo-600/10 rounded-full blur-[120px]" />
+        <div className="absolute top-1/3 -left-40 w-[500px] h-[500px] bg-violet-600/10 rounded-full blur-[120px]" />
+        <div className="absolute bottom-10 right-10 w-[400px] h-[400px] bg-blue-600/10 rounded-full blur-[100px]" />
+        <div className="absolute inset-0 bg-[linear-gradient(to_right,#1e293b15_1px,transparent_1px),linear-gradient(to_bottom,#1e293b15_1px,transparent_1px)] bg-[size:4rem_4rem] [mask-image:radial-gradient(ellipse_60%_50%_at_50%_0%,#000_70%,transparent_100%)]" />
       </div>
 
-      <div className="max-w-[1700px] mx-auto px-4 sm:px-6 py-8 space-y-8">
-        {/* Header */}
-        <header className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-6 border-b border-slate-200/80">
-          <div className="flex items-center gap-4">
-            <div className="relative">
-              <div className="bg-gradient-to-br from-indigo-500 to-violet-600 p-3.5 rounded-2xl text-white shadow-lg shadow-indigo-500/20 ring-1 ring-white/20">
-                <Users size={26} />
+      <div className="max-w-[1700px] mx-auto px-4 sm:px-8 py-10 space-y-10">
+        {/* Modern Header */}
+        <header className="flex flex-col md:flex-row md:items-center justify-between gap-6 pb-8 border-b border-slate-800/80">
+          <div className="flex items-center gap-5">
+            <div className="relative group">
+              <div className="absolute -inset-0.5 bg-gradient-to-r from-indigo-500 to-violet-500 rounded-2xl blur-md opacity-50 group-hover:opacity-100 transition duration-300" />
+              <div className="relative bg-slate-900 border border-slate-700/60 p-4 rounded-2xl text-indigo-400 shadow-xl">
+                <Users size={28} />
               </div>
             </div>
 
             <div>
-              <div className="flex items-center gap-2.5">
-                <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight text-slate-900">
+              <div className="flex items-center gap-3">
+                <h1 className="text-3xl font-extrabold tracking-tight text-white bg-clip-text bg-gradient-to-r from-white via-slate-100 to-slate-400">
                   Contributors
                 </h1>
                 {contributorList.length > 0 && (
-                  <span className="px-2.5 py-0.5 text-xs font-semibold rounded-full bg-indigo-50 text-indigo-700 ring-1 ring-inset ring-indigo-700/10">
+                  <span className="px-3 py-1 text-xs font-semibold rounded-full bg-indigo-500/10 text-indigo-400 border border-indigo-500/20 backdrop-blur-md">
                     {contributorList.length} Active
                   </span>
                 )}
               </div>
-              <p className="text-sm text-slate-500 mt-0.5 font-medium">
-                Individual metrics, code impacts, and interactive AI developer profiles
+              <p className="text-sm text-slate-400 mt-1 font-medium">
+                Individual developer metrics, impact analysis, and real-time AI profiles
               </p>
             </div>
           </div>
 
           {analysis && (
-            <div className="self-start sm:self-auto bg-white p-1 rounded-xl shadow-xs border border-slate-200">
+            <div className="self-start md:self-auto bg-slate-900/80 backdrop-blur-md p-1.5 rounded-2xl border border-slate-800 shadow-xl ring-1 ring-white/5">
               <TimeRangeFilter
                 value={rangeDays}
                 onChange={setRangeDays}
@@ -363,22 +369,23 @@ function Contributors() {
         </header>
 
         {!analysis ? (
-          <div className="bg-white/80 backdrop-blur-md rounded-3xl border border-slate-200/80 shadow-xs p-12 text-center max-w-lg mx-auto my-16 space-y-4">
-            <div className="bg-red-50 text-red-500 p-4 rounded-2xl w-fit mx-auto ring-1 ring-red-100">
-              <AlertCircle size={28} />
+          /* Empty State */
+          <div className="bg-slate-900/40 backdrop-blur-xl rounded-3xl border border-slate-800/80 shadow-2xl p-12 text-center max-w-md mx-auto my-20 space-y-5">
+            <div className="bg-red-500/10 text-red-400 p-4 rounded-2xl w-fit mx-auto border border-red-500/20">
+              <AlertCircle size={32} />
             </div>
-            <div>
-              <h3 className="text-lg font-semibold text-slate-900">
+            <div className="space-y-2">
+              <h3 className="text-xl font-bold text-white">
                 No Repository Selected
               </h3>
-              <p className="text-sm text-slate-500 mt-1 max-w-sm mx-auto">
-                Please analyze a repository to view contributor breakdown, code patterns, and AI insights.
+              <p className="text-sm text-slate-400 leading-relaxed">
+                Analyze a codebase repository to view granular developer activity, code attribution, and automated AI insights.
               </p>
             </div>
           </div>
         ) : (
           <>
-            {/* Stats Bar */}
+            {/* Stats Overview */}
             <section className="transition-all duration-300">
               <ContributorStats
                 contributors={contributorList}
@@ -386,20 +393,24 @@ function Contributors() {
               />
             </section>
 
-            {/* Hint Banner */}
-            <div className="flex items-center justify-between bg-gradient-to-r from-indigo-50 via-violet-50 to-white border border-indigo-100 rounded-xl px-4 py-3 text-xs sm:text-sm text-indigo-900 shadow-xs">
-              <div className="flex items-center gap-2.5">
-                <span className="flex h-2 w-2 rounded-full bg-indigo-600 animate-ping" />
-                <MousePointerClick size={18} className="text-indigo-600 shrink-0" />
+            {/* Interactive Selector Alert Banner */}
+            <div className="relative overflow-hidden flex items-center justify-between bg-gradient-to-r from-indigo-950/60 via-slate-900/80 to-slate-950/60 border border-indigo-500/20 rounded-2xl px-5 py-4 text-sm text-indigo-200 backdrop-blur-md shadow-xl group">
+              <div className="absolute top-0 right-0 w-64 h-full bg-indigo-500/5 blur-2xl pointer-events-none" />
+              <div className="flex items-center gap-3.5 z-10">
+                <div className="relative flex h-3 w-3 shrink-0">
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-indigo-400 opacity-75" />
+                  <span className="relative inline-flex rounded-full h-3 w-3 bg-indigo-500" />
+                </div>
+                <MousePointerClick size={20} className="text-indigo-400 shrink-0" />
                 <span>
-                  <strong className="font-semibold">Interactive Selection:</strong> Click on any contributor in the leaderboard below to reveal their personalized AI evaluation.
+                  <strong className="font-semibold text-white">Interactive Focus:</strong> Select any engineer from the leaderboards below to inspect deep individual performance profiles.
                 </span>
               </div>
             </div>
 
-            {/* Leaderboards */}
-            <section className="grid grid-cols-1 xl:grid-cols-12 gap-6">
-              <div className="xl:col-span-7 bg-white rounded-2xl border border-slate-200/80 shadow-sm hover:shadow-md transition-all p-1 ring-1 ring-slate-900/5">
+            {/* Main Leaderboard & Distribution Grid */}
+            <section className="grid grid-cols-1 xl:grid-cols-12 gap-8">
+              <div className="xl:col-span-7 bg-slate-900/60 backdrop-blur-md rounded-3xl border border-slate-800/80 shadow-xl p-2 hover:border-slate-700/80 transition-all duration-300">
                 <TopContributors
                   contributors={contributorList}
                   aggregates={aggregates}
@@ -408,60 +419,67 @@ function Contributors() {
                 />
               </div>
 
-              <div className="xl:col-span-5 bg-white rounded-2xl border border-slate-200/80 shadow-sm hover:shadow-md transition-all p-1 ring-1 ring-slate-900/5">
+              <div className="xl:col-span-5 bg-slate-900/60 backdrop-blur-md rounded-3xl border border-slate-800/80 shadow-xl p-2 hover:border-slate-700/80 transition-all duration-300">
                 <ContributionDistribution
                   contributors={contributorList}
                 />
               </div>
             </section>
 
-            {/* Active Contributor AI & Insight Section */}
+            {/* Selected Contributor AI Profile Section */}
             {activeContributor ? (
-              <section className="space-y-6 pt-4 animate-in fade-in slide-in-from-bottom-3 duration-300">
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 text-white rounded-2xl p-5 shadow-xl border border-slate-800 gap-4">
-                  <div className="flex items-center gap-3.5">
-                    <div className="p-2.5 bg-indigo-500/20 text-indigo-300 rounded-xl border border-indigo-500/30 backdrop-blur-xs">
-                      <UserCheck size={22} />
-                    </div>
-                    <div>
-                      <div className="flex items-center gap-2">
-                        <span className="text-[11px] uppercase tracking-wider font-bold text-indigo-400">
-                          Active Contributor Insights
-                        </span>
-                        <span className="inline-block w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+              <section className="space-y-8 pt-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
+                {/* Active Contributor Header Spotlight */}
+                <div className="relative overflow-hidden rounded-3xl bg-gradient-to-r from-slate-900 via-indigo-950/40 to-slate-900 border border-indigo-500/30 p-6 sm:p-8 shadow-2xl backdrop-blur-xl">
+                  <div className="absolute top-0 right-0 -mt-12 -mr-12 w-64 h-64 bg-indigo-500/10 rounded-full blur-3xl pointer-events-none" />
+                  
+                  <div className="relative z-10 flex flex-col sm:flex-row sm:items-center justify-between gap-6">
+                    <div className="flex items-center gap-5">
+                      <div className="p-4 bg-indigo-500/10 text-indigo-400 rounded-2xl border border-indigo-500/20 shadow-inner">
+                        <UserCheck size={30} />
                       </div>
-                      <h2 className="text-xl sm:text-2xl font-bold tracking-tight text-white mt-0.5">
-                        {activeContributor}
-                      </h2>
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <span className="text-xs uppercase tracking-widest font-bold text-indigo-400">
+                            Active Contributor Profile
+                          </span>
+                          <span className="inline-block w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+                        </div>
+                        <h2 className="text-2xl sm:text-3xl font-extrabold tracking-tight text-white mt-1">
+                          {activeContributor}
+                        </h2>
+                      </div>
                     </div>
-                  </div>
 
-                  <div className="flex items-center gap-3 align-self-start sm:align-self-auto">
-                    <div className="flex items-center gap-2 text-xs font-medium bg-white/10 px-3.5 py-1.5 rounded-full border border-white/10 shadow-inner">
-                      <Sparkles size={14} className="text-indigo-300" />
-                      <span>Rank #{activeRank + 1} of {contributorList.length}</span>
+                    <div className="flex items-center gap-3 self-start sm:self-auto">
+                      <div className="flex items-center gap-2 text-xs font-semibold bg-slate-800/80 text-slate-300 px-4 py-2 rounded-xl border border-slate-700/60 shadow-md">
+                        <Sparkles size={15} className="text-indigo-400" />
+                        <span>Rank #{activeRank + 1} of {contributorList.length}</span>
+                      </div>
+
+                      {contributorList.length > 1 && (
+                        <button
+                          onClick={handleSelectNext}
+                          className="flex items-center gap-1.5 text-xs font-bold bg-indigo-600 hover:bg-indigo-500 text-white px-4 py-2 rounded-xl transition-all shadow-lg shadow-indigo-600/20 active:scale-95 cursor-pointer"
+                          title="View Next Contributor"
+                        >
+                          <span>Next</span>
+                          <ChevronRight size={16} />
+                        </button>
+                      )}
                     </div>
-
-                    {contributorList.length > 1 && (
-                      <button
-                        onClick={handleSelectNext}
-                        className="flex items-center gap-1 text-xs font-semibold bg-indigo-600 hover:bg-indigo-500 text-white px-3 py-1.5 rounded-full transition-colors cursor-pointer"
-                        title="View Next Contributor"
-                      >
-                        <span>Next</span>
-                        <ChevronRight size={14} />
-                      </button>
-                    )}
                   </div>
                 </div>
 
+                {/* Summary Metrics Bar */}
                 <ContributorSummaryBar
                   contributorName={activeContributor}
                   allCommits={allCommits}
                   rank={activeRank}
                 />
 
-                <div className="grid grid-cols-1 xl:grid-cols-12 gap-6">
+                {/* AI Insights Engine */}
+                <div className="grid grid-cols-1 xl:grid-cols-12 gap-8">
                   <div className={showRecentCommits ? "xl:col-span-8" : "xl:col-span-12"}>
                     <ContributorAI
                       key={activeContributor}
@@ -471,16 +489,17 @@ function Contributors() {
                   </div>
                 </div>
 
-                <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
+                {/* Technical Breakdown Cards */}
+                <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-8">
                   <TechnicalFocusCard focus={contributorInsights.focus} />
                   <TopLanguagesCard languages={contributorInsights.languages} />
                   <MostModifiedFilesCard files={contributorInsights.files} />
                 </div>
               </section>
             ) : (
-              <div className="p-8 text-center bg-white rounded-2xl border border-dashed border-slate-300">
-                <ShieldAlert size={32} className="mx-auto text-slate-400 mb-2" />
-                <p className="text-slate-600 font-medium">Select a contributor above to load insights.</p>
+              <div className="p-10 text-center bg-slate-900/40 rounded-3xl border border-dashed border-slate-800 backdrop-blur-md">
+                <ShieldAlert size={36} className="mx-auto text-slate-500 mb-3" />
+                <p className="text-slate-400 font-medium">Select a contributor above to load developer profiles.</p>
               </div>
             )}
           </>

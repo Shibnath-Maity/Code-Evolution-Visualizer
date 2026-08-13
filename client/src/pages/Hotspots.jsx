@@ -9,21 +9,33 @@ import HotspotPagination, {
 import HotspotEmptyState from "../components/Hotspots/HotspotEmptyState";
 
 import { useAnalysis } from "../context/AnalysisContext";
-import { Sparkles, Flame, GitFork, ArrowUpRight, ShieldAlert } from "lucide-react";
+import { Sparkles, Flame, GitFork } from "lucide-react";
 import { FaGithub } from "react-icons/fa";
 
 const ITEMS_PER_PAGE = 10;
 
 const DEFAULT_AI_INSIGHT = {
   riskLevel: "Unknown",
-  summary: "AI analysis is not available.",
+  summary: "No AI insight was matched to this hotspot file.",
   recommendations: [],
   impact: "No impact analysis available.",
 };
 
+// Helper for consistent case-insensitive path comparisons
+const normalizePath = (value) =>
+  String(value || "")
+    .replace(/\\/g, "/")
+    .replace(/^\.\/+/, "")
+    .trim()
+    .toLowerCase();
+
 function normalizeFileField(item) {
-  const rawPath = item.file || item.path || item.filename || "Unknown file";
-  const normalizedPath = rawPath.replace(/\\/g, "/");
+  const rawPath =
+    item.file || item.path || item.filename || item.filePath || "Unknown file";
+  const normalizedPath = String(rawPath)
+    .replace(/\\/g, "/")
+    .replace(/^\.\/+/, "")
+    .trim();
 
   return {
     ...item,
@@ -39,24 +51,99 @@ export default function Hotspots() {
   const [selectedFile, setSelectedFile] = useState(null);
   const [currentPage, setCurrentPage] = useState(1);
 
-  // Extract raw hotspots safely from AnalysisContext
+  // Safely extract and normalize hotspots list
   const hotspots = useMemo(() => {
     const raw = analysis?.hotspots;
     if (Array.isArray(raw)) return raw.map(normalizeFileField);
     return (raw?.hotspots || []).map(normalizeFileField);
   }, [analysis]);
 
-  const hotspotInsights = useMemo(
-    () => analysis?.hotspotInsights || [],
-    [analysis]
-  );
+  // Extract and normalize AI insights, preserving object keys (filenames) if raw is a dictionary
+  const hotspotInsights = useMemo(() => {
+    const raw =
+      analysis?.hotspotInsights ??
+      analysis?.hotspotsInsight ??
+      [];
 
-  // Fast map for O(1) insight lookups
+    if (!raw) return [];
+
+    let list = [];
+
+    if (Array.isArray(raw)) {
+      list = raw;
+    } else if (typeof raw === "object") {
+      // Handle key-value objects like { "index.html": { riskLevel: "High" } }
+      list = Object.entries(raw).map(([key, value]) => {
+        if (!value || typeof value !== "object") {
+          return null;
+        }
+
+        return {
+          ...value,
+          file:
+            value.file ||
+            value.path ||
+            value.filename ||
+            value.filePath ||
+            key,
+        };
+      });
+    }
+
+    return list
+      .filter(Boolean)
+      .map((item) => {
+        const rawPath =
+          item.file ||
+          item.path ||
+          item.filename ||
+          item.filePath ||
+          "";
+
+        return {
+          ...item,
+          file: String(rawPath)
+            .replace(/\\/g, "/")
+            .replace(/^\.\/+/, "")
+            .trim(),
+        };
+      })
+      .filter((item) => item.file);
+  }, [analysis]);
+
+  // Fast O(1) insight lookup map indexed by both full path and filename fallback
   const insightMap = useMemo(() => {
-    return new Map(hotspotInsights.map((item) => [item.file, item]));
+    const map = new Map();
+
+    hotspotInsights.forEach((item) => {
+      const path = normalizePath(item.file);
+      if (!path) return;
+
+      map.set(path, item);
+
+      // Index by filename alone for fallback matching (e.g. "src/index.html" -> "index.html")
+      const filename = path.split("/").pop();
+      if (filename) {
+        map.set(filename, item);
+      }
+    });
+
+    console.log("🤖 NORMALIZED AI INSIGHTS:", hotspotInsights);
+    console.log("🗺️ AI INSIGHT MAP:", map);
+
+    return map;
   }, [hotspotInsights]);
 
-  // Fallback calculations for score fields
+  // Detailed debug log on analysis context changes
+  useEffect(() => {
+    console.log("========== HOTSPOT AI DEBUG ==========");
+    console.log("Analysis:", analysis);
+    console.log("Hotspot insights from context:", analysis?.hotspotInsights);
+    console.log("Processed insights:", hotspotInsights);
+    console.log("======================================");
+  }, [analysis, hotspotInsights]);
+
+  // Calculate score fields
   const scoredHotspots = useMemo(
     () =>
       hotspots.map((item) => ({
@@ -108,7 +195,7 @@ export default function Hotspots() {
     return filteredHotspots.slice(start, start + ITEMS_PER_PAGE);
   }, [filteredHotspots, currentPage]);
 
-  // Aggregated totals memoized against scoredHotspots
+  // Aggregated totals
   const totals = useMemo(() => {
     return scoredHotspots.reduce(
       (acc, item) => {
@@ -121,19 +208,33 @@ export default function Hotspots() {
     );
   }, [scoredHotspots]);
 
+  // Handle file selection with exact and fallback match logging
   const handleSelectHotspot = useCallback(
     (item) => {
       if (!item) {
         setSelectedFile(null);
         return;
       }
-      const insight = insightMap.get(item.file);
+
+      const normalizedFile = normalizePath(item.file);
+      const filename = normalizedFile.split("/").pop();
+
+      const insight =
+        insightMap.get(normalizedFile) || insightMap.get(filename);
+
+      console.log("🔥 HOTSPOT SELECTED:", item.file);
+      console.log("🔎 NORMALIZED FILE:", normalizedFile);
+      console.log("📄 FILENAME:", filename);
+      console.log("🤖 MATCHED AI INSIGHT:", insight);
+      console.log("📦 ALL AI INSIGHTS:", hotspotInsights);
+
       setSelectedFile({
         ...item,
+        file: item.file,
         aiInsight: insight || DEFAULT_AI_INSIGHT,
       });
     },
-    [insightMap]
+    [insightMap, hotspotInsights]
   );
 
   // Synchronize selection cleanly whenever filter set changes
@@ -151,7 +252,7 @@ export default function Hotspots() {
     if (!isStillInList) {
       handleSelectHotspot(filteredHotspots[0]);
     }
-  }, [filteredHotspots, handleSelectHotspot]);
+  }, [filteredHotspots, handleSelectHotspot, selectedFile]);
 
   return (
     <div className="h-screen bg-slate-950 text-slate-100 flex flex-col overflow-hidden selection:bg-orange-500/20 selection:text-orange-300">
