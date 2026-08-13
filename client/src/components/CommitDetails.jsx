@@ -12,36 +12,42 @@ import {
   ChevronUp,
   Plus,
   Minus,
+  Sparkles,
+  Zap,
+  Code2,
 } from "lucide-react";
 
 function DetailRow({ icon: Icon, label, children }) {
   return (
-    <div className="mb-5">
-      <p className="text-sm font-semibold text-gray-500 flex items-center gap-1.5">
-        <Icon size={14} className="text-gray-400" />
+    <div className="space-y-1.5">
+      <p className="text-xs font-medium text-slate-400 flex items-center gap-1.5 uppercase tracking-wider font-mono">
+        <Icon size={13} className="text-indigo-400" />
         {label}
       </p>
-      <div className="mt-1">{children}</div>
+      <div>{children}</div>
     </div>
   );
 }
 
 function SkeletonBlock({ className = "" }) {
-  return <div className={`animate-pulse bg-gray-100 rounded-lg ${className}`} />;
+  return <div className={`animate-pulse bg-slate-800/80 rounded-xl ${className}`} />;
 }
 
 function CommitDetailsLoading() {
   return (
-    <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
-      <div className="space-y-2 mb-6">
-        <SkeletonBlock className="h-6 w-40" />
-        <SkeletonBlock className="h-4 w-56" />
+    <div className="bg-slate-900/80 border border-slate-800 rounded-2xl p-6 space-y-6">
+      <div className="space-y-2">
+        <SkeletonBlock className="h-6 w-48" />
+        <SkeletonBlock className="h-4 w-64" />
       </div>
-      <div className="space-y-4">
-        <SkeletonBlock className="h-10 w-full" />
-        <SkeletonBlock className="h-4 w-32" />
-        <SkeletonBlock className="h-4 w-40" />
-        <SkeletonBlock className="h-24 w-full" />
+      <div className="space-y-4 pt-2">
+        <SkeletonBlock className="h-12 w-full" />
+        <div className="grid grid-cols-2 gap-4">
+          <SkeletonBlock className="h-10 w-full" />
+          <SkeletonBlock className="h-10 w-full" />
+        </div>
+        <SkeletonBlock className="h-32 w-full" />
+        <SkeletonBlock className="h-48 w-full" />
       </div>
     </div>
   );
@@ -49,32 +55,28 @@ function CommitDetailsLoading() {
 
 function CommitDetailsEmpty() {
   return (
-    <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
-      <h2 className="text-xl font-bold text-slate-900">Commit Details</h2>
-      <p className="text-gray-500 mt-1 text-sm">
-        Detailed information about this commit
-      </p>
-      <div className="mt-10 mb-6 flex flex-col items-center justify-center text-center text-gray-400">
-        <GitCommit size={28} className="mb-3" />
-        <p className="text-sm">Select a commit from the list to view details.</p>
+    <div className="bg-slate-900/60 border border-slate-800/80 rounded-2xl p-10 text-center">
+      <div className="inline-flex p-3 rounded-2xl bg-slate-800/60 text-slate-400 mb-3 border border-slate-700/50">
+        <GitCommit size={28} />
       </div>
+      <h2 className="text-lg font-bold text-white">No Commit Selected</h2>
+      <p className="text-slate-400 text-xs mt-1 max-w-sm mx-auto">
+        Select any commit card from the timeline to inspect its full code diff, changed files, and AI summary.
+      </p>
     </div>
   );
 }
 
-// Case-insensitive on purpose: the backend normalizes to "High"/"Medium"/"Low",
-// but this shouldn't silently fall back to the gray "unknown" style just
-// because casing drifts somewhere upstream.
 function levelBadgeStyle(level) {
   switch (level?.toLowerCase()) {
     case "high":
-      return "bg-red-100 text-red-700";
+      return "bg-rose-500/10 text-rose-400 border-rose-500/20";
     case "medium":
-      return "bg-yellow-100 text-yellow-700";
+      return "bg-amber-500/10 text-amber-400 border-amber-500/20";
     case "low":
-      return "bg-green-100 text-green-700";
+      return "bg-emerald-500/10 text-emerald-400 border-emerald-500/20";
     default:
-      return "bg-gray-100 text-gray-500";
+      return "bg-slate-800 text-slate-400 border-slate-700/60";
   }
 }
 
@@ -85,10 +87,10 @@ function levelBadgeLabel(level) {
 
 function LevelStat({ label, value }) {
   return (
-    <div className="bg-gray-50 border border-gray-100 rounded-lg p-3">
-      <p className="text-xs text-gray-500 mb-1.5">{label}</p>
+    <div className="bg-slate-900/80 border border-slate-800/90 rounded-xl p-3">
+      <p className="text-[11px] font-mono uppercase tracking-wider text-slate-400 mb-1.5">{label}</p>
       <span
-        className={`inline-block px-2.5 py-0.5 rounded-full text-xs font-semibold ${levelBadgeStyle(
+        className={`inline-block px-2.5 py-0.5 rounded-lg text-xs font-semibold border ${levelBadgeStyle(
           value
         )}`}
       >
@@ -98,9 +100,6 @@ function LevelStat({ label, value }) {
   );
 }
 
-// Splits a full multi-file unified diff into per-file blocks so each file
-// can be shown with its own path header and copy button, matching how git
-// actually structures a multi-file diff (each file starts with "diff --git").
 function splitDiffByFile(diffText) {
   if (!diffText) return [];
 
@@ -116,8 +115,6 @@ function splitDiffByFile(diffText) {
     } else if (current) {
       current.lines.push(line);
     } else {
-      // Diff text with no "diff --git" header at all (e.g. a single-file
-      // diff straight from `git show`) — collect into one unnamed block.
       current = { path: null, lines: [line] };
       blocks.push(current);
     }
@@ -126,9 +123,6 @@ function splitDiffByFile(diffText) {
   return blocks;
 }
 
-// Attaches a single running line-number to each row (new-file line number
-// for context/added lines, old-file line number for removed lines), reset
-// whenever a new "@@ ... @@" hunk header is encountered.
 function annotateDiffLines(lines) {
   let oldLine = null;
   let newLine = null;
@@ -178,36 +172,39 @@ function DiffFileBlock({ path, lines }) {
       setCopied(true);
       setTimeout(() => setCopied(false), 1500);
     } catch {
-      // clipboard write failed silently — button just won't flip to "copied"
+      // Ignore copy error
     }
   };
 
   return (
-    <div className="rounded-xl overflow-hidden border border-gray-800 mb-4 last:mb-0 min-w-0 w-full">
-      <div className="flex items-center justify-between bg-gray-900 px-4 py-2.5 border-b border-gray-800">
-        <span className="flex items-center gap-2 text-gray-300 text-sm font-mono truncate">
-          <FileText size={14} className="text-gray-500 shrink-0" />
+    <div className="rounded-2xl overflow-hidden border border-slate-800/80 bg-slate-950 mb-4 last:mb-0 min-w-0 w-full shadow-inner">
+      {/* File Header */}
+      <div className="flex items-center justify-between bg-slate-900/90 px-4 py-2.5 border-b border-slate-800/80">
+        <span className="flex items-center gap-2 text-slate-300 text-xs font-mono truncate">
+          <Code2 size={14} className="text-indigo-400 shrink-0" />
           <span className="truncate">{path || "diff"}</span>
         </span>
         <button
           onClick={handleCopy}
-          className="flex items-center gap-1.5 text-xs text-gray-400 hover:text-white transition-colors shrink-0"
+          className="flex items-center gap-1.5 px-2.5 py-1 text-xs font-mono text-slate-400 hover:text-white bg-slate-800/60 hover:bg-slate-800 border border-slate-700/50 rounded-lg transition-all shrink-0 cursor-pointer"
         >
-          {copied ? <Check size={13} /> : <Copy size={13} />}
-          {copied ? "Copied" : "Copy"}
+          {copied ? <Check size={12} className="text-emerald-400" /> : <Copy size={12} />}
+          <span>{copied ? "Copied" : "Copy"}</span>
         </button>
       </div>
-      <pre className="bg-gray-950 overflow-x-auto text-sm font-mono leading-6 m-0 min-w-0">
+
+      {/* Line-by-Line Code View */}
+      <pre className="bg-slate-950 p-2 overflow-x-auto text-xs font-mono leading-6 m-0 min-w-0 custom-scrollbar">
         {annotated.map((row, i) => {
-          let rowStyle = "text-gray-300";
-          if (row.type === "add") rowStyle = "text-green-400 bg-green-500/10";
-          else if (row.type === "remove") rowStyle = "text-red-400 bg-red-500/10";
-          else if (row.type === "hunk") rowStyle = "text-purple-400";
-          else if (row.type === "meta") rowStyle = "text-gray-500";
+          let rowStyle = "text-slate-300";
+          if (row.type === "add") rowStyle = "text-emerald-300 bg-emerald-500/10";
+          else if (row.type === "remove") rowStyle = "text-rose-300 bg-rose-500/10";
+          else if (row.type === "hunk") rowStyle = "text-indigo-400 bg-indigo-500/10 font-bold";
+          else if (row.type === "meta") rowStyle = "text-slate-500 italic";
 
           return (
-            <div key={i} className={`flex ${rowStyle}`}>
-              <span className="w-10 shrink-0 text-right pr-3 text-gray-600 select-none">
+            <div key={i} className={`flex items-center rounded-sm ${rowStyle}`}>
+              <span className="w-10 shrink-0 text-right pr-3 text-slate-600 select-none font-mono text-[11px]">
                 {row.gutter}
               </span>
               <span className="px-2 flex-1 whitespace-pre">
@@ -221,22 +218,25 @@ function DiffFileBlock({ path, lines }) {
   );
 }
 
-function CollapsibleSection({ title, defaultOpen = true, children }) {
+function CollapsibleSection({ title, icon: Icon, defaultOpen = true, children }) {
   const [open, setOpen] = useState(defaultOpen);
   return (
-    <div className="mt-6 first:mt-0 min-w-0">
+    <div className="mt-6 first:mt-0 min-w-0 border-t border-slate-800/60 pt-5">
       <button
         onClick={() => setOpen((v) => !v)}
-        className="w-full flex items-center justify-between text-left mb-3"
+        className="w-full flex items-center justify-between text-left group cursor-pointer"
       >
-        <h3 className="text-base font-bold text-slate-900">{title}</h3>
-        {open ? (
-          <ChevronUp size={18} className="text-gray-400" />
-        ) : (
-          <ChevronDown size={18} className="text-gray-400" />
-        )}
+        <div className="flex items-center gap-2">
+          {Icon && <Icon size={16} className="text-indigo-400" />}
+          <h3 className="text-sm font-bold text-white group-hover:text-indigo-300 transition-colors">
+            {title}
+          </h3>
+        </div>
+        <div className="p-1 rounded-lg bg-slate-800/50 group-hover:bg-slate-800 text-slate-400 group-hover:text-white transition-all">
+          {open ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+        </div>
       </button>
-      {open && children}
+      {open && <div className="mt-4">{children}</div>}
     </div>
   );
 }
@@ -251,8 +251,20 @@ function CommitDetails({
   onClose,
 }) {
   const [filesExpanded, setFilesExpanded] = useState(false);
+  const [copiedHash, setCopiedHash] = useState(false);
 
   const diffBlocks = useMemo(() => splitDiffByFile(commitDiff), [commitDiff]);
+
+  const handleCopyHash = async (hash) => {
+    if (!hash) return;
+    try {
+      await navigator.clipboard.writeText(hash);
+      setCopiedHash(true);
+      setTimeout(() => setCopiedHash(false), 1500);
+    } catch {
+      // Ignore copy error
+    }
+  };
 
   if (loadingDetails) {
     return <CommitDetailsLoading />;
@@ -267,201 +279,221 @@ function CommitDetails({
   const hasMoreFiles = files.length > 5;
 
   return (
-    <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6 min-w-0 w-full">
-      {/* Header */}
-      <div className="flex justify-between items-start mb-5 pb-5 border-b border-gray-100">
-        <div>
-          <h2 className="text-xl font-bold text-slate-900">Commit Details</h2>
-          <p className="text-gray-500 mt-0.5 text-sm">
-            Detailed information about this commit
-          </p>
+    <div className="space-y-6 min-w-0 w-full font-sans">
+      
+      {/* Top Details Card */}
+      <div className="bg-slate-900/90 border border-slate-800 rounded-2xl p-5 space-y-5 shadow-xl backdrop-blur-xl">
+        
+        {/* Hash Badge with Copy Action */}
+        <DetailRow icon={GitCommit} label="Commit Hash">
+          <div className="flex items-center justify-between bg-slate-950 border border-slate-800 rounded-xl p-2.5">
+            <span className="font-mono text-xs text-indigo-300 break-all select-all">
+              {selectedCommit.hash}
+            </span>
+            <button
+              onClick={() => handleCopyHash(selectedCommit.hash)}
+              className="ml-3 flex items-center gap-1 px-2.5 py-1 text-[11px] font-mono text-slate-400 hover:text-white bg-slate-800 hover:bg-slate-700 border border-slate-700/50 rounded-lg transition-all shrink-0 cursor-pointer"
+            >
+              {copiedHash ? <Check size={12} className="text-emerald-400" /> : <Copy size={12} />}
+              <span>{copiedHash ? "Copied" : "Copy"}</span>
+            </button>
+          </div>
+        </DetailRow>
+
+        {/* Author + Date Grid */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <DetailRow icon={User} label="Author">
+            <p className="text-xs font-semibold text-slate-200 bg-slate-950/60 border border-slate-800/80 rounded-xl px-3 py-2">
+              {selectedCommit.author}
+            </p>
+          </DetailRow>
+          <DetailRow icon={Calendar} label="Timestamp">
+            <p className="text-xs font-mono text-slate-300 bg-slate-950/60 border border-slate-800/80 rounded-xl px-3 py-2">
+              {new Date(selectedCommit.date).toLocaleString()}
+            </p>
+          </DetailRow>
         </div>
-        {onClose && (
-          <button
-            onClick={onClose}
-            aria-label="Close commit details"
-            className="text-gray-400 hover:text-gray-900 hover:bg-gray-50 rounded-lg p-1.5 transition-colors shrink-0"
-          >
-            <X size={18} />
-          </button>
+
+        {/* Message */}
+        <DetailRow icon={FileText} label="Message">
+          <div className="bg-slate-950/60 border border-slate-800/80 rounded-xl p-3">
+            <p className="font-medium text-slate-100 text-sm leading-relaxed">
+              {selectedCommit.message}
+            </p>
+          </div>
+        </DetailRow>
+
+        {/* Code Modification Stat Chips */}
+        {(selectedCommit.additions !== undefined ||
+          selectedCommit.deletions !== undefined) && (
+          <div className="flex flex-wrap items-center gap-2 pt-1 font-mono text-xs">
+            <span className="inline-flex items-center gap-1 text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 px-3 py-1 rounded-xl">
+              <Plus size={13} />
+              {selectedCommit.additions || 0} additions
+            </span>
+            <span className="inline-flex items-center gap-1 text-rose-400 bg-rose-500/10 border border-rose-500/20 px-3 py-1 rounded-xl">
+              <Minus size={13} />
+              {selectedCommit.deletions || 0} deletions
+            </span>
+            <span className="inline-flex items-center gap-1.5 text-slate-300 bg-slate-800/80 border border-slate-700/60 px-3 py-1 rounded-xl">
+              <FileText size={13} className="text-slate-400" />
+              {files.length} files changed
+            </span>
+          </div>
         )}
       </div>
 
-      {/* Hash */}
-      <DetailRow icon={GitCommit} label="Commit hash">
-        <p className="font-mono text-xs bg-gray-100 rounded-lg p-2.5 break-all">
-          {selectedCommit.hash}
-        </p>
-      </DetailRow>
-
-      {/* Author + Date side by side */}
-      <div className="grid grid-cols-2 gap-x-4">
-        <DetailRow icon={User} label="Author">
-          <p className="text-sm">{selectedCommit.author}</p>
-        </DetailRow>
-        <DetailRow icon={Calendar} label="Date">
-          <p className="text-sm">{selectedCommit.date}</p>
-        </DetailRow>
-      </div>
-
-      {/* Message */}
-      <DetailRow icon={FileText} label="Message">
-        <p className="font-medium text-slate-800 text-sm">
-          {selectedCommit.message}
-        </p>
-      </DetailRow>
-
-      {/* Stat chips */}
-      {(selectedCommit.additions !== undefined ||
-        selectedCommit.deletions !== undefined) && (
-        <div className="flex flex-wrap items-center gap-2 mb-2">
-          <span className="inline-flex items-center gap-1 text-green-600 bg-green-50 px-2.5 py-1 rounded-full text-xs font-semibold">
-            <Plus size={12} />
-            {selectedCommit.additions || 0} additions
-          </span>
-          <span className="inline-flex items-center gap-1 text-red-600 bg-red-50 px-2.5 py-1 rounded-full text-xs font-semibold">
-            <Minus size={12} />
-            {selectedCommit.deletions || 0} deletions
-          </span>
-          <span className="inline-flex items-center gap-1 text-gray-600 bg-gray-50 px-2.5 py-1 rounded-full text-xs font-semibold">
-            <FileText size={12} />
-            {files.length} files changed
-          </span>
-        </div>
-      )}
-
-      {/* AI Summary */}
-      <div className="mt-6">
-        <div className="flex items-center justify-between mb-4">
-          <div className="flex items-center gap-2">
-            <Brain className="text-violet-600" size={20} />
-            <h3 className="text-lg font-bold text-slate-900">AI Summary</h3>
+      {/* AI Summary Section */}
+      <div className="bg-gradient-to-b from-indigo-950/40 via-slate-900/80 to-slate-900/90 border border-indigo-500/30 rounded-2xl p-5 shadow-xl backdrop-blur-xl space-y-4">
+        
+        {/* Header */}
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2.5">
+            <div className="p-2 rounded-xl bg-indigo-500/20 border border-indigo-500/30 text-indigo-400">
+              <Brain size={18} />
+            </div>
+            <div>
+              <h3 className="text-sm font-bold text-white flex items-center gap-1.5">
+                AI Commit Summary
+              </h3>
+              <p className="text-[11px] text-slate-400 font-mono">Automated intelligent code review</p>
+            </div>
           </div>
-          <span className="text-xs font-medium text-violet-600 bg-violet-50 px-2.5 py-1 rounded-full">
-            Powered by Groq
+          <span className="text-[11px] font-mono text-indigo-300 bg-indigo-500/10 border border-indigo-500/20 px-2.5 py-1 rounded-lg flex items-center gap-1">
+            <Sparkles size={11} /> Powered by Groq
           </span>
         </div>
 
         {loadingSummary ? (
-          <div className="space-y-3">
+          <div className="space-y-3 pt-2">
             <SkeletonBlock className="h-4 w-full" />
             <SkeletonBlock className="h-4 w-5/6" />
             <SkeletonBlock className="h-20 w-full" />
           </div>
         ) : aiSummary ? (
-          <div className="bg-violet-50 border border-violet-200 rounded-xl p-4">
-            <p className="text-gray-700 text-sm leading-6">
+          <div className="space-y-4 pt-1">
+            
+            {/* Overview Summary */}
+            <p className="text-slate-300 text-xs sm:text-sm leading-relaxed bg-slate-950/50 border border-slate-800/80 rounded-xl p-3.5">
               {aiSummary.summary || "No summary generated for this commit."}
             </p>
 
-            <div className="mt-4">
-              <p className="text-xs text-gray-500 mb-1">Purpose</p>
-              <p className="text-sm font-medium">
+            {/* Purpose */}
+            <div className="bg-slate-950/50 border border-slate-800/80 rounded-xl p-3">
+              <p className="text-[10px] font-mono text-slate-400 uppercase tracking-wider mb-1">Purpose</p>
+              <p className="text-xs font-medium text-slate-200">
                 {aiSummary.purpose || "Not specified"}
               </p>
             </div>
 
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mt-4">
+            {/* Level Stats Grid */}
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
               <LevelStat label="Impact" value={aiSummary.impact} />
               <LevelStat label="Risk" value={aiSummary.risk} />
               <LevelStat label="Complexity" value={aiSummary.complexity} />
-              <div className="bg-gray-50 border border-gray-100 rounded-lg p-3">
-                <p className="text-xs text-gray-500 mb-1.5">Review Time</p>
-                <span className="inline-block px-2.5 py-0.5 rounded-full text-xs font-semibold bg-blue-100 text-blue-700">
+              <div className="bg-slate-900/80 border border-slate-800/90 rounded-xl p-3">
+                <p className="text-[11px] font-mono uppercase tracking-wider text-slate-400 mb-1.5">Review Time</p>
+                <span className="inline-block px-2.5 py-0.5 rounded-lg text-xs font-semibold bg-indigo-500/10 text-indigo-300 border border-indigo-500/20 font-mono">
                   {aiSummary.reviewTime || "Unknown"}
                 </span>
               </div>
             </div>
 
-            <div className="grid grid-cols-2 gap-2 mt-2">
-              <div className="bg-gray-50 border border-gray-100 rounded-lg p-3">
-                <p className="text-xs text-gray-500 mb-1.5">Breaking Change</p>
+            {/* Breaking Changes & Tags */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+              <div className="bg-slate-900/80 border border-slate-800/90 rounded-xl p-3">
+                <p className="text-[11px] font-mono uppercase tracking-wider text-slate-400 mb-1.5">Breaking Change</p>
                 <span
-                  className={`inline-block px-2.5 py-0.5 rounded-full text-xs font-semibold ${
+                  className={`inline-block px-2.5 py-0.5 rounded-lg text-xs font-semibold border ${
                     aiSummary.breakingChange
-                      ? "bg-red-100 text-red-700"
-                      : "bg-green-100 text-green-700"
+                      ? "bg-rose-500/10 text-rose-400 border-rose-500/20"
+                      : "bg-emerald-500/10 text-emerald-400 border-emerald-500/20"
                   }`}
                 >
-                  {aiSummary.breakingChange ? "Yes" : "No"}
+                  {aiSummary.breakingChange ? "Yes (Action Required)" : "No"}
                 </span>
               </div>
+
               {aiSummary.tags?.length > 0 && (
-                <div className="bg-gray-50 border border-gray-100 rounded-lg p-3">
-                  <p className="text-xs text-gray-500 mb-1.5">Tags</p>
+                <div className="bg-slate-900/80 border border-slate-800/90 rounded-xl p-3">
+                  <p className="text-[11px] font-mono uppercase tracking-wider text-slate-400 mb-1.5">Tags</p>
                   <div className="flex flex-wrap gap-1.5">
                     {aiSummary.tags.map((tag, index) => (
                       <span
                         key={`${tag}-${index}`}
-                        className="px-2 py-0.5 bg-violet-100 text-violet-700 rounded-full text-xs"
+                        className="px-2 py-0.5 bg-indigo-500/10 text-indigo-300 border border-indigo-500/20 rounded-md text-[11px] font-mono"
                       >
-                        {tag}
+                        #{tag}
                       </span>
                     ))}
                   </div>
                 </div>
               )}
             </div>
+
           </div>
         ) : (
-          <div className="bg-gray-50 rounded-xl p-5 text-gray-500 text-sm">
-            AI summary is not available.
+          <div className="bg-slate-950/40 border border-slate-800/80 rounded-xl p-4 text-slate-400 text-xs text-center font-mono">
+            AI summary is not available for this commit.
           </div>
         )}
       </div>
 
-      {/* Files changed */}
+      {/* Changed Files List Section */}
       <CollapsibleSection
-        title={`Files Changed${files.length ? ` (${files.length})` : ""}`}
+        title={`Files Changed (${files.length})`}
+        icon={FileText}
         defaultOpen={false}
       >
         <div className="space-y-2">
           {visibleFiles.map((file, index) => (
             <div
               key={index}
-              className="flex items-center gap-2 bg-gray-50 border border-gray-100 rounded-lg px-3 py-2.5 font-mono text-xs text-slate-700"
+              className="flex items-center gap-2.5 bg-slate-950/60 border border-slate-800/80 rounded-xl px-3.5 py-2.5 font-mono text-xs text-slate-300 hover:border-slate-700 transition-colors"
             >
-              <FileText size={13} className="text-gray-400 shrink-0" />
+              <FileText size={14} className="text-indigo-400 shrink-0" />
               <span className="truncate">{file}</span>
             </div>
           ))}
         </div>
+
         {hasMoreFiles && (
           <button
             onClick={() => setFilesExpanded((v) => !v)}
-            className="mt-2 flex items-center gap-1 text-xs font-medium text-blue-600 hover:text-blue-700"
+            className="mt-3 flex items-center gap-1.5 text-xs font-mono font-medium text-indigo-400 hover:text-indigo-300 transition-colors cursor-pointer"
           >
             {filesExpanded ? (
               <>
-                Show less <ChevronUp size={13} />
+                Show less <ChevronUp size={14} />
               </>
             ) : (
               <>
-                Show {files.length - 5} more <ChevronDown size={13} />
+                Show {files.length - 5} more files <ChevronDown size={14} />
               </>
             )}
           </button>
         )}
       </CollapsibleSection>
 
-      {/* Diff viewer */}
-      <CollapsibleSection title="Diff Viewer" defaultOpen>
+      {/* Code Diff Viewer Section */}
+      <CollapsibleSection title="Unified Code Diff" icon={Zap} defaultOpen>
         {loadingDiff ? (
-          <div className="space-y-2">
+          <div className="space-y-3">
             <SkeletonBlock className="h-4 w-full" />
             <SkeletonBlock className="h-4 w-5/6" />
-            <SkeletonBlock className="h-4 w-2/3" />
+            <SkeletonBlock className="h-32 w-full" />
           </div>
         ) : diffBlocks.length > 0 ? (
           diffBlocks.map((block, i) => (
             <DiffFileBlock key={block.path || i} path={block.path} lines={block.lines} />
           ))
         ) : (
-          <p className="text-gray-400 text-sm py-4">
-            No diff available for this commit.
-          </p>
+          <div className="bg-slate-950/40 border border-slate-800/80 rounded-xl p-6 text-center text-slate-500 font-mono text-xs">
+            No code diff changes found for this commit.
+          </div>
         )}
       </CollapsibleSection>
+
     </div>
   );
 }

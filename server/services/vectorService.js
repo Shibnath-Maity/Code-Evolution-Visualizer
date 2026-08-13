@@ -1,6 +1,9 @@
 const fs = require("fs");
 const path = require("path");
-const { addDocument } = require("./ragService");
+const { addDocument, isRepositoryIndexed } = require("./ragService");
+
+// Schema version for RAG indices
+const INDEX_VERSION = "v2";
 
 // ==========================================
 // Directories to ignore
@@ -47,8 +50,6 @@ const ALLOWED_EXTENSIONS = [
   ".properties",
   ".toml",
   ".ini",
-  // Note: "Dockerfile" and ".env.example" have no matching extname()
-  // result, so they're handled separately via SPECIAL_FILES below.
 ];
 
 // Files that should always be indexed even though they don't have
@@ -77,9 +78,7 @@ const SPECIAL_FILES = [
   ".env.example",
 ];
 
-// Lockfiles: worth acknowledging in the repo summary, but usually huge,
-// machine-generated, and low-value to chunk/embed for semantic search.
-// We index them as a single truncated chunk instead of splitting fully.
+// Lockfiles: index as a single truncated chunk
 const LOCKFILES = new Set([
   "package-lock.json",
   "yarn.lock",
@@ -88,15 +87,13 @@ const LOCKFILES = new Set([
   "Cargo.lock",
 ]);
 
-// Skip files bigger than this entirely (bytes). Prevents pathological
-// slowdowns on generated/minified/vendored files that slipped through
-// the extension filter.
+// Skip files bigger than this entirely (bytes)
 const MAX_FILE_SIZE_BYTES = 1.5 * 1024 * 1024; // 1.5MB
 
-// Cap how much of a lockfile we actually embed.
+// Cap how much of a lockfile we actually embed
 const LOCKFILE_MAX_CHARS = 4000;
 
-// How many files to embed concurrently.
+// How many files to embed concurrently
 const INDEX_CONCURRENCY = 5;
 
 // ==========================================
@@ -164,8 +161,6 @@ function detectLanguage(extension, fileName = "") {
 function getSourceFiles(directory, repoRoot = directory, seenRealPaths = new Set()) {
   let files = [];
 
-  // Guard against symlink cycles (e.g. a symlinked dir pointing back
-  // up the tree, which would otherwise recurse forever).
   let realPath;
   try {
     realPath = fs.realpathSync(directory);
@@ -189,10 +184,6 @@ function getSourceFiles(directory, repoRoot = directory, seenRealPaths = new Set
   for (const entry of entries) {
     const fullPath = path.join(directory, entry.name);
 
-    // ================================
-    // Directory
-    // ================================
-
     if (entry.isDirectory()) {
       if (IGNORED_DIRS.includes(entry.name)) {
         continue;
@@ -202,24 +193,14 @@ function getSourceFiles(directory, repoRoot = directory, seenRealPaths = new Set
       continue;
     }
 
-    // Skip symlinked files to avoid surprises/duplication; only index
-    // real files.
     if (entry.isSymbolicLink()) {
       continue;
     }
-
-    // ================================
-    // Special configuration files / lockfiles
-    // ================================
 
     if (SPECIAL_FILES.includes(entry.name) || LOCKFILES.has(entry.name)) {
       files.push(fullPath);
       continue;
     }
-
-    // ================================
-    // Normal extensions
-    // ================================
 
     const extension = path.extname(entry.name).toLowerCase();
 
@@ -227,7 +208,6 @@ function getSourceFiles(directory, repoRoot = directory, seenRealPaths = new Set
       continue;
     }
 
-    // Ignore generated statistics
     if (entry.name.toLowerCase() === "stats.json") {
       continue;
     }
@@ -253,8 +233,6 @@ function chunkCode(content, chunkSize = 3000, overlap = 200) {
   while (start < content.length) {
     let end = Math.min(start + chunkSize, content.length);
 
-    // If we're not at the end of the file, try to break on a newline
-    // near the boundary so we don't split mid-line/mid-function.
     if (end < content.length) {
       const lastNewline = content.lastIndexOf("\n", end);
       if (lastNewline > start + chunkSize * 0.5) {
@@ -266,9 +244,6 @@ function chunkCode(content, chunkSize = 3000, overlap = 200) {
 
     if (end >= content.length) break;
 
-    // Step forward, backing up by `overlap` so context carries between
-    // chunks (helps retrieval quality for anything split across a
-    // boundary).
     start = Math.max(end - overlap, start + 1);
   }
 
@@ -276,7 +251,7 @@ function chunkCode(content, chunkSize = 3000, overlap = 200) {
 }
 
 // ==========================================
-// Tiny concurrency-limited async map
+// Concurrency-limited async map
 // ==========================================
 
 async function mapWithConcurrency(items, limit, worker) {
@@ -297,10 +272,10 @@ async function mapWithConcurrency(items, limit, worker) {
 }
 
 // ==========================================
-// Index a single file (extracted so it can run concurrently)
+// Index a single file
 // ==========================================
 
-async function indexFile(filePath, repoPath, repositoryId) {
+async function indexFile(filePath, repoPath, userId, repositoryId) {
   const relativePath = path.relative(repoPath, filePath);
   const fileName = path.basename(filePath);
   const extension = path.extname(fileName).toLowerCase();
@@ -316,7 +291,7 @@ async function indexFile(filePath, repoPath, repositoryId) {
 
   if (stats.size > MAX_FILE_SIZE_BYTES) {
     console.log(
-      `⏭️  Skipping ${relativePath} (${Math.round(stats.size / 1024)}KB exceeds size limit)`
+      `⏭️ Skipping ${relativePath} (${Math.round(stats.size / 1024)}KB exceeds size limit)`
     );
     return null;
   }
@@ -336,9 +311,6 @@ async function indexFile(filePath, repoPath, repositoryId) {
   const language = detectLanguage(extension, fileName);
   const isLockfile = LOCKFILES.has(fileName);
 
-  // Lockfiles: index a single truncated chunk rather than fully
-  // splitting a machine-generated file that's rarely useful to search
-  // line-by-line.
   const chunks = isLockfile
     ? [content.slice(0, LOCKFILE_MAX_CHARS)]
     : chunkCode(content);
@@ -364,9 +336,12 @@ Code / Content:
 ${chunks[i]}
 `;
 
-    const chunkId = `${repositoryId}_${relativePath.replace(/[^a-zA-Z0-9]/g, "_")}_${i}`;
+    // Explicitly scope chunk IDs by user + repo + chunk index to prevent collisions
+    const chunkId = `${userId}_${repositoryId}_${relativePath.replace(/[^a-zA-Z0-9]/g, "_")}_${i}`;
 
     await addDocument(chunkId, documentText, {
+      userId: String(userId),
+      repositoryId: String(repositoryId),
       file: relativePath,
       directory,
       fileName,
@@ -375,7 +350,7 @@ ${chunks[i]}
       type: "source",
       language,
       extension,
-      repositoryId,
+      indexVersion: INDEX_VERSION,
     });
   }
 
@@ -391,48 +366,71 @@ ${chunks[i]}
 // Index entire repository
 // ==========================================
 
-async function indexRepository(repoPath, repositoryId) {
+async function indexRepository(repoPath, userId, repositoryId) {
   try {
     if (!repositoryId) {
       throw new Error("repositoryId is required for indexing");
     }
+    if (!userId) {
+      throw new Error("userId is required for indexing");
+    }
+
+    // Check if user + repository combination is already indexed at current INDEX_VERSION
+    const alreadyIndexed = await isRepositoryIndexed(
+      String(userId),
+      String(repositoryId),
+      INDEX_VERSION
+    );
+
+    if (alreadyIndexed) {
+      console.log(
+        `♻️ Repository ${repositoryId} for user ${userId} already indexed (v:${INDEX_VERSION}). Skipping RAG indexing.`
+      );
+      return {
+        skipped: true,
+        files: 0,
+        chunks: 0,
+      };
+    }
 
     console.log("\n🔍 Starting repository indexing...");
     console.log("Repository:", repoPath);
+    console.log("User ID:", userId);
     console.log("Repository ID:", repositoryId);
 
     const files = getSourceFiles(repoPath);
 
     console.log(`📁 Found ${files.length} indexable files`);
-const frameworks = new Set();
+    const frameworks = new Set();
 
-for (const filePath of files) {
-  if (path.basename(filePath) === "package.json") {
-    try {
-      const pkg = JSON.parse(fs.readFileSync(filePath, "utf8"));
+    for (const filePath of files) {
+      if (path.basename(filePath) === "package.json") {
+        try {
+          const pkg = JSON.parse(fs.readFileSync(filePath, "utf8"));
 
-      const deps = {
-        ...(pkg.dependencies || {}),
-        ...(pkg.devDependencies || {}),
-      };
+          const deps = {
+            ...(pkg.dependencies || {}),
+            ...(pkg.devDependencies || {}),
+          };
 
-      if (deps.react) frameworks.add("React");
-      if (deps.express) frameworks.add("Express");
-      if (deps.vite) frameworks.add("Vite");
-      if (deps.tailwindcss) frameworks.add("Tailwind CSS");
-      if (deps.axios) frameworks.add("Axios");
-      if (deps.mongoose) frameworks.add("Mongoose");
-      if (deps["react-router-dom"]) frameworks.add("React Router");
-      if (deps.recharts) frameworks.add("Recharts");
-    } catch (err) {
-      console.error("Failed to parse package.json:", err.message);
+          if (deps.react) frameworks.add("React");
+          if (deps.express) frameworks.add("Express");
+          if (deps.vite) frameworks.add("Vite");
+          if (deps.tailwindcss) frameworks.add("Tailwind CSS");
+          if (deps.axios) frameworks.add("Axios");
+          if (deps.mongoose) frameworks.add("Mongoose");
+          if (deps["react-router-dom"]) frameworks.add("React Router");
+          if (deps.recharts) frameworks.add("Recharts");
+        } catch (err) {
+          console.error("Failed to parse package.json:", err.message);
+        }
+      }
     }
-  }
-}
 
-console.log("Detected Frameworks:", [...frameworks]);
+    console.log("Detected Frameworks:", [...frameworks]);
+
     const results = await mapWithConcurrency(files, INDEX_CONCURRENCY, (filePath) =>
-      indexFile(filePath, repoPath, repositoryId).catch((error) => {
+      indexFile(filePath, repoPath, userId, repositoryId).catch((error) => {
         console.error(`⚠️ Could not process ${filePath}:`, error.message);
         return null;
       })
@@ -462,7 +460,7 @@ console.log("Detected Frameworks:", [...frameworks]);
 
     const fileSummary = repositoryFiles.map((item) => `- ${item.file} (${item.language})`).join("\n");
 
-   const repositorySummary = `
+    const repositorySummary = `
 Repository Overview
 
 Repository ID:
@@ -486,20 +484,25 @@ ${fileSummary}
 
     console.log("\n📋 Creating repository summary...");
 
-    await addDocument(`${repositoryId}_repository_summary`, repositorySummary, {
-  repositoryId,
-  type: "repository_summary",
-  totalFiles: files.length,
-  totalChunks,
-  languages: Object.keys(languageStats).join(", "),
-  frameworks: [...frameworks].join(", "),
-});
+    const summaryId = `${userId}_${repositoryId}_${INDEX_VERSION}_repository_summary`;
+
+    await addDocument(summaryId, repositorySummary, {
+      userId: String(userId),
+      repositoryId: String(repositoryId),
+      type: "repository_summary",
+      totalFiles: files.length,
+      totalChunks,
+      languages: Object.keys(languageStats).join(", "),
+      frameworks: [...frameworks].join(", "),
+      indexVersion: INDEX_VERSION,
+    });
 
     console.log("✅ Repository summary added to ChromaDB");
-    console.log("\n✅ Repository indexed successfully");
+    console.log("✅ Repository indexed successfully");
     console.log(`📦 Total chunks stored: ${totalChunks}`);
 
     return {
+      skipped: false,
       files: files.length,
       chunks: totalChunks,
     };

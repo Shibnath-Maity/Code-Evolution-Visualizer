@@ -17,14 +17,15 @@ async function explainFile(
   repoPath,
   filePath,
   architecture = null,
-  repositoryId = null
+  repositoryId = null,
+  userId = null
 ) {
   /* ========================================================
      1. CHECK CACHE FIRST
   ======================================================== */
 
-  if (repositoryId) {
-    const session = getAnalysisSession(repositoryId);
+  if (userId && repositoryId) {
+    const session = getAnalysisSession(userId, repositoryId);
 
     const cached = session?.aiFileExplanations?.[filePath];
 
@@ -257,12 +258,12 @@ Return ONLY JSON.
      9. SAVE RESULT IN SESSION CACHE
   ======================================================== */
 
-  if (repositoryId) {
-    const session = getAnalysisSession(repositoryId);
+  if (userId && repositoryId) {
+    const session = getAnalysisSession(userId, repositoryId);
 
     const existingCache = session?.aiFileExplanations || {};
 
-    updateAnalysisSession(repositoryId, {
+    updateAnalysisSession(userId, repositoryId, {
       aiFileExplanations: {
         ...existingCache,
         [filePath]: result,

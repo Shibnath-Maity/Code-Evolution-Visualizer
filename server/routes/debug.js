@@ -6,9 +6,25 @@ const protect = require("../middleware/authMiddleware");
 const { solveBug } = require("../services/bugSolverService");
 const { getAnalysisSession } = require("../services/sessionService");
 
+function getUserId(req) {
+  return req.userId || req.user?.id || req.user?.userId;
+}
+
 router.post("/bug-solver", protect, async (req, res) => {
   try {
     const { error, repositoryId } = req.body;
+
+    const userId = getUserId(req);
+
+    // ------------------------------------------
+    // Validate user
+    // ------------------------------------------
+    if (!userId) {
+      return res.status(401).json({
+        success: false,
+        message: "Authenticated user not found.",
+      });
+    }
 
     // ------------------------------------------
     // Validate error
@@ -33,7 +49,7 @@ router.post("/bug-solver", protect, async (req, res) => {
     // ------------------------------------------
     // Get repository session
     // ------------------------------------------
-    const session = getAnalysisSession(repositoryId);
+    const session = getAnalysisSession(userId, repositoryId);
 
     if (!session || !session.repoPath) {
       return res.status(400).json({
@@ -45,6 +61,7 @@ router.post("/bug-solver", protect, async (req, res) => {
     const repoPath = session.repoPath;
 
     console.log("\n========== BUG SOLVER ROUTE ==========");
+    console.log("User ID:", userId);
     console.log("Repository ID:", repositoryId);
     console.log("Repository Path:", repoPath);
 

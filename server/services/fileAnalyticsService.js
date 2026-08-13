@@ -289,6 +289,14 @@ function mergeRepositoryData(scannedFiles, gitHistory) {
       const changes = Number(git.changes) || 0;
       const metrics = calculateFileMetrics(file);
 
+      // Preserve the actual contributor names (not just the count) so the
+      // frontend can filter files by the currently selected contributor.
+      // Previously only `contributorCount` (a number) was kept and the Set
+      // itself was discarded, which silently broke per-contributor file
+      // filtering on the Contributors page (Technical Focus / Top Languages /
+      // Most Modified Files all rely on `file.contributors` being an array).
+      const contributors = git.contributors ? Array.from(git.contributors) : [];
+
       return {
         ...file,
         path: normalizedPath,
@@ -296,7 +304,8 @@ function mergeRepositoryData(scannedFiles, gitHistory) {
         additions,
         deletions,
         churn: additions + deletions,
-        contributorCount: git.contributors ? git.contributors.size : 0,
+        contributors,
+        contributorCount: contributors.length,
         lastModified: null,
         metrics,
       };

@@ -1,106 +1,272 @@
+
 const activeAnalyses = new Map();
 
-// Session expiration time (2 hours of inactivity)
-const SESSION_TTL_MS = 2 * 60 * 60 * 1000;
-
 /* ==========================================================
-   SESSION CORE MANAGEMENT
+   SESSION KEY
 ========================================================== */
 
-function createAnalysisSession(analysisId, data) {
-  activeAnalyses.set(analysisId, {
-    ...data,
-    createdAt: Date.now(),
-    lastAccessedAt: Date.now(),
-    fileAIAnalysisCache: data?.fileAIAnalysisCache || {},
-  });
+function getSessionKey(userId, repositoryId) {
+  if (!userId || !repositoryId) {
+    throw new Error("userId and repositoryId are required");
+  }
+
+  return `${userId}:${repositoryId}`;
 }
 
-function getAnalysisSession(analysisId) {
-  const session = activeAnalyses.get(analysisId);
-  if (!session) return null;
+/* ==========================================================
+   CREATE / REPLACE ONE REPOSITORY SESSION
+========================================================== */
 
-  // Touch access time to keep active sessions alive
+function createAnalysisSession(userId, repositoryId, data = {}) {
+  const key = getSessionKey(userId, repositoryId);
+
+  const existingSession = activeAnalyses.get(key);
+
+  const session = {
+    ...data,
+
+    userId,
+    repositoryId,
+
+    createdAt: existingSession?.createdAt || Date.now(),
+    lastAccessedAt: Date.now(),
+
+    // Preserve file AI cache if the same repository is re-analyzed
+    fileAIAnalysisCache:
+      data.fileAIAnalysisCache ||
+      existingSession?.fileAIAnalysisCache ||
+      {},
+  };
+
+  activeAnalyses.set(key, session);
+
+  console.log("🟢 Analysis session created/updated:", key);
+
+  return key;
+}
+
+/* ==========================================================
+   GET SESSION
+========================================================== */
+
+function getAnalysisSession(userId, repositoryId) {
+  const key = getSessionKey(userId, repositoryId);
+
+  const session = activeAnalyses.get(key);
+
+  if (!session) {
+    return null;
+  }
+
   session.lastAccessedAt = Date.now();
+
   return session;
 }
 
-function updateAnalysisSession(analysisId, updates) {
-  const session = activeAnalyses.get(analysisId);
+/* ==========================================================
+   UPDATE SESSION
+========================================================== */
 
-  if (!session) return false;
+function updateAnalysisSession(userId, repositoryId, updates) {
+  const key = getSessionKey(userId, repositoryId);
 
-  activeAnalyses.set(analysisId, {
+  const session = activeAnalyses.get(key);
+
+  if (!session) {
+    return false;
+  }
+
+  activeAnalyses.set(key, {
     ...session,
     ...updates,
+
+    userId,
+    repositoryId,
+
     lastAccessedAt: Date.now(),
   });
 
   return true;
 }
 
-function deleteAnalysisSession(analysisId) {
-  return activeAnalyses.delete(analysisId);
+/* ==========================================================
+   DELETE ONE REPOSITORY SESSION
+========================================================== */
+
+function deleteAnalysisSession(userId, repositoryId) {
+  const key = getSessionKey(userId, repositoryId);
+
+  const deleted = activeAnalyses.delete(key);
+
+  if (deleted) {
+    console.log("🗑️ Analysis session deleted:", key);
+  }
+
+  return deleted;
 }
 
-function hasAnalysisSession(analysisId) {
-  return activeAnalyses.has(analysisId);
+/* ==========================================================
+   DELETE ALL USER SESSIONS
+   Use ONLY when user logs out / account cleanup /
+   explicit "clear all analyses".
+========================================================== */
+
+function deleteUserAnalysisSession(userId) {
+  if (!userId) {
+    throw new Error("userId is required");
+  }
+
+  const prefix = `${userId}:`;
+  let deleted = false;
+
+  for (const key of activeAnalyses.keys()) {
+    if (key.startsWith(prefix)) {
+      activeAnalyses.delete(key);
+      deleted = true;
+
+      console.log("🗑️ User analysis session deleted:", key);
+    }
+  }
+
+  return deleted;
 }
+
+/* ==========================================================
+   CHECK SESSION
+========================================================== */
+
+function hasAnalysisSession(userId, repositoryId) {
+  const key = getSessionKey(userId, repositoryId);
+
+  return activeAnalyses.has(key);
+}
+
+/* ==========================================================
+   GET ALL SESSIONS
+========================================================== */
 
 function getAllAnalysisSessions() {
   return activeAnalyses;
 }
 
 /* ==========================================================
-   PER-FILE AI CACHING
+   GET ALL SESSIONS FOR ONE USER
 ========================================================== */
 
-function getFileAIAnalysis(analysisId, filePath) {
-  const session = activeAnalyses.get(analysisId);
+function getUserAnalysisSessions(userId) {
+  if (!userId) {
+    throw new Error("userId is required");
+  }
 
-  if (!session || !session.fileAIAnalysisCache) {
+  const prefix = `${userId}:`;
+  const sessions = [];
+
+  for (const [key, session] of activeAnalyses.entries()) {
+    if (key.startsWith(prefix)) {
+      sessions.push(session);
+    }
+  }
+
+  return sessions;
+}
+
+/* ==========================================================
+   PER-FILE AI CACHE
+========================================================== */
+
+function getFileAIAnalysis(
+  userId,
+  repositoryId,
+  filePath
+) {
+  const session = getAnalysisSession(
+    userId,
+    repositoryId
+  );
+
+  if (
+    !session ||
+    !session.fileAIAnalysisCache
+  ) {
     return null;
   }
 
-  session.lastAccessedAt = Date.now();
-  return session.fileAIAnalysisCache[filePath] || null;
+  return (
+    session.fileAIAnalysisCache[filePath] ||
+    null
+  );
 }
 
-function saveFileAIAnalysis(analysisId, filePath, analysis) {
-  const session = activeAnalyses.get(analysisId);
+/* ==========================================================
+   SAVE FILE AI ANALYSIS
+========================================================== */
 
-  if (!session) return false;
+function saveFileAIAnalysis(
+  userId,
+  repositoryId,
+  filePath,
+  analysis
+) {
+  const key = getSessionKey(
+    userId,
+    repositoryId
+  );
 
-  const existingCache = session.fileAIAnalysisCache || {};
+  const session = activeAnalyses.get(key);
 
-  activeAnalyses.set(analysisId, {
-    ...session,
-    lastAccessedAt: Date.now(),
-    fileAIAnalysisCache: {
-      ...existingCache,
-      [filePath]: analysis,
-    },
-  });
+  if (!session) {
+    return false;
+  }
+
+  if (!session.fileAIAnalysisCache) {
+    session.fileAIAnalysisCache = {};
+  }
+
+  session.fileAIAnalysisCache[filePath] = analysis;
+  session.lastAccessedAt = Date.now();
 
   return true;
 }
 
 /* ==========================================================
-   AUTOMATIC MEMORY CLEANUP
+   SESSION CLEANUP
 ========================================================== */
 
-function cleanupStaleSessions(ttlMs = SESSION_TTL_MS) {
+/*
+  Prevent unlimited memory growth.
+
+  Example:
+  A user analyzes 50 repositories.
+  Old sessions eventually disappear if unused.
+*/
+
+const SESSION_TTL =
+  Number(process.env.ANALYSIS_SESSION_TTL) ||
+  1000 * 60 * 60 * 6; // 6 hours
+
+function cleanupExpiredSessions() {
   const now = Date.now();
-  for (const [id, session] of activeAnalyses.entries()) {
-    const lastAccess = session.lastAccessedAt || session.createdAt;
-    if (now - lastAccess > ttlMs) {
-      activeAnalyses.delete(id);
+
+  for (const [key, session] of activeAnalyses.entries()) {
+    if (
+      now - session.lastAccessedAt >
+      SESSION_TTL
+    ) {
+      activeAnalyses.delete(key);
+
+      console.log(
+        "🧹 Expired analysis session removed:",
+        key
+      );
     }
   }
 }
 
-// Periodically purge dead sessions every 30 minutes
-setInterval(() => cleanupStaleSessions(), 30 * 60 * 1000);
+// Run cleanup every 30 minutes
+setInterval(
+  cleanupExpiredSessions,
+  1000 * 60 * 30
+);
 
 /* ==========================================================
    EXPORTS
@@ -110,10 +276,17 @@ module.exports = {
   createAnalysisSession,
   getAnalysisSession,
   updateAnalysisSession,
+
   deleteAnalysisSession,
+  deleteUserAnalysisSession,
+
   hasAnalysisSession,
   getAllAnalysisSessions,
+  getUserAnalysisSessions,
+
   getFileAIAnalysis,
   saveFileAIAnalysis,
-  cleanupStaleSessions,
+
+  cleanupExpiredSessions,
 };
+

@@ -2,89 +2,139 @@ const simpleGit = require("simple-git");
 const path = require("path");
 const fs = require("fs");
 
+// Fixed regex: Escaped literal dot before 'git'
 const GITHUB_URL_PATTERN =
   /^https:\/\/github\.com\/([\w.-]+)\/([\w.-]+?)(\.git)?\/?$/;
 
 const SHA_PATTERN = /^[0-9a-f]{4,40}$/i;
-
-// Unique-ish delimiters unlikely to appear in commit messages/author
-// names, used to split `git log` output into per-commit blocks.
+const ID_PATTERN = /^[\w-]+$/;
 
 const COMMIT_SEP = "###COMMIT###";
 const FIELD_SEP = "|||";
+
+// ==========================================
+// Validation Helpers
+// ==========================================
+
 function assertValidHash(hash) {
   if (typeof hash !== "string" || !SHA_PATTERN.test(hash)) {
     throw new Error("Invalid commit hash.");
   }
 }
 
+function assertValidId(id, fieldName) {
+  if (!id || !ID_PATTERN.test(String(id))) {
+    throw new Error(
+      `Invalid ${fieldName}. Only alphanumeric characters, hyphens, and underscores are allowed.`
+    );
+  }
+}
+
 // ==========================================
-// Clone Repository
+// Git Commit SHA Helper
 // ==========================================
 
-async function cloneRepository(repoUrl) {
+async function getCurrentCommitSha(repoPath) {
+  const git = simpleGit(repoPath);
+  const result = await git.revparse(["HEAD"]);
+  return result.trim();
+}
+
+// ==========================================
+// Clone / Sync Repository Strategy
+// ==========================================
+
+async function cloneRepository(repoUrl, userId, repositoryId) {
   if (!repoUrl) {
     throw new Error("Repository URL is required.");
   }
 
-  repoUrl = repoUrl.trim();
+  assertValidId(userId, "User ID");
+  assertValidId(repositoryId, "Repository ID");
 
+  repoUrl = repoUrl.trim();
   const match = repoUrl.match(GITHUB_URL_PATTERN);
+
   if (!match) {
     throw new Error("Please enter a valid GitHub repository URL.");
   }
 
-  const [, owner, repoName] = match;
+  // Isolated directory per user & repository
+  const userFolder = path.join(__dirname, "../repositories", String(userId));
+  const repoPath = path.join(userFolder, String(repositoryId));
 
-  // Key the clone directory on owner + repo, not just repo name — two
-  // different repos can share a name (e.g. "userA/app" vs "userB/app"),
-  // and using repoName alone would make the second analysis silently
-  // reuse the first repo's clone.
-  const folderName = `${owner}__${repoName}`;
-  const repoPath = path.join(__dirname, "../repositories", folderName);
+  fs.mkdirSync(userFolder, { recursive: true });
 
+  // Check if repository already exists and is valid
   if (fs.existsSync(repoPath)) {
-    console.log("📁 Repository already exists. Checking Git...");
+    const git = simpleGit(repoPath);
 
     try {
-      const existingGit = simpleGit(repoPath);
-      await existingGit.status();
+      const isRepo = await git.checkIsRepo();
 
-      console.log("🔄 Refreshing existing repository...");
-      // Without this, a repo cloned once would keep returning the same
-      // stale commit history on every future analysis.
-      await existingGit.fetch(["--all", "--prune"]);
-      await existingGit.pull();
+      if (isRepo) {
+        console.log("📁 Repository exists. Fetching updates...");
+        await git.fetch(["origin", "--prune"]);
 
-      console.log("✅ Existing repository is valid and up to date.");
-      return repoPath;
+        let branch;
+        try {
+          const remoteHead = await git.raw([
+            "symbolic-ref",
+            "refs/remotes/origin/HEAD",
+          ]);
+          branch = remoteHead.trim().replace("refs/remotes/origin/", "");
+        } catch {
+          // Fallback: If origin/HEAD target isn't resolved locally, detect default branch automatically
+          await git.remote(["set-head", "origin", "--auto"]);
+          const remoteHead = await git.raw([
+            "symbolic-ref",
+            "refs/remotes/origin/HEAD",
+          ]);
+          branch = remoteHead.trim().replace("refs/remotes/origin/", "");
+        }
+
+        await git.reset(["--hard", `origin/${branch}`]);
+        await git.clean("f", ["-d"]);
+        console.log("✅ Existing repository updated successfully.");
+
+        const commitSha = await getCurrentCommitSha(repoPath);
+        return { repoPath, commitSha };
+      } else {
+        console.warn("⚠️ Path exists but is not a valid Git repository. Re-cloning...");
+        fs.rmSync(repoPath, { recursive: true, force: true });
+      }
     } catch (error) {
-      console.log("⚠️ Existing repository is corrupted or unreachable.");
-      console.log("🗑️ Removing repository for a fresh clone...");
-
-      fs.rmSync(repoPath, {
-        recursive: true,
-        force: true,
-      });
+      console.warn(
+        "⚠️ Could not update existing repository. Falling back to fresh clone:",
+        error.message
+      );
+      if (fs.existsSync(repoPath)) {
+        fs.rmSync(repoPath, { recursive: true, force: true });
+      }
     }
   }
 
+  // Fresh Clone
   try {
     console.log("📥 Cloning repository...");
-
     const git = simpleGit();
     await git.clone(repoUrl, repoPath);
-
     console.log("✅ Repository cloned successfully.");
+
+    const commitSha = await getCurrentCommitSha(repoPath);
+    return { repoPath, commitSha };
   } catch (error) {
     console.error("❌ Git clone failed:", error.message);
 
+    // Clean up partial clone directory on failure
+    if (fs.existsSync(repoPath)) {
+      fs.rmSync(repoPath, { recursive: true, force: true });
+    }
+
     throw new Error(
-      "Unable to clone repository. Please check the GitHub URL and repository access."
+      "Unable to clone repository. Please check the GitHub URL and access permissions."
     );
   }
-
-  return repoPath;
 }
 
 // ==========================================
@@ -94,38 +144,46 @@ async function cloneRepository(repoUrl) {
 async function getCommits(repoPath) {
   const git = simpleGit(repoPath);
 
-  const log = await git.log();
+  const raw = await git.raw([
+    "log",
+    `--pretty=format:${COMMIT_SEP}%H${FIELD_SEP}%an${FIELD_SEP}%ae${FIELD_SEP}%ad${FIELD_SEP}%s`,
+    "--date=iso-strict",
+    "--numstat",
+  ]);
 
   const commits = [];
+  const blocks = raw.split(COMMIT_SEP).filter(Boolean);
 
-  for (const commit of log.all) {
-    const diff = await git.raw([
-      "show",
-      "--stat",
-      "--format=",
-      commit.hash,
-    ]);
+  for (const block of blocks) {
+    const lines = block.split("\n");
+    const header = lines[0];
+
+    const [hash, author_name, author_email, date, ...msgParts] =
+      header.split(FIELD_SEP);
+    const message = msgParts.join(FIELD_SEP);
 
     let additions = 0;
     let deletions = 0;
     let filesChanged = 0;
 
-    const lines = diff.split("\n");
+    for (let i = 1; i < lines.length; i++) {
+      const line = lines[i].trim();
+      if (!line) continue;
 
-    for (const line of lines) {
-      const plus = (line.match(/\+/g) || []).length;
-      const minus = (line.match(/-/g) || []).length;
+      const [addedStr, removedStr, file] = line.split("\t");
+      if (file === undefined) continue;
 
-      additions += plus;
-      deletions += minus;
-
-      if (line.includes("|")) {
-        filesChanged++;
-      }
+      filesChanged++;
+      additions += addedStr === "-" ? 0 : parseInt(addedStr, 10) || 0;
+      deletions += removedStr === "-" ? 0 : parseInt(removedStr, 10) || 0;
     }
 
     commits.push({
-      ...commit,
+      hash,
+      author_name,
+      author_email,
+      date,
+      message,
       additions,
       deletions,
       files_changed: filesChanged,
@@ -139,34 +197,44 @@ async function getCommits(repoPath) {
 // Get Contributors
 // ==========================================
 //
-// Single `git log --numstat` call instead of one `git show` per commit.
-// This is the difference between 1 subprocess and N+1 subprocesses for
-// a repo with N commits, and gives exact added/removed line counts
-// (via numstat) instead of estimating them from `--stat`'s truncated
-// +/- symbol columns.
+// IMPORTANT: Contributors are grouped by normalized author EMAIL (not the raw
+// display name). Git allows the same person to commit under different name
+// casing/spelling (e.g. "Anik Chand" vs "ANIK CHAND") while using the same
+// email address. Grouping by exact name string previously caused these to be
+// treated as two separate contributors, splitting one person's commit history
+// across two buckets. Email is the stable, unique identifier for a person;
+// name casing/spelling is not. If email is somehow missing, we fall back to a
+// normalized (trimmed, lowercased) name so we still avoid casing-based splits.
+// ==========================================
 
 async function getContributors(repoPath) {
   const git = simpleGit(repoPath);
 
   const raw = await git.raw([
     "log",
-    `--pretty=format:${COMMIT_SEP}%H${FIELD_SEP}%an${FIELD_SEP}%ad`,
+    `--pretty=format:${COMMIT_SEP}%H${FIELD_SEP}%an${FIELD_SEP}%ae${FIELD_SEP}%ad`,
     "--date=iso-strict",
     "--numstat",
   ]);
 
   const contributors = {};
-
   const blocks = raw.split(COMMIT_SEP).filter(Boolean);
 
   for (const block of blocks) {
     const lines = block.split("\n");
     const header = lines[0];
-    const [hash, author, date] = header.split(FIELD_SEP);
+    const [hash, author, authorEmail, date] = header.split(FIELD_SEP);
 
-    if (!contributors[author]) {
-      contributors[author] = {
+    // Normalized identity key: prefer email (unique per person), fall back
+    // to normalized name only if email is missing for some reason.
+    const key = authorEmail
+      ? authorEmail.trim().toLowerCase()
+      : String(author || "").trim().toLowerCase();
+
+    if (!contributors[key]) {
+      contributors[key] = {
         name: author,
+        email: authorEmail || null,
         commits: 0,
         linesAdded: 0,
         linesRemoved: 0,
@@ -175,15 +243,15 @@ async function getContributors(repoPath) {
       };
     }
 
-    const contributor = contributors[author];
+    const contributor = contributors[key];
     contributor.commits += 1;
 
     if (new Date(date) > new Date(contributor.lastContribution)) {
       contributor.lastContribution = date;
+      // Keep the most recently used name/casing as the display name.
+      contributor.name = author;
     }
 
-    // Remaining lines are numstat rows: "<added>\t<removed>\t<path>".
-    // Binary files report "-" instead of a number for added/removed.
     for (let i = 1; i < lines.length; i++) {
       const line = lines[i].trim();
       if (!line) continue;
@@ -208,34 +276,19 @@ async function getContributors(repoPath) {
 }
 
 // ==========================================
-// Commit Statistics
+// Commit Statistics & Details
 // ==========================================
-
-// async function getCommitStats(repoPath) {
-//   const git = simpleGit(repoPath);
-//   const log = await git.log();
-
-//   return {
-//     totalCommits: log.total,
-//     firstCommit: log.all.length > 0 ? log.all[log.all.length - 1].date : null,
-//     latestCommit: log.all.length > 0 ? log.all[0].date : null,
-//   };
-// }
 
 function getCommitStats(commits) {
-    return {
-        totalCommits: commits.length,
-        firstCommit: commits.length ? commits[commits.length - 1].date : null,
-        latestCommit: commits.length ? commits[0].date : null,
-    };
+  return {
+    totalCommits: commits.length,
+    firstCommit: commits.length ? commits[commits.length - 1].date : null,
+    latestCommit: commits.length ? commits[0].date : null,
+  };
 }
-// ==========================================
-// Commit Details
-// ==========================================
 
 async function getCommitDetails(repoPath, hash) {
   assertValidHash(hash);
-
   const git = simpleGit(repoPath);
 
   const result = await git.show([hash, "--stat", "--format=fuller"]);
@@ -277,23 +330,14 @@ async function getCommitDetails(repoPath, hash) {
 
 async function getCommitDiff(repoPath, hash) {
   assertValidHash(hash);
-
   const git = simpleGit(repoPath);
-  const diff = await git.show([hash, "--patch", "--stat"]);
-
-  return diff;
+  return await git.show([hash, "--patch", "--stat"]);
 }
-
-// ==========================================
-// AI Commit Data
-// ==========================================
 
 async function getAICommitData(repoPath, hash) {
   assertValidHash(hash);
-
   const git = simpleGit(repoPath);
 
-  // Complete commit information
   const raw = await git.show([
     hash,
     "--stat",
@@ -302,7 +346,6 @@ async function getAICommitData(repoPath, hash) {
   ]);
 
   const lines = raw.split("\n");
-
   const data = {
     hash,
     author: "",
@@ -317,24 +360,17 @@ async function getAICommitData(repoPath, hash) {
   for (const line of lines) {
     if (line.startsWith("Author:")) {
       data.author = line.replace("Author:", "").trim();
-    }
-
-    else if (line.startsWith("CommitDate:")) {
+    } else if (line.startsWith("CommitDate:")) {
       data.date = line.replace("CommitDate:", "").trim();
-    }
-
-    else if (!messageFound && line.startsWith("    ")) {
+    } else if (!messageFound && line.startsWith("    ")) {
       data.message = line.trim();
       messageFound = true;
-    }
-
-    else if (
+    } else if (
       line.includes("|") &&
       !line.includes("file changed") &&
       !line.includes("files changed")
     ) {
       const file = line.split("|")[0].trim();
-
       if (file.length) {
         data.files.push(file);
       }
@@ -343,43 +379,32 @@ async function getAICommitData(repoPath, hash) {
 
   return data;
 }
-// ==========================================
-// Timeline
-// ==========================================
 
-async function getTimeline(repoPath) {
-    const git = simpleGit(repoPath);
-    const log = await git.log();
-
-    return log.all.map((commit) => ({
-        hash: commit.hash,
-        message: commit.message,
-        author: commit.author_name,
-        date: commit.date,
-        type: getCommitType(commit.message),
-    }));
-}
+// ==========================================
+// Timeline & File Coupling
+// ==========================================
 
 function getCommitType(message = "") {
   const msg = message.toLowerCase().trim();
-
   if (msg.startsWith("feat")) return "feat";
   if (msg.startsWith("fix")) return "fix";
   if (msg.startsWith("docs")) return "docs";
   if (msg.startsWith("refactor")) return "refactor";
-
   return "other";
 }
 
-// ==========================================
-// File Commit History + Co-Change (Dependencies)
-// ==========================================
-//
-// One git log --numstat pass across the whole repo (same pattern as
-// getContributors), filtered down to commits that touched `filePath`.
-// Also tallies which other files appeared in those same commits —
-// "temporal coupling" — to power the Dependencies tab without needing
-// a real import-graph analyzer.
+async function getTimeline(repoPath) {
+  const git = simpleGit(repoPath);
+  const log = await git.log();
+
+  return log.all.map((commit) => ({
+    hash: commit.hash,
+    message: commit.message,
+    author: commit.author_name,
+    date: commit.date,
+    type: getCommitType(commit.message),
+  }));
+}
 
 async function getFileHistory(repoPath, filePath) {
   const git = simpleGit(repoPath);
@@ -392,7 +417,6 @@ async function getFileHistory(repoPath, filePath) {
   ]);
 
   const blocks = raw.split(COMMIT_SEP).filter(Boolean);
-
   const fileCommits = [];
   const coupledCounts = {};
 
@@ -422,7 +446,6 @@ async function getFileHistory(repoPath, filePath) {
       }
     }
 
-    // This commit didn't touch the requested file — skip it entirely.
     if (!matchedStats) continue;
 
     fileCommits.push({
@@ -450,6 +473,7 @@ async function getFileHistory(repoPath, filePath) {
 
 module.exports = {
   cloneRepository,
+  getCurrentCommitSha,
   getCommits,
   getContributors,
   getCommitStats,
@@ -458,5 +482,5 @@ module.exports = {
   getTimeline,
   getCommitType,
   getAICommitData,
-   getFileHistory,
+  getFileHistory,
 };

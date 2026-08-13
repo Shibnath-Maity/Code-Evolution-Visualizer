@@ -50,8 +50,7 @@ setInterval(() => {
 
   for (const [key, timestamps] of requestLog.entries()) {
     const fresh = timestamps.filter(
-      (timestamp) =>
-        now - timestamp < RATE_LIMIT_WINDOW_MS
+      (timestamp) => now - timestamp < RATE_LIMIT_WINDOW_MS
     );
 
     if (fresh.length === 0) {
@@ -76,7 +75,7 @@ router.get("/test", (req, res) => {
 // AI Question Answering
 // ==========================================
 
-router.post("/",protect, async (req, res) => {
+router.post("/", protect, async (req, res) => {
   const { question, repositoryId } = req.body || {};
 
   // ----------------------------------------
@@ -142,7 +141,8 @@ router.post("/",protect, async (req, res) => {
   try {
     const result = await askRepositoryAssistant(
       trimmedQuestion,
-      repositoryIdStr
+      repositoryIdStr,
+      req.user.id
     );
 
     return res.json({

@@ -7,16 +7,27 @@ import {
   Minus,
   Folder,
   Calendar,
+  BarChart3,
+  Clock,
 } from "lucide-react";
 
-function StatisticRow({ icon: Icon, label, value, color = "" }) {
+function StatisticRow({
+  icon: Icon,
+  label,
+  value,
+  colorClass = "text-white",
+  iconColor = "text-slate-400",
+  bgIcon = "bg-slate-800/50",
+}) {
   return (
-    <div className="flex items-center justify-between py-2 border-b border-gray-100 last:border-0">
-      <div className="flex items-center gap-2 text-gray-600">
-        <Icon size={16} />
-        <span className="text-sm">{label}</span>
+    <div className="flex items-center justify-between py-2 px-3 rounded-xl hover:bg-slate-800/40 transition-colors border border-transparent hover:border-slate-800/60">
+      <div className="flex items-center gap-2.5">
+        <div className={`p-1.5 rounded-lg ${bgIcon} border border-slate-700/50`}>
+          <Icon size={14} className={iconColor} />
+        </div>
+        <span className="text-xs font-medium text-slate-400">{label}</span>
       </div>
-      <span className={`font-semibold ${color}`}>{value}</span>
+      <span className={`text-xs font-mono font-bold ${colorClass}`}>{value}</span>
     </div>
   );
 }
@@ -32,11 +43,6 @@ function formatDate(value) {
   return Number.isNaN(date.getTime()) ? "-" : date.toLocaleDateString();
 }
 
-// Reads the first present field from a list of candidate names. Two
-// different backend response shapes have been seen for this data
-// (`filesChanged` vs. `totalFilesChanged`, etc.) and it hasn't been
-// confirmed which one is actually live, so this accepts either rather
-// than hardcoding one and silently rendering "0" if the other is real.
 function pick(source, ...keys) {
   for (const key of keys) {
     if (source[key] !== undefined && source[key] !== null) return source[key];
@@ -45,7 +51,15 @@ function pick(source, ...keys) {
 }
 
 function CommitStatistics({ stats }) {
-  if (!stats) return null;
+  if (!stats) {
+    return (
+      <div className="bg-slate-900/60 border border-slate-800/80 rounded-2xl p-6 h-full flex flex-col justify-center items-center backdrop-blur-xl text-center">
+        <BarChart3 className="h-8 w-8 text-slate-600 mb-2" />
+        <p className="text-sm font-semibold text-slate-400">No Commit Statistics</p>
+        <p className="text-xs text-slate-500 mt-0.5">Statistics data is currently unavailable.</p>
+      </div>
+    );
+  }
 
   const totalCommits = toNumber(stats.totalCommits);
   const authors = toNumber(stats.authors);
@@ -57,53 +71,107 @@ function CommitStatistics({ stats }) {
   );
 
   return (
-    <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
-      <h2 className="text-xl font-bold text-slate-900 mb-5">
-        Commit Statistics
-      </h2>
+    <div className="relative group bg-slate-900/60 border border-slate-800/80 rounded-2xl p-6 h-full flex flex-col justify-between shadow-2xl backdrop-blur-xl overflow-hidden">
+      {/* Background Ambient Glow */}
+      <div className="absolute -bottom-20 -right-20 w-52 h-52 bg-indigo-500/10 blur-[70px] rounded-full pointer-events-none" />
 
-      <div className="space-y-1">
-        <StatisticRow
-          icon={GitCommit}
-          label="Total Commits"
-          value={totalCommits.toLocaleString()}
-        />
-        <StatisticRow
-          icon={Users}
-          label="Authors"
-          value={authors.toLocaleString()}
-        />
+      {/* Header */}
+      <div className="flex items-center justify-between mb-5 relative z-10">
+        <div>
+          <div className="flex items-center gap-2">
+            <BarChart3 className="h-4 w-4 text-indigo-400" />
+            <h2 className="text-lg font-bold text-white tracking-tight">
+              Commit Statistics
+            </h2>
+          </div>
+          <p className="text-xs text-slate-400 mt-0.5">
+            Key activity metrics and repository impact summary
+          </p>
+        </div>
+
+        <span className="px-2.5 py-1 bg-slate-800/60 border border-slate-700/60 rounded-xl text-[11px] font-mono text-indigo-300">
+          Overview
+        </span>
+      </div>
+
+      {/* Top Featured Metrics Grid */}
+      <div className="grid grid-cols-2 gap-3 mb-4 relative z-10">
+        {/* Total Commits */}
+        <div className="p-3 bg-slate-800/40 border border-slate-800/80 rounded-xl flex items-center gap-3">
+          <div className="p-2 rounded-lg bg-indigo-500/10 border border-indigo-500/20 text-indigo-400">
+            <GitCommit size={18} />
+          </div>
+          <div>
+            <p className="text-[10px] font-mono uppercase tracking-wider text-slate-400">Commits</p>
+            <p className="text-sm font-bold font-mono text-white">{totalCommits.toLocaleString()}</p>
+          </div>
+        </div>
+
+        {/* Total Authors */}
+        <div className="p-3 bg-slate-800/40 border border-slate-800/80 rounded-xl flex items-center gap-3">
+          <div className="p-2 rounded-lg bg-cyan-500/10 border border-cyan-500/20 text-cyan-400">
+            <Users size={18} />
+          </div>
+          <div>
+            <p className="text-[10px] font-mono uppercase tracking-wider text-slate-400">Authors</p>
+            <p className="text-sm font-bold font-mono text-white">{authors.toLocaleString()}</p>
+          </div>
+        </div>
+
+        {/* Additions */}
+        <div className="p-3 bg-slate-800/40 border border-slate-800/80 rounded-xl flex items-center gap-3">
+          <div className="p-2 rounded-lg bg-emerald-500/10 border border-emerald-500/20 text-emerald-400">
+            <Plus size={18} />
+          </div>
+          <div>
+            <p className="text-[10px] font-mono uppercase tracking-wider text-slate-400">Additions</p>
+            <p className="text-sm font-bold font-mono text-emerald-400">+{additions.toLocaleString()}</p>
+          </div>
+        </div>
+
+        {/* Deletions */}
+        <div className="p-3 bg-slate-800/40 border border-slate-800/80 rounded-xl flex items-center gap-3">
+          <div className="p-2 rounded-lg bg-rose-500/10 border border-rose-500/20 text-rose-400">
+            <Minus size={18} />
+          </div>
+          <div>
+            <p className="text-[10px] font-mono uppercase tracking-wider text-slate-400">Deletions</p>
+            <p className="text-sm font-bold font-mono text-rose-400">-{deletions.toLocaleString()}</p>
+          </div>
+        </div>
+      </div>
+
+      {/* Secondary Detailed Rows */}
+      <div className="space-y-1 relative z-10 border-t border-slate-800/80 pt-3">
         <StatisticRow
           icon={FileText}
-          label="Files Changed"
+          label="Total Files Changed"
           value={filesChanged.toLocaleString()}
+          iconColor="text-slate-300"
         />
-        <StatisticRow
-          icon={Plus}
-          label="Additions"
-          value={`+${additions.toLocaleString()}`}
-          color="text-green-600"
-        />
-        <StatisticRow
-          icon={Minus}
-          label="Deletions"
-          value={`-${deletions.toLocaleString()}`}
-          color="text-red-600"
-        />
+
         <StatisticRow
           icon={Folder}
           label="Avg. Files / Commit"
           value={avgFilesPerCommit.toFixed(2)}
+          iconColor="text-amber-400"
+          bgIcon="bg-amber-500/10"
         />
+
         <StatisticRow
           icon={Calendar}
           label="First Commit"
           value={formatDate(stats.firstCommit)}
+          iconColor="text-indigo-400"
+          bgIcon="bg-indigo-500/10"
         />
+
         <StatisticRow
-          icon={Calendar}
+          icon={Clock}
           label="Latest Commit"
           value={formatDate(stats.latestCommit)}
+          iconColor="text-indigo-400"
+          bgIcon="bg-indigo-500/10"
         />
       </div>
     </div>

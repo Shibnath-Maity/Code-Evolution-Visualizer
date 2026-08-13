@@ -23,16 +23,16 @@ const {
   getAnalysisSession,
 } = require("./sessionService");
 
-let stepCounter = 0;
-
-function logStep(message) {
-  stepCounter += 1;
-  console.log(`${stepCounter}️⃣ ${message}`);
+/* ==========================================================
+   SCOPED LOGGING (Thread-Safe / Multi-User Safe)
+========================================================== */
+function logStep(repositoryId, message) {
+  console.log(`[Repo ${repositoryId}] ${message}`);
 }
 
-/**
- * Single source of truth for background state initialization.
- */
+/* ==========================================================
+   BACKGROUND STATE INITIALIZER
+========================================================== */
 function pendingBackgroundFields() {
   return {
     architecture: null,
@@ -56,49 +56,65 @@ function pendingBackgroundFields() {
 }
 
 /**
- * Runs vector/RAG indexing in the background asynchronously.
+ * Validates that the active session matches the running background job.
+ * Discards background results if a newer analysis run superseded this job.
  */
-function startBackgroundIndexing(repoPath, repositoryId) {
-  console.log("🔍 Starting background repository vector indexing...");
+function isSessionActive(userId, repositoryId, executionId) {
+  const session = getAnalysisSession(userId, repositoryId);
+  return session && session.executionId === executionId;
+}
 
-  indexRepository(repoPath, repositoryId)
+/* ==========================================================
+   BACKGROUND VECTOR / RAG INDEXING
+========================================================== */
+function startBackgroundIndexing(userId, repoPath, repositoryId, executionId) {
+  logStep(repositoryId, "🔍 Starting background repository vector indexing...");
+
+  // FIX: indexRepository's signature is (repoPath, userId, repositoryId) —
+  // this previously passed (repoPath, repositoryId, userId), swapping the two IDs.
+  indexRepository(repoPath, userId, repositoryId)
     .then(() => {
-      console.log("✅ Background repository indexing completed!");
-      updateAnalysisSession(repositoryId, {
+      if (!isSessionActive(userId, repositoryId, executionId)) return;
+
+      logStep(repositoryId, "✅ Background repository indexing completed!");
+      updateAnalysisSession(userId, repositoryId, {
         vectorIndexingPending: false,
         vectorIndexingError: null,
       });
     })
     .catch((error) => {
-      console.error(
-        "❌ Background repository indexing failed:",
-        error.message
-      );
-      updateAnalysisSession(repositoryId, {
+      if (!isSessionActive(userId, repositoryId, executionId)) return;
+
+      console.error(`[Repo ${repositoryId}] ❌ Background indexing failed:`, error.message);
+      updateAnalysisSession(userId, repositoryId, {
         vectorIndexingPending: false,
         vectorIndexingError: error.message,
       });
     });
 }
 
-/**
- * Fires off AI hotspot insights in the background.
- */
-function startBackgroundAIWork(repositoryId, hotspots) {
+/* ==========================================================
+   BACKGROUND AI HOTSPOT INSIGHTS
+========================================================== */
+function startBackgroundAIWork(userId, repositoryId, hotspots, executionId) {
   setImmediate(async () => {
     try {
-      const hotspotInsights = await generateHotspotInsights(
-        hotspots.hotspots
-      );
-      updateAnalysisSession(repositoryId, {
+      const hotspotInsights = await generateHotspotInsights(hotspots.hotspots);
+
+      if (!isSessionActive(userId, repositoryId, executionId)) return;
+
+      updateAnalysisSession(userId, repositoryId, {
         hotspotInsights,
         hotspotInsightsPending: false,
         hotspotInsightsError: null,
       });
-      console.log("✅ AI Hotspot Insights completed");
+
+      logStep(repositoryId, "✅ AI Hotspot Insights completed");
     } catch (err) {
-      console.error("❌ Hotspot Insight Error:", err.message);
-      updateAnalysisSession(repositoryId, {
+      if (!isSessionActive(userId, repositoryId, executionId)) return;
+
+      console.error(`[Repo ${repositoryId}] ❌ Hotspot Insight Error:`, err.message);
+      updateAnalysisSession(userId, repositoryId, {
         hotspotInsightsPending: false,
         hotspotInsightsError: err.message,
       });
@@ -106,21 +122,24 @@ function startBackgroundAIWork(repositoryId, hotspots) {
   });
 }
 
-/**
- * Runs Architecture parsing + Code Evolution (churn) in the background.
- * Recalculates the final project health score once BOTH have landed.
- */
+/* ==========================================================
+   BACKGROUND ARCHITECTURE + CODE EVOLUTION
+========================================================== */
 function startBackgroundArchitectureAndEvolution(
+  userId,
   repoPath,
   repositoryId,
   fileAnalysis,
-  hotspots
+  hotspots,
+  executionId
 ) {
   const maybeFinalizeHealthScore = () => {
-    const session = getAnalysisSession(repositoryId);
-    if (!session) return;
+    if (!isSessionActive(userId, repositoryId, executionId)) return;
 
-    if (session.architecturePending || session.codeEvolutionPending) return;
+    const session = getAnalysisSession(userId, repositoryId);
+    if (!session || session.architecturePending || session.codeEvolutionPending) {
+      return;
+    }
 
     try {
       const healthScore = calculateProjectHealth({
@@ -130,39 +149,43 @@ function startBackgroundArchitectureAndEvolution(
         codeEvolution: session.codeEvolution,
       });
 
-      updateAnalysisSession(repositoryId, {
+      updateAnalysisSession(userId, repositoryId, {
         healthScore,
         healthScorePending: false,
         healthScoreError: null,
       });
-      console.log("❤️ PROJECT HEALTH (finalized):", healthScore);
+
+      logStep(repositoryId, `❤️ PROJECT HEALTH (finalized): ${healthScore}`);
     } catch (err) {
-      console.error("❌ Final health score calculation failed:", err.message);
-      updateAnalysisSession(repositoryId, {
+      console.error(`[Repo ${repositoryId}] ❌ Final health score failed:`, err.message);
+      updateAnalysisSession(userId, repositoryId, {
         healthScorePending: false,
         healthScoreError: err.message,
       });
     }
   };
 
-  // Background Architecture job
+  /* ----------------------------------------------------------
+     Architecture
+  ---------------------------------------------------------- */
   setImmediate(async () => {
     try {
       const architecture = buildArchitecture(repoPath);
-      console.log(
-        "🏗️ ARCHITECTURE RESULT:",
-        architecture ? "Generated Successfully" : "Null/Undefined"
-      );
 
-      updateAnalysisSession(repositoryId, {
+      if (!isSessionActive(userId, repositoryId, executionId)) return;
+
+      updateAnalysisSession(userId, repositoryId, {
         architecture,
         architecturePending: false,
         architectureError: null,
       });
-      console.log("✅ Architecture Tree generated");
+
+      logStep(repositoryId, "✅ Architecture Tree generated");
     } catch (err) {
-      console.error("❌ Background architecture failed:", err.message);
-      updateAnalysisSession(repositoryId, {
+      if (!isSessionActive(userId, repositoryId, executionId)) return;
+
+      console.error(`[Repo ${repositoryId}] ❌ Background architecture failed:`, err.message);
+      updateAnalysisSession(userId, repositoryId, {
         architecturePending: false,
         architectureError: err.message,
       });
@@ -171,19 +194,27 @@ function startBackgroundArchitectureAndEvolution(
     }
   });
 
-  // Background Code Evolution job
+  /* ----------------------------------------------------------
+     Code Evolution
+  ---------------------------------------------------------- */
   setImmediate(async () => {
     try {
       const codeEvolution = await getCodeChurn(repoPath);
-      updateAnalysisSession(repositoryId, {
+
+      if (!isSessionActive(userId, repositoryId, executionId)) return;
+
+      updateAnalysisSession(userId, repositoryId, {
         codeEvolution,
         codeEvolutionPending: false,
         codeEvolutionError: null,
       });
-      console.log("✅ Code Evolution calculated");
+
+      logStep(repositoryId, "✅ Code Evolution calculated");
     } catch (err) {
-      console.error("❌ Background code evolution failed:", err.message);
-      updateAnalysisSession(repositoryId, {
+      if (!isSessionActive(userId, repositoryId, executionId)) return;
+
+      console.error(`[Repo ${repositoryId}] ❌ Background code evolution failed:`, err.message);
+      updateAnalysisSession(userId, repositoryId, {
         codeEvolutionPending: false,
         codeEvolutionError: err.message,
       });
@@ -193,31 +224,40 @@ function startBackgroundArchitectureAndEvolution(
   });
 }
 
-/**
- * Main Repository Analysis Flow
- */
-async function analyzeRepository(url, repositoryId) {
+/* ==========================================================
+   MAIN REPOSITORY ANALYSIS FLOW
+========================================================== */
+async function analyzeRepository(url, userId, repositoryId) {
   if (typeof url !== "string" || !url.trim()) {
     throw new Error("analyzeRepository: 'url' must be a non-empty string");
+  }
+  if (!userId) {
+    throw new Error("analyzeRepository: 'userId' is required");
   }
   if (!repositoryId) {
     throw new Error("analyzeRepository: 'repositoryId' is required");
   }
 
-  stepCounter = 0;
+  // Unique ID to prevent concurrent run race conditions
+  const executionId = `${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
 
-  createAnalysisSession(repositoryId, {
+  /* ----------------------------------------------------------
+     Create user-isolated analysis session
+  ---------------------------------------------------------- */
+  createAnalysisSession(userId, repositoryId, {
+    executionId,
     status: "processing",
     url,
-    aiFileExplanations: {},
     ...pendingBackgroundFields(),
   });
 
   try {
-    logStep("Cloning repository...");
-    const repoPath = await cloneRepository(url);
+    logStep(repositoryId, "Cloning repository...");
 
-    logStep("Gathering core repository data...");
+    // Extract both repoPath and commitSha from cloneRepository object response
+    const { repoPath, commitSha } = await cloneRepository(url, userId, repositoryId);
+
+    logStep(repositoryId, "Gathering core repository data...");
     const [commits, contributors, branchData] = await Promise.all([
       getCommits(repoPath),
       getContributors(repoPath),
@@ -227,19 +267,19 @@ async function analyzeRepository(url, repositoryId) {
     const stats = getCommitStats(commits);
     const commitStatistics = getCommitStatistics(commits);
 
-    logStep("Analyzing files and building timeline...");
+    logStep(repositoryId, "Analyzing files and building timeline...");
     const [fileAnalysis, timeline] = await Promise.all([
       getFileChanges(repoPath),
       Promise.resolve(createTimeline(commits)),
     ]);
 
-    logStep("Analyzing languages...");
+    logStep(repositoryId, "Analyzing languages...");
     const languageAnalysis = analyzeLanguages(fileAnalysis);
 
-    logStep("Calculating hotspots...");
+    logStep(repositoryId, "Calculating hotspots...");
     const hotspots = calculateHotspots(fileAnalysis, contributors);
 
-    logStep("Calculating initial health score (provisional)...");
+    logStep(repositoryId, "Calculating initial health score (provisional)...");
     const provisionalHealthScore = calculateProjectHealth({
       architecture: null,
       fileAnalysis,
@@ -247,69 +287,59 @@ async function analyzeRepository(url, repositoryId) {
       codeEvolution: null,
     });
 
-    updateAnalysisSession(repositoryId, {
+    const sessionPayload = {
+      executionId,
       status: "ready",
       repoPath,
-
+      commitSha,
       stats,
       commitStatistics,
       contributors,
       timeline,
       fileAnalysis,
       languageAnalysis,
-
       hotspots: hotspots.hotspots,
       allScoredHotspots: hotspots.allScored,
-
       branches: branchData,
-
       healthScore: provisionalHealthScore,
-
       recentCommits: commits.slice(0, 5),
       allCommits: commits,
-
       ...pendingBackgroundFields(),
-    });
+    };
 
+    /* ----------------------------------------------------------
+       Save initial analysis into USER-SPECIFIC session
+    ---------------------------------------------------------- */
+    updateAnalysisSession(userId, repositoryId, sessionPayload);
+
+    /* ----------------------------------------------------------
+       Queue Background Jobs (tracked via executionId)
+    ---------------------------------------------------------- */
     startBackgroundArchitectureAndEvolution(
+      userId,
       repoPath,
       repositoryId,
       fileAnalysis,
-      hotspots
+      hotspots,
+      executionId
     );
-    startBackgroundIndexing(repoPath, repositoryId);
-    startBackgroundAIWork(repositoryId, hotspots);
 
-    logStep("Dashboard response ready! (Background processing queued)");
+    startBackgroundIndexing(userId, repoPath, repositoryId, executionId);
+    startBackgroundAIWork(userId, repositoryId, hotspots, executionId);
 
-    return {
-      repoPath,
+    logStep(repositoryId, "Dashboard response ready! (Background processing queued)");
 
-      stats,
-      commitStatistics,
-      contributors,
-      timeline,
-      fileAnalysis,
-      languageAnalysis,
-
-      hotspots: hotspots.hotspots,
-      allScoredHotspots: hotspots.allScored,
-
-      branches: branchData,
-
-      healthScore: provisionalHealthScore,
-
-      recentCommits: commits.slice(0, 5),
-      allCommits: commits,
-
-      ...pendingBackgroundFields(),
-    };
+    return sessionPayload;
   } catch (error) {
-    console.error("❌ Repository analysis failed:", error.message);
-    updateAnalysisSession(repositoryId, {
-      status: "failed",
-      error: error.message,
-    });
+    console.error(`[Repo ${repositoryId}] ❌ Repository analysis failed:`, error.message);
+
+    if (isSessionActive(userId, repositoryId, executionId)) {
+      updateAnalysisSession(userId, repositoryId, {
+        status: "failed",
+        error: error.message,
+      });
+    }
+
     throw error;
   }
 }

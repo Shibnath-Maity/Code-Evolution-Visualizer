@@ -24,14 +24,40 @@ import {
   Check,
   BarChart3,
   Calendar,
+  ExternalLink,
 } from "lucide-react";
 
 const RISK_STYLES = {
-  Critical: { text: "text-red-600", bg: "bg-red-50", ring: "#ef4444", badge: "bg-red-50 text-red-600 border border-red-100" },
-  High: { text: "text-orange-600", bg: "bg-orange-50", ring: "#f97316", badge: "bg-orange-50 text-orange-600 border border-orange-100" },
-  Medium: { text: "text-amber-600", bg: "bg-amber-50", ring: "#f59e0b", badge: "bg-amber-50 text-amber-600 border border-amber-100" },
-  Low: { text: "text-emerald-600", bg: "bg-emerald-50", ring: "#10b981", badge: "bg-emerald-50 text-emerald-600 border border-emerald-100" },
-  Unknown: { text: "text-slate-500", bg: "bg-slate-50", ring: "#94a3b8", badge: "bg-slate-50 text-slate-500 border border-slate-200" },
+  Critical: {
+    text: "text-rose-600 dark:text-rose-400",
+    ring: "#f43f5e",
+    badge: "bg-rose-50/80 text-rose-700 border-rose-200/80 ring-rose-500/10",
+    pulse: "bg-rose-500",
+  },
+  High: {
+    text: "text-orange-600 dark:text-orange-400",
+    ring: "#f97316",
+    badge: "bg-orange-50/80 text-orange-700 border-orange-200/80 ring-orange-500/10",
+    pulse: "bg-orange-500",
+  },
+  Medium: {
+    text: "text-amber-600 dark:text-amber-400",
+    ring: "#f59e0b",
+    badge: "bg-amber-50/80 text-amber-700 border-amber-200/80 ring-amber-500/10",
+    pulse: "bg-amber-500",
+  },
+  Low: {
+    text: "text-emerald-600 dark:text-emerald-400",
+    ring: "#10b981",
+    badge: "bg-emerald-50/80 text-emerald-700 border-emerald-200/80 ring-emerald-500/10",
+    pulse: "bg-emerald-500",
+  },
+  Unknown: {
+    text: "text-slate-500",
+    ring: "#94a3b8",
+    badge: "bg-slate-100 text-slate-600 border-slate-200 ring-slate-500/10",
+    pulse: "bg-slate-400",
+  },
 };
 
 const RISK_ICON = {
@@ -75,29 +101,32 @@ function relativeTime(dateStr) {
 
 function ScoreGauge({ score, ringColor }) {
   const pct = Math.max(0, Math.min(100, Math.round(score)));
-  const r = 34;
+  const r = 36;
   const c = 2 * Math.PI * r;
   const offset = c - (pct / 100) * c;
 
   return (
-    <div className="relative w-20 h-20 shrink-0">
-      <svg viewBox="0 0 80 80" className="w-20 h-20 -rotate-90">
-        <circle cx="40" cy="40" r={r} fill="none" stroke="#f1f5f9" strokeWidth="8" />
+    <div className="relative w-20 h-20 shrink-0 flex items-center justify-center">
+      <svg viewBox="0 0 88 88" className="w-20 h-20 -rotate-90 drop-shadow-sm">
+        {/* Track background */}
+        <circle cx="44" cy="44" r={r} fill="none" stroke="#f1f5f9" strokeWidth="7" />
+        {/* Active Ring */}
         <circle
-          cx="40"
-          cy="40"
+          cx="44"
+          cy="44"
           r={r}
           fill="none"
           stroke={ringColor}
-          strokeWidth="8"
+          strokeWidth="7"
           strokeLinecap="round"
           strokeDasharray={c}
           strokeDashoffset={offset}
-          style={{ transition: "stroke-dashoffset 0.6s ease" }}
+          className="transition-all duration-1000 ease-out"
         />
       </svg>
-      <div className="absolute inset-0 flex items-center justify-center">
-        <span className="text-lg font-bold text-slate-900">{pct}%</span>
+      <div className="absolute inset-0 flex flex-col items-center justify-center">
+        <span className="text-lg font-extrabold text-slate-900 tracking-tight">{pct}%</span>
+        <span className="text-[9px] font-semibold text-slate-400 uppercase tracking-widest -mt-1">Score</span>
       </div>
     </div>
   );
@@ -105,35 +134,39 @@ function ScoreGauge({ score, ringColor }) {
 
 function EmptyTab({ icon: Icon, title, hint }) {
   return (
-    <div className="flex flex-col items-center justify-center text-center py-14 px-6">
-      <div className="bg-slate-50 p-3 rounded-full mb-3">
-        <Icon size={22} className="text-slate-300" />
+    <div className="flex flex-col items-center justify-center text-center py-16 px-6">
+      <div className="bg-slate-100/80 p-4 rounded-2xl mb-3 shadow-inner">
+        <Icon size={24} className="text-slate-400" />
       </div>
-      <p className="text-sm font-medium text-slate-500">{title}</p>
-      <p className="text-xs text-slate-400 mt-1 max-w-[240px]">{hint}</p>
+      <p className="text-sm font-semibold text-slate-700">{title}</p>
+      <p className="text-xs text-slate-400 mt-1 max-w-[240px] leading-relaxed">{hint}</p>
     </div>
   );
 }
 
 function TabSkeleton() {
   return (
-    <div className="p-5 space-y-3 animate-pulse">
-      {Array.from({ length: 4 }).map((_, i) => (
-        <div key={i} className="h-4 bg-gray-100 rounded w-full" />
-      ))}
+    <div className="p-6 space-y-4 animate-pulse">
+      <div className="h-20 bg-slate-100 rounded-2xl w-full" />
+      <div className="h-12 bg-slate-100 rounded-xl w-3/4" />
+      <div className="h-28 bg-slate-100 rounded-2xl w-full" />
     </div>
   );
 }
 
 function Bar({ label, value, color = "bg-slate-900" }) {
+  const safeVal = Math.min(100, Math.max(0, value));
   return (
-    <div>
-      <div className="flex items-center justify-between text-xs mb-1">
-        <span className="text-gray-500">{label}</span>
-        <span className="font-medium text-slate-700">{Math.round(value)}%</span>
+    <div className="space-y-1.5">
+      <div className="flex items-center justify-between text-xs font-medium">
+        <span className="text-slate-600">{label}</span>
+        <span className="font-bold text-slate-800">{Math.round(safeVal)}%</span>
       </div>
-      <div className="h-1.5 w-full bg-gray-100 rounded-full overflow-hidden">
-        <div className={`h-full rounded-full ${color}`} style={{ width: `${Math.min(100, Math.max(0, value))}%` }} />
+      <div className="h-2 w-full bg-slate-100 rounded-full overflow-hidden p-0.5">
+        <div
+          className={`h-full rounded-full transition-all duration-500 ease-out ${color}`}
+          style={{ width: `${safeVal}%` }}
+        />
       </div>
     </div>
   );
@@ -145,7 +178,7 @@ function HotspotDetails({ selectedHotspot, onClose, maxScore = 0 }) {
   const [activeTab, setActiveTab] = useState("ai");
   const [copied, setCopied] = useState(false);
 
-  const [fileCommits, setFileCommits] = useState(null); // null = not fetched yet
+  const [fileCommits, setFileCommits] = useState(null);
   const [coupledFiles, setCoupledFiles] = useState([]);
   const [loadingHistory, setLoadingHistory] = useState(false);
   const [historyError, setHistoryError] = useState(false);
@@ -162,10 +195,7 @@ function HotspotDetails({ selectedHotspot, onClose, maxScore = 0 }) {
     setCoupledFiles([]);
 
     API.get(`/repository/hotspots/commits`, {
-      params: {
-        repositoryId,
-        file,
-      },
+      params: { repositoryId, file },
     })
       .then((res) => {
         if (cancelled) return;
@@ -218,18 +248,12 @@ function HotspotDetails({ selectedHotspot, onClose, maxScore = 0 }) {
     });
     return Object.entries(buckets)
       .sort(([a], [b]) => (a > b ? 1 : -1))
-      .slice(-6); // last 6 months with activity
+      .slice(-6);
   }, [fileCommits]);
 
   if (!selectedHotspot) return null;
 
-  const {
-    changes = 0,
-    additions = 0,
-    deletions = 0,
-    score = 0,
-    aiInsight,
-  } = selectedHotspot;
+  const { changes = 0, additions = 0, deletions = 0, score = 0, aiInsight } = selectedHotspot;
 
   const risk = RISK_STYLES[aiInsight?.riskLevel] || RISK_STYLES.Unknown;
   const RiskIcon = RISK_ICON[aiInsight?.riskLevel] || RISK_ICON.Unknown;
@@ -239,9 +263,10 @@ function HotspotDetails({ selectedHotspot, onClose, maxScore = 0 }) {
   const impactPrediction = aiInsight?.impactPrediction;
   const confidence = aiInsight?.confidence;
 
-  const derivedChurn = additions + deletions > 0
-    ? Math.min(100, Math.round(((additions + deletions) / (maxScore || additions + deletions || 1)) * 100))
-    : 0;
+  const derivedChurn =
+    additions + deletions > 0
+      ? Math.min(100, Math.round(((additions + deletions) / (maxScore || additions + deletions || 1)) * 100))
+      : 0;
   const derivedFrequency = maxScore > 0 ? Math.round((score / maxScore) * 100) : 0;
 
   const buildReportText = () => {
@@ -284,63 +309,70 @@ function HotspotDetails({ selectedHotspot, onClose, maxScore = 0 }) {
   };
 
   const maxMonthlyCount = Math.max(1, ...monthlyBuckets.map(([, c]) => c));
+  const fileName = file?.split("/").pop() || file;
+  const filePath = file?.split("/").slice(0, -1).join("/") || "";
 
   return (
-    <div className="flex flex-col h-full bg-white">
+    <div className="flex flex-col h-full bg-white text-slate-800 shadow-xl rounded-2xl border border-slate-100 overflow-hidden font-sans">
       {/* Header */}
-      <div className="px-5 py-4 border-b border-gray-100 flex items-start justify-between shrink-0">
-        <div className="flex items-center gap-3 min-w-0">
-          <div className="bg-orange-100 p-2.5 rounded-xl shrink-0">
-            <FileCode2 size={20} className="text-orange-500" />
+      <div className="px-6 py-4 bg-white border-b border-slate-100 flex items-center justify-between shrink-0 gap-4">
+        <div className="flex items-center gap-3.5 min-w-0">
+          <div className="p-2.5 rounded-xl bg-orange-50 text-orange-600 border border-orange-100/60 shadow-sm shrink-0">
+            <FileCode2 size={22} />
           </div>
           <div className="min-w-0">
-            <h2 className="text-base font-bold text-slate-900 truncate" title={file}>
-              {file}
+            <h2 className="text-base font-bold text-slate-900 truncate tracking-tight" title={file}>
+              {fileName}
             </h2>
-            <p className="text-xs text-gray-400 truncate">{file}</p>
+            {filePath && <p className="text-xs text-slate-400 truncate tracking-wide">{filePath}/</p>}
           </div>
         </div>
-        <div className="flex items-center gap-2 shrink-0">
-          <span className={`text-xs font-medium px-2.5 py-1 rounded-full flex items-center gap-1 ${risk.badge}`}>
-            <RiskIcon size={12} />
+
+        <div className="flex items-center gap-2.5 shrink-0">
+          <span
+            className={`text-xs font-semibold px-3 py-1.5 rounded-full flex items-center gap-1.5 border ring-1 ${risk.badge}`}
+          >
+            <span className={`w-1.5 h-1.5 rounded-full animate-pulse ${risk.pulse}`} />
+            <RiskIcon size={13} />
             {aiInsight?.riskLevel || "Unknown"}
           </span>
           <button
             onClick={onClose}
-            className="p-1.5 rounded-lg text-gray-400 hover:text-gray-900 hover:bg-gray-100 transition"
+            className="p-1.5 rounded-xl text-slate-400 hover:text-slate-700 hover:bg-slate-100/80 transition-all duration-200"
           >
             <X size={18} />
           </button>
         </div>
       </div>
 
-      {/* Score + stat pills */}
-      <div className="px-5 py-4 border-b border-gray-100 flex items-center gap-5 shrink-0 flex-wrap">
+      {/* Metrics Header Bar */}
+      <div className="px-6 py-4 bg-slate-50/50 border-b border-slate-100 flex items-center gap-6 shrink-0 flex-wrap">
         <ScoreGauge score={gaugePct} ringColor={risk.ring} />
-        <div className="grid grid-cols-3 gap-4 flex-1 min-w-[220px]">
-          <div>
-            <p className="text-[11px] text-gray-400 flex items-center gap-1">
-              <Plus size={11} /> Additions
+        
+        <div className="grid grid-cols-3 gap-3 flex-1 min-w-[240px] bg-white p-3 rounded-2xl border border-slate-100 shadow-xs">
+          <div className="px-2">
+            <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider flex items-center gap-1">
+              <Plus size={10} className="text-emerald-500" /> Additions
             </p>
-            <p className="text-sm font-bold text-green-600">+{additions}</p>
+            <p className="text-base font-bold text-emerald-600 mt-0.5">+{additions.toLocaleString()}</p>
           </div>
-          <div>
-            <p className="text-[11px] text-gray-400 flex items-center gap-1">
-              <Minus size={11} /> Deletions
+          <div className="px-2 border-l border-slate-100">
+            <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider flex items-center gap-1">
+              <Minus size={10} className="text-rose-500" /> Deletions
             </p>
-            <p className="text-sm font-bold text-red-600">-{deletions}</p>
+            <p className="text-base font-bold text-rose-600 mt-0.5">-{deletions.toLocaleString()}</p>
           </div>
-          <div>
-            <p className="text-[11px] text-gray-400 flex items-center gap-1">
-              <GitCommit size={11} /> Commits
+          <div className="px-2 border-l border-slate-100">
+            <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider flex items-center gap-1">
+              <GitCommit size={10} className="text-slate-400" /> Commits
             </p>
-            <p className="text-sm font-bold text-slate-900">{changes}</p>
+            <p className="text-base font-bold text-slate-900 mt-0.5">{changes.toLocaleString()}</p>
           </div>
         </div>
       </div>
 
-      {/* Tabs */}
-      <div className="flex items-center gap-1 px-3 pt-2 border-b border-gray-100 overflow-x-auto shrink-0">
+      {/* Modern Tab Switcher */}
+      <div className="px-5 pt-3 bg-white border-b border-slate-100 flex items-center gap-1 overflow-x-auto no-scrollbar shrink-0">
         {TABS.map((tab) => {
           const Icon = tab.icon;
           const isActive = activeTab === tab.key;
@@ -348,54 +380,57 @@ function HotspotDetails({ selectedHotspot, onClose, maxScore = 0 }) {
             <button
               key={tab.key}
               onClick={() => setActiveTab(tab.key)}
-              className={`flex items-center gap-1.5 text-xs font-medium px-3 py-2 border-b-2 transition-colors whitespace-nowrap ${
+              className={`flex items-center gap-2 text-xs font-semibold px-3.5 py-2.5 rounded-xl transition-all duration-200 whitespace-nowrap mb-2 ${
                 isActive
-                  ? "border-orange-500 text-orange-600"
-                  : "border-transparent text-gray-400 hover:text-gray-600"
+                  ? "bg-slate-900 text-white shadow-sm scale-[1.02]"
+                  : "text-slate-500 hover:text-slate-800 hover:bg-slate-100/60"
               }`}
             >
-              <Icon size={13} />
+              <Icon size={14} className={isActive ? "text-orange-400" : "text-slate-400"} />
               {tab.label}
             </button>
           );
         })}
       </div>
 
-      {/* Tab content */}
-      <div className="flex-1 overflow-y-auto">
+      {/* Scrollable Tab Content */}
+      <div className="flex-1 overflow-y-auto custom-scrollbar">
+        {/* AI ANALYSIS TAB */}
         {activeTab === "ai" && (
-          <div className="p-5 space-y-5">
-            <div>
-              <h3 className="text-sm font-semibold text-slate-800 flex items-center gap-1.5 mb-2">
-                <Sparkles size={14} className="text-violet-500" />
-                AI Summary
+          <div className="p-6 space-y-6">
+            <div className="bg-gradient-to-br from-violet-50/50 via-white to-slate-50/50 p-4 rounded-2xl border border-violet-100/80 shadow-xs">
+              <h3 className="text-xs font-bold text-violet-900 uppercase tracking-wider flex items-center gap-2 mb-2">
+                <Sparkles size={14} className="text-violet-600" />
+                AI Analysis Summary
               </h3>
-              <p className="text-sm text-gray-600 leading-6">
+              <p className="text-xs text-slate-600 leading-relaxed font-normal">
                 {aiInsight?.summary || "AI analysis is not available for this hotspot."}
               </p>
             </div>
 
-            <div>
-              <h3 className="text-sm font-semibold text-slate-800 flex items-center gap-1.5 mb-3">
-                <TriangleAlert size={14} className="text-red-500" />
+            {/* Risk Factors */}
+            <div className="bg-white p-4 rounded-2xl border border-slate-100 shadow-xs space-y-3">
+              <h3 className="text-xs font-bold text-slate-900 uppercase tracking-wider flex items-center gap-2">
+                <TriangleAlert size={14} className="text-rose-500" />
                 Risk Factors
               </h3>
               {riskFactors?.length ? (
-                <div className="space-y-3">
+                <div className="space-y-3 pt-1">
                   {riskFactors.map((f, i) => (
-                    <Bar key={i} label={f.label} value={f.value} color="bg-red-500" />
+                    <Bar key={i} label={f.label} value={f.value} color="bg-rose-500" />
                   ))}
                 </div>
               ) : (
-                <div className="space-y-3">
-                  <Bar label="Change Frequency" value={derivedFrequency} color="bg-red-500" />
-                  <Bar label="Code Churn (additions + deletions)" value={derivedChurn} color="bg-orange-500" />
+                <div className="space-y-3 pt-1">
+                  <Bar label="Change Frequency" value={derivedFrequency} color="bg-rose-500" />
+                  <Bar label="Code Churn (Additions + Deletions)" value={derivedChurn} color="bg-orange-500" />
                 </div>
               )}
             </div>
 
-            <div>
-              <h3 className="text-sm font-semibold text-slate-800 flex items-center gap-1.5 mb-3">
+            {/* Recommendations */}
+            <div className="bg-white p-4 rounded-2xl border border-slate-100 shadow-xs space-y-3">
+              <h3 className="text-xs font-bold text-slate-900 uppercase tracking-wider flex items-center gap-2">
                 <Lightbulb size={14} className="text-amber-500" />
                 Recommendations
               </h3>
@@ -404,73 +439,80 @@ function HotspotDetails({ selectedHotspot, onClose, maxScore = 0 }) {
                   {aiInsight.recommendations.map((r, i) => (
                     <li
                       key={i}
-                      className="flex items-start gap-2 text-sm text-slate-700 bg-slate-50 border border-slate-100 rounded-lg px-3 py-2"
+                      className="flex items-start gap-2.5 text-xs text-slate-700 bg-slate-50/80 border border-slate-100 rounded-xl p-3"
                     >
-                      <CircleCheck size={14} className="text-emerald-500 mt-0.5 shrink-0" />
-                      {r}
+                      <CircleCheck size={15} className="text-emerald-500 mt-0.5 shrink-0" />
+                      <span className="leading-relaxed">{r}</span>
                     </li>
                   ))}
                 </ul>
               ) : (
-                <p className="text-sm text-gray-400 italic">No specific recommendations available.</p>
+                <p className="text-xs text-slate-400 italic">No specific recommendations available.</p>
               )}
             </div>
 
+            {/* Impact Prediction */}
             {(aiInsight?.impact || impactPrediction?.length) && (
-              <div>
-                <h3 className="text-sm font-semibold text-slate-800 flex items-center gap-1.5 mb-2">
+              <div className="bg-white p-4 rounded-2xl border border-slate-100 shadow-xs space-y-3">
+                <h3 className="text-xs font-bold text-slate-900 uppercase tracking-wider flex items-center gap-2">
                   <Activity size={14} className="text-blue-500" />
                   {impactPrediction?.length ? "Impact Prediction" : "Potential Impact"}
                 </h3>
                 {impactPrediction?.length ? (
-                  <div className="space-y-3">
+                  <div className="space-y-3 pt-1">
                     {impactPrediction.map((f, i) => (
                       <Bar key={i} label={f.label} value={f.value} color="bg-blue-500" />
                     ))}
                   </div>
                 ) : (
-                  <p className="text-sm text-gray-600 leading-6">{aiInsight.impact}</p>
+                  <p className="text-xs text-slate-600 leading-relaxed">{aiInsight.impact}</p>
                 )}
               </div>
             )}
 
+            {/* Confidence Banner */}
             {confidence != null && (
-              <div className="bg-slate-900 text-white rounded-xl p-4">
-                <p className="text-xs text-slate-300 mb-1">AI Confidence</p>
-                <p className="text-2xl font-bold">{confidence}%</p>
+              <div className="bg-slate-900 text-white rounded-2xl p-4 flex items-center justify-between shadow-md">
+                <div>
+                  <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">AI Confidence Rating</p>
+                  <p className="text-xs text-slate-300 mt-0.5">Based on analytical heuristic confidence models</p>
+                </div>
+                <div className="text-2xl font-black text-emerald-400">{confidence}%</div>
               </div>
             )}
           </div>
         )}
 
-        {activeTab === "metrics" && (
-          loadingHistory ? (
+        {/* METRICS TAB */}
+        {activeTab === "metrics" &&
+          (loadingHistory ? (
             <TabSkeleton />
           ) : fileMetrics ? (
-            <div className="p-5 grid grid-cols-2 gap-3">
-              <div className="bg-gray-50 rounded-xl p-3">
-                <p className="text-[11px] text-gray-400">Total Commits</p>
-                <p className="text-lg font-bold text-slate-900">{fileMetrics.totalCommits}</p>
+            <div className="p-6 grid grid-cols-2 gap-3">
+              <div className="bg-slate-50/80 border border-slate-100 rounded-2xl p-4">
+                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Total Commits</p>
+                <p className="text-2xl font-extrabold text-slate-900 mt-1">{fileMetrics.totalCommits}</p>
               </div>
-              <div className="bg-gray-50 rounded-xl p-3">
-                <p className="text-[11px] text-gray-400">Contributors</p>
-                <p className="text-lg font-bold text-slate-900">{fileMetrics.contributors}</p>
+              <div className="bg-slate-50/80 border border-slate-100 rounded-2xl p-4">
+                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Contributors</p>
+                <p className="text-2xl font-extrabold text-slate-900 mt-1">{fileMetrics.contributors}</p>
               </div>
-              <div className="bg-gray-50 rounded-xl p-3">
-                <p className="text-[11px] text-gray-400">Avg Additions / commit</p>
-                <p className="text-lg font-bold text-green-600">+{fileMetrics.avgAdditions}</p>
+              <div className="bg-slate-50/80 border border-slate-100 rounded-2xl p-4">
+                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Avg Additions / Commit</p>
+                <p className="text-2xl font-extrabold text-emerald-600 mt-1">+{fileMetrics.avgAdditions}</p>
               </div>
-              <div className="bg-gray-50 rounded-xl p-3">
-                <p className="text-[11px] text-gray-400">Avg Deletions / commit</p>
-                <p className="text-lg font-bold text-red-600">-{fileMetrics.avgDeletions}</p>
+              <div className="bg-slate-50/80 border border-slate-100 rounded-2xl p-4">
+                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Avg Deletions / Commit</p>
+                <p className="text-2xl font-extrabold text-rose-600 mt-1">-{fileMetrics.avgDeletions}</p>
               </div>
-              <div className="bg-gray-50 rounded-xl p-3 col-span-2">
-                <p className="text-[11px] text-gray-400 flex items-center gap-1">
-                  <Calendar size={11} /> First → Last modified
+              <div className="bg-slate-50/80 border border-slate-100 rounded-2xl p-4 col-span-2">
+                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1.5">
+                  <Calendar size={12} className="text-slate-500" /> Active Period
                 </p>
-                <p className="text-sm font-semibold text-slate-900 mt-1">
-                  {fileMetrics.firstModified?.toLocaleDateString() || "N/A"} →{" "}
-                  {fileMetrics.lastModified?.toLocaleDateString() || "N/A"}
+                <p className="text-xs font-semibold text-slate-800 mt-2 flex items-center gap-2">
+                  <span>{fileMetrics.firstModified?.toLocaleDateString() || "N/A"}</span>
+                  <span className="text-slate-300">→</span>
+                  <span>{fileMetrics.lastModified?.toLocaleDateString() || "N/A"}</span>
                 </p>
               </div>
             </div>
@@ -478,62 +520,63 @@ function HotspotDetails({ selectedHotspot, onClose, maxScore = 0 }) {
             <EmptyTab
               icon={BarChart3}
               title={historyError ? "Error loading commit history" : "No metrics available"}
-              hint={
-                historyError
-                  ? "Failed to load details from the server."
-                  : "No commit history found for this file."
-              }
+              hint={historyError ? "Failed to load details from the server." : "No commit history found for this file."}
             />
-          )
-        )}
+          ))}
 
-        {activeTab === "timeline" && (
-          loadingHistory ? (
+        {/* TIMELINE TAB */}
+        {activeTab === "timeline" &&
+          (loadingHistory ? (
             <TabSkeleton />
           ) : monthlyBuckets.length > 0 ? (
-            <div className="p-5">
-              <div className="flex items-end gap-3 h-40">
-                {monthlyBuckets.map(([month, count]) => (
-                  <div key={month} className="flex-1 h-full flex flex-col items-center justify-end gap-2">
-                    <span className="text-[11px] font-semibold text-slate-700">{count}</span>
-                    <div
-                      className="w-full bg-orange-400 rounded-t-md"
-                      style={{ height: `${(count / maxMonthlyCount) * 100}%`, minHeight: 4 }}
-                    />
-                    <span className="text-[10px] text-gray-400">{month.slice(2)}</span>
-                  </div>
-                ))}
+            <div className="p-6">
+              <div className="bg-slate-50/60 border border-slate-100 rounded-2xl p-5">
+                <div className="flex items-end gap-3 h-44 pt-6">
+                  {monthlyBuckets.map(([month, count]) => (
+                    <div key={month} className="flex-1 h-full flex flex-col items-center justify-end gap-2 group">
+                      <span className="text-[10px] font-bold text-slate-600 opacity-80 group-hover:opacity-100 transition-opacity">
+                        {count}
+                      </span>
+                      <div
+                        className="w-full bg-orange-500 group-hover:bg-orange-600 rounded-t-lg transition-all duration-300 shadow-xs"
+                        style={{ height: `${(count / maxMonthlyCount) * 100}%`, minHeight: 6 }}
+                      />
+                      <span className="text-[10px] font-semibold text-slate-400 mt-1">{month.slice(2)}</span>
+                    </div>
+                  ))}
+                </div>
               </div>
-              <p className="text-[11px] text-gray-400 mt-4">Commits per month, last {monthlyBuckets.length} active months.</p>
+              <p className="text-[11px] text-slate-400 text-center mt-3">
+                Commits per month (last {monthlyBuckets.length} active months)
+              </p>
             </div>
           ) : (
             <EmptyTab
               icon={Activity}
               title={historyError ? "Error loading commit history" : "No timeline data"}
-              hint={
-                historyError
-                  ? "Failed to load details from the server."
-                  : "No commit history found for this file."
-              }
+              hint={historyError ? "Failed to load details from the server." : "No commit history found for this file."}
             />
-          )
-        )}
+          ))}
 
-        {activeTab === "dependencies" && (
-          loadingHistory ? (
+        {/* DEPENDENCIES TAB */}
+        {activeTab === "dependencies" &&
+          (loadingHistory ? (
             <TabSkeleton />
           ) : coupledFiles.length > 0 ? (
-            <div className="p-5 space-y-2">
-              <p className="text-xs text-gray-400 mb-3">
-                Files most often changed in the same commits as this one.
-              </p>
+            <div className="p-6 space-y-2">
+              <p className="text-xs text-slate-400 mb-3">Files frequently changed together in the same commits.</p>
               {coupledFiles.slice(0, 10).map((d, i) => (
-                <div key={i} className="flex items-center justify-between gap-2 text-sm bg-gray-50 rounded-lg px-3 py-2">
-                  <span className="flex items-center gap-2 text-slate-700 truncate">
-                    <GitBranch size={13} className="text-gray-400 shrink-0" />
-                    <span className="truncate">{d.file}</span>
+                <div
+                  key={i}
+                  className="flex items-center justify-between gap-3 text-xs bg-slate-50/80 hover:bg-slate-100/80 border border-slate-100 rounded-xl px-3.5 py-2.5 transition-colors"
+                >
+                  <span className="flex items-center gap-2.5 text-slate-700 truncate min-w-0">
+                    <GitBranch size={14} className="text-slate-400 shrink-0" />
+                    <span className="truncate font-medium">{d.file}</span>
                   </span>
-                  <span className="text-xs font-medium text-orange-600 shrink-0">{d.count}×</span>
+                  <span className="text-xs font-bold text-orange-600 bg-orange-50 px-2 py-0.5 rounded-md border border-orange-100 shrink-0">
+                    {d.count}×
+                  </span>
                 </div>
               ))}
             </div>
@@ -547,34 +590,33 @@ function HotspotDetails({ selectedHotspot, onClose, maxScore = 0 }) {
                   : "This file hasn't consistently changed alongside others."
               }
             />
-          )
-        )}
+          ))}
 
-        {activeTab === "commits" && (
-          loadingHistory ? (
+        {/* COMMITS TAB */}
+        {activeTab === "commits" &&
+          (loadingHistory ? (
             <TabSkeleton />
           ) : fileCommits?.length > 0 ? (
-            <div className="p-5 space-y-3">
+            <div className="p-6 space-y-3">
               {fileCommits.map((c, i) => (
-                <div key={c.hash || i} className="border-b border-gray-50 pb-3 last:border-0">
-                  <p className="text-sm font-medium text-slate-800">{c.message || "No commit message"}</p>
-                  <div className="flex items-center gap-3 mt-1.5 flex-wrap">
-                    <span className="flex items-center gap-1 text-[11px] text-gray-400">
-                      <span className="w-4 h-4 rounded-full bg-indigo-100 text-indigo-700 text-[9px] font-bold flex items-center justify-center">
+                <div
+                  key={c.hash || i}
+                  className="p-3.5 rounded-xl border border-slate-100 bg-slate-50/30 hover:bg-slate-50/80 transition-all space-y-2"
+                >
+                  <p className="text-xs font-semibold text-slate-800 leading-snug">{c.message || "No commit message"}</p>
+                  <div className="flex items-center gap-3 flex-wrap">
+                    <span className="flex items-center gap-1.5 text-[11px] font-medium text-slate-600">
+                      <span className="w-4 h-4 rounded-full bg-slate-200 text-slate-700 text-[9px] font-bold flex items-center justify-center">
                         {initials(c.author_name)}
                       </span>
                       {c.author_name || "Unknown"}
                     </span>
-                    <span className="flex items-center gap-1 text-[11px] text-gray-400">
+                    <span className="flex items-center gap-1 text-[11px] text-slate-400">
                       <Clock size={11} /> {relativeTime(c.date)}
                     </span>
-                    <span className="flex items-center gap-1 text-[11px] text-green-600">
-                      <Plus size={10} /> {c.additions || 0}
-                    </span>
-                    <span className="flex items-center gap-1 text-[11px] text-red-600">
-                      <Minus size={10} /> {c.deletions || 0}
-                    </span>
-                    <span className="text-[11px] font-mono text-gray-400 bg-gray-50 px-1.5 py-0.5 rounded">
+                    <span className="text-[11px] font-semibold text-emerald-600">+{c.additions || 0}</span>
+                    <span className="text-[11px] font-semibold text-rose-600">-{c.deletions || 0}</span>
+                    <span className="text-[10px] font-mono text-slate-500 bg-slate-100 px-1.5 py-0.5 rounded border border-slate-200 ml-auto">
                       {(c.hash || "").substring(0, 7)}
                     </span>
                   </div>
@@ -585,38 +627,36 @@ function HotspotDetails({ selectedHotspot, onClose, maxScore = 0 }) {
             <EmptyTab
               icon={History}
               title={historyError ? "Error loading commit history" : "No commits found"}
-              hint={
-                historyError
-                  ? "Failed to load details from the server."
-                  : "No commit history found for this file."
-              }
+              hint={historyError ? "Failed to load details from the server." : "No commit history found for this file."}
             />
-          )
-        )}
+          ))}
       </div>
 
-      {/* Action bar */}
-      <div className="px-5 py-3 border-t border-gray-100 flex items-center gap-2 shrink-0 flex-wrap">
-        <button className="flex items-center gap-1.5 bg-orange-500 hover:bg-orange-600 text-white text-xs font-medium px-3 py-2 rounded-lg transition-colors">
-          <Wand2 size={13} /> Generate Refactor
-        </button>
-        <button
-          onClick={handleCopyReport}
-          className="flex items-center gap-1.5 text-xs font-medium text-gray-500 hover:text-gray-800 px-3 py-2 rounded-lg border border-gray-200 transition-colors"
-        >
-          {copied ? (
-            <>
-              <Check size={13} className="text-emerald-500" /> Copied!
-            </>
-          ) : (
-            <>
-              <Copy size={13} /> Copy Report
-            </>
-          )}
-        </button>
+      {/* Action Footer */}
+      <div className="px-6 py-3.5 bg-white border-t border-slate-100 flex items-center justify-between gap-3 shrink-0 flex-wrap">
+        <div className="flex items-center gap-2">
+          <button className="flex items-center gap-2 bg-gradient-to-r from-orange-500 to-amber-500 hover:from-orange-600 hover:to-amber-600 text-white text-xs font-semibold px-4 py-2.5 rounded-xl shadow-xs transition-all active:scale-[0.98]">
+            <Wand2 size={14} /> Generate Refactor
+          </button>
+          <button
+            onClick={handleCopyReport}
+            className="flex items-center gap-2 text-xs font-semibold text-slate-600 hover:text-slate-900 bg-slate-50 hover:bg-slate-100/80 px-3.5 py-2.5 rounded-xl border border-slate-200/80 transition-all active:scale-[0.98]"
+          >
+            {copied ? (
+              <>
+                <Check size={14} className="text-emerald-500" /> Copied
+              </>
+            ) : (
+              <>
+                <Copy size={14} /> Copy Report
+              </>
+            )}
+          </button>
+        </div>
+
         {fileMetrics && (
-          <span className="flex items-center gap-1 text-xs text-gray-400 ml-auto">
-            <Users size={12} /> {fileMetrics.contributors} contributors
+          <span className="flex items-center gap-1.5 text-xs font-medium text-slate-400">
+            <Users size={13} /> {fileMetrics.contributors} contributors
           </span>
         )}
       </div>

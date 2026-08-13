@@ -1,71 +1,140 @@
 const express = require("express");
 const router = express.Router();
 const crypto = require("crypto");
+
 const {
-  cloneRepository,
-  getCommits,
-  getContributors,
-  getCommitStats,
   getCommitDiff,
   getCommitDetails,
   getAICommitData,
   getFileHistory,
 } = require("../services/gitService");
-const { analyzeRepository } = require("../services/analysisService");
-const { solveIssue } = require("../services/issueSolverService");
-const { createTimeline } = require("../services/analyticsService");
-const { getFileChanges } = require("../services/fileAnalyticsService");
-const { calculateHotspots } = require("../services/hotspotService");
+
+const {
+  analyzeRepository,
+} = require("../services/analysisService");
+
+const {
+  solveIssue,
+} = require("../services/issueSolverService");
+
 const {
   getRepositoryInfo,
   getRepositoryIssues,
   getRepositoryIssue,
-    getRepositoryPullRequests,
+  getRepositoryPullRequests,
 } = require("../services/githubService");
-const { indexRepository } = require("../services/vectorService");
-const { getAnalysisSession } = require("../services/sessionService");
+
+const {
+  getAnalysisSession,
+  getFileAIAnalysis,
+  saveFileAIAnalysis,
+} = require("../services/sessionService");
+
 const {
   generateCommitSummary,
 } = require("../services/aiCommitService");
+
 const {
   getCommitCalendar,
 } = require("../services/calendarService");
+
 const protect = require("../middleware/authMiddleware");
+
 const {
   explainFile,
 } = require("../services/fileExplanationService");
+
 const {
   buildArchitecture,
 } = require("../services/architectureService");
 
-// ==========================================
-// Helper: resolve a repoPath from the session, or fail cleanly.
-// Every route that used to read the global `currentRepoPath` now
-// needs a repositoryId (query for GET, body for POST) so it can
-// look up the right session — this is what makes multiple repos /
-// multiple users safe at the same time.
-// ==========================================
-function getRepoPathOrFail(repositoryId, res) {
+const Repository = require("../models/repositoryModel");
+
+/* ==========================================================
+   AUTHENTICATED USER HELPER
+========================================================== */
+
+function getUserId(req) {
+  return req.userId || req.user?.id || req.user?.userId;
+}
+
+/* ==========================================================
+   REPOSITORY SESSION HELPER
+========================================================== */
+
+async function getRepoPathOrFail(
+  userId,
+  repositoryId,
+  res
+) {
+  if (!userId) {
+    res.status(401).json({
+      success: false,
+      message: "Authenticated user not found.",
+    });
+
+    return null;
+  }
+
   if (!repositoryId) {
     res.status(400).json({
       success: false,
       message: "repositoryId is required.",
     });
+
     return null;
   }
 
-  const session = getAnalysisSession(repositoryId);
+  // 🔐 Verify repository belongs to logged-in user
+  const repository = await Repository.findOne({
+    repositoryId,
+    userId,
+  });
+
+  if (!repository) {
+    res.status(403).json({
+      success: false,
+      message: "You do not have access to this repository.",
+    });
+
+    return null;
+  }
+
+  const session = getAnalysisSession(
+    userId,
+    repositoryId
+  );
 
   if (!session || !session.repoPath) {
-    res.status(400).json({
+    res.status(404).json({
       success: false,
-      message: "Repository not analyzed yet, or session has expired.",
+      message:
+        "Repository not analyzed yet, or session has expired.",
     });
+
     return null;
   }
 
   return session.repoPath;
 }
+
+/* ==========================================================
+   ROUTER LOGGING
+========================================================== */
+
+router.use((req, res, next) => {
+  console.log(
+    "📍 Repository router hit:",
+    req.method,
+    req.url
+  );
+
+  next();
+});
+
+/* ==========================================================
+   INFO
+========================================================== */
 
 router.get("/info", (req, res) => {
   res.json({
@@ -76,438 +145,973 @@ router.get("/info", (req, res) => {
   });
 });
 
-// Add repo
-router.get("/repo-info", protect, async (req, res) => {
-  try {
-    const { url } = req.query;
+/* ==========================================================
+   REPOSITORY INFO
+========================================================== */
 
-    const repo = await getRepositoryInfo(url);
+router.get(
+  "/repo-info",
+  protect,
+  async (req, res) => {
+    try {
+      const { url } = req.query;
 
-    res.json(repo);
-  } catch (error) {
-    res.status(500).json({
-      success: false,
-      message: error.message,
-    });
-  }
-});
+      if (!url) {
+        return res.status(400).json({
+          success: false,
+          message: "Repository URL is required",
+        });
+      }
 
-// ==========================================
-// Fetch Repository Issues
-// ==========================================
-router.post("/issues", protect, async (req, res) => {
-  console.log("===== /issues API HIT =====");
-  console.log("Request Body:", req.body);
+      const repo =
+        await getRepositoryInfo(url);
 
-  try {
-    const { repoUrl } = req.body;
+      res.json(repo);
+    } catch (error) {
+      console.error(
+        "Repository Info Error:",
+        error
+      );
 
-    console.log("Repository URL:", repoUrl);
-
-    if (!repoUrl) {
-      return res.status(400).json({
+      res.status(500).json({
         success: false,
-        message: "Repository URL is required",
+        message: error.message,
       });
     }
-
-    const repo = await getRepositoryInfo(repoUrl);
-
-    console.log("Repository Info:", repo);
-
-    const issues = await getRepositoryIssues(repo.owner, repo.repo);
-
-    console.log("Issues Found:", issues.length);
-
-    res.json({
-      success: true,
-      repository: repo,
-      issues,
-    });
-  } catch (error) {
-    console.error("Issue Fetch Error:", error);
-
-    res.status(500).json({
-      success: false,
-      message: error.message,
-    });
   }
-});
-
-// ==========================================
-// AI Issue Solver
-// ==========================================
-router.post("/issue-solution", protect, async (req, res) => {
-  try {
-    const { owner, repo, issueNumber, repositoryId } = req.body;
-
-    if (!owner || !repo || !issueNumber) {
-      return res.status(400).json({
-        success: false,
-        message: "owner, repo and issueNumber are required",
-      });
-    }
-
-    const repoPath = getRepoPathOrFail(repositoryId, res);
-    if (!repoPath) return;
-
-    // Fetch issue from GitHub
-    const issue = await getRepositoryIssue(owner, repo, issueNumber);
-
-    // Ask Gemini to solve it
-    const solution = await solveIssue({
-      issue,
-      repoPath,
-      repositoryId,
-    });
-
-    res.json({
-      success: true,
-      issue,
-      solution,
-    });
-  } catch (error) {
-    console.error("Issue Solver Error:", error);
-
-    res.status(500).json({
-      success: false,
-      message: error.message,
-    });
-  }
-});
-
-router.use((req, res, next) => {
-  console.log("📍 Repository router hit:", req.method, req.url);
-  next();
-});
-
-// ==========================================
-// Analyze Repository
-// ==========================================
-router.post("/analytics", protect, async (req, res) => {
-  console.log("📌 Analytics route reached");
-  try {
-    const { url } = req.body;
-
-    // Backend now owns the repositoryId instead of trusting the
-    // frontend to generate/send one.
-    const repositoryId = crypto.randomUUID();
-
-    console.log("🚀 Starting repository analysis...", repositoryId);
-
-    const result = await analyzeRepository(url, repositoryId);
-
-    console.log("✅ Analysis complete for", repositoryId);
-    console.log(result.commitStatistics);
-
-    console.log("8️⃣ Sending dashboard response...");
-
-    // Send dashboard immediately. Full data also lives in the
-    // session under repositoryId for every other route to reuse.
-    res.json({
-      repositoryId,
-      stats: result.stats,
-      contributors: result.contributors,
-      timeline: result.timeline,
-      fileAnalysis: result.fileAnalysis,
-      aiFileAnalysis: result.aiFileAnalysis,
-      aiFileAnalysisPending: result.aiFileAnalysisPending,
-      languageAnalysis: result.languageAnalysis,
-      codeEvolution: result.codeEvolution,
-      hotspots: result.hotspots,
-      allScoredHotspots: result.allScoredHotspots,
-      hotspotInsights: result.hotspotInsights,
-      hotspotInsightsPending: result.hotspotInsightsPending,
-      branches: result.branches,
-      recentCommits: result.recentCommits,
-      allCommits: result.allCommits,
-      architecture: result.architecture,
-      commitStatistics: result.commitStatistics,
-    });
-  } catch (error) {
-    console.error("========== BACKEND ERROR ==========");
-    console.error(error);
-    console.error(error.stack);
-
-    res.status(500).json({
-      success: false,
-      message: error.message,
-      stack: error.stack,
-    });
-  }
-});
-
-// ==========================================
-// Poll Session Status
-// ==========================================
-router.get("/analytics/:repositoryId/status", protect, (req, res) => {
-  const { repositoryId } = req.params;
-
-  const session = getAnalysisSession(repositoryId);
-
-  if (!session) {
-    return res.status(404).json({
-      success: false,
-      message: "Session not found or expired.",
-    });
-  }
-
-  res.json({
-    success: true,
-
-    status: session.status,
-
-    // Architecture
-    architecture: session.architecture,
-    architecturePending: session.architecturePending,
-    architectureError: session.architectureError,
-
-    // Code Evolution
-    codeEvolution: session.codeEvolution,
-    codeEvolutionPending: session.codeEvolutionPending,
-    codeEvolutionError: session.codeEvolutionError,
-
-    // Hotspot AI
-    hotspotInsights: session.hotspotInsights,
-    hotspotInsightsPending: session.hotspotInsightsPending,
-    hotspotInsightsError: session.hotspotInsightsError,
-
-    // Vector / RAG
-    vectorIndexingPending: session.vectorIndexingPending,
-    vectorIndexingError: session.vectorIndexingError,
-
-    // Health Score
-    healthScore: session.healthScore,
-    healthScorePending: session.healthScorePending,
-    healthScoreError: session.healthScoreError,
-
-    error: session.error,
-  });
-});
-
-// ==========================================
-// Full session data (lets the frontend reload the complete
-// analysis for a repositoryId without re-running it)
-// ==========================================
-router.get("/analytics/:repositoryId", protect, (req, res) => {
-  const { repositoryId } = req.params;
-
-  const session = getAnalysisSession(repositoryId);
-
-  if (!session) {
-    return res.status(404).json({
-      success: false,
-      message: "Session expired.",
-    });
-  }
-
-  res.json({
-    success: true,
-    data: session,
-  });
-});
-
-router.get("/calendar", protect, async (req, res) => {
-  try {
-    const { repositoryId } = req.query;
-
-    const repoPath = getRepoPathOrFail(repositoryId, res);
-    if (!repoPath) return;
-
-    const calendar = await getCommitCalendar(repoPath);
-
-    res.json(calendar);
-  } catch (err) {
-    console.error(err);
-
-    res.status(500).json({
-      error: "Unable to generate calendar",
-    });
-  }
-});
-
-// Commit Details
-router.get("/commit/:hash", protect, async (req, res) => {
-  try {
-    const { hash } = req.params;
-    const { repositoryId } = req.query;
-
-    const repoPath = getRepoPathOrFail(repositoryId, res);
-    if (!repoPath) return;
-
-    const data = await getCommitDetails(repoPath, hash);
-
-    res.json({
-      success: true,
-      data,
-    });
-  } catch (error) {
-    console.error(error);
-
-    res.status(500).json({
-      success: false,
-      message: error.message,
-    });
-  }
-});
-
-// Commit Diff
-router.get("/commit/:hash/diff", protect, async (req, res) => {
-  try {
-    const { hash } = req.params;
-    const { repositoryId } = req.query;
-
-    const repoPath = getRepoPathOrFail(repositoryId, res);
-    if (!repoPath) return;
-
-    const data = await getCommitDiff(repoPath, hash);
-
-    res.json({
-      success: true,
-      data,
-    });
-  } catch (error) {
-    console.error(error);
-
-    res.status(500).json({
-      success: false,
-      message: error.message,
-    });
-  }
-});
-
-// ==========================================
-// AI Commit Summary
-// ==========================================
-router.get("/commit/:hash/summary", protect, async (req, res) => {
-  try {
-    const { hash } = req.params;
-    const { repositoryId } = req.query;
-
-    const repoPath = getRepoPathOrFail(repositoryId, res);
-    if (!repoPath) return;
-
-    const commit = await getAICommitData(repoPath, hash);
-
-    const summary = await generateCommitSummary(commit);
-
-    res.json({
-      success: true,
-      data: summary,
-    });
-  } catch (error) {
-    console.error("AI Commit Summary Error:", error);
-
-    res.status(500).json({
-      success: false,
-      message: error.message,
-    });
-  }
-});
-
-// ==========================================
-// AI File Explanation
-// ==========================================
-router.post("/file-explanation", protect, async (req, res) => {
-  try {
-    const { filePath, repositoryId } = req.body;
-
-    if (!filePath) {
-      return res.status(400).json({
-        success: false,
-        message: "filePath is required",
-      });
-    }
-
-    const repoPath = getRepoPathOrFail(repositoryId, res);
-    if (!repoPath) return;
-
-    console.log("repoPath:", repoPath);
-    console.log("filePath:", filePath);
-const architecture = buildArchitecture(repoPath);
-
-const explanation = await explainFile(
-  repoPath,
-  filePath,
-  architecture,
-  repositoryId
 );
 
+/* ==========================================================
+   FETCH REPOSITORY ISSUES
+========================================================== */
 
-    res.json({
-      success: true,
-      data: explanation,
-    });
-  } catch (error) {
-    console.error("File Explanation Error:", error);
+router.post(
+  "/issues",
+  protect,
+  async (req, res) => {
+    try {
+      const { repoUrl } = req.body;
 
-    res.status(500).json({
-      success: false,
-      message: error.message,
-    });
-  }
-});
+      if (!repoUrl) {
+        return res.status(400).json({
+          success: false,
+          message:
+            "Repository URL is required",
+        });
+      }
 
-// ==========================================
-// File Commit History + Co-Change (for Hotspot details panel)
-// ==========================================
-router.get("/hotspots/commits", protect, async (req, res) => {
-  try {
-    const { file, repositoryId } = req.query;
+      const repo =
+        await getRepositoryInfo(repoUrl);
 
-    if (!file) {
-      return res.status(400).json({
+      const issues =
+        await getRepositoryIssues(
+          repo.owner,
+          repo.repo
+        );
+
+      res.json({
+        success: true,
+        repository: repo,
+        issues,
+      });
+    } catch (error) {
+      console.error(
+        "Issue Fetch Error:",
+        error
+      );
+
+      res.status(500).json({
         success: false,
-        message: "file query param is required.",
+        message: error.message,
+      });
+    }
+  }
+);
+
+/* ==========================================================
+   AI ISSUE SOLVER
+========================================================== */
+
+router.post(
+  "/issue-solution",
+  protect,
+  async (req, res) => {
+    try {
+      const {
+        owner,
+        repo,
+        issueNumber,
+        repositoryId,
+      } = req.body;
+
+      const userId = getUserId(req);
+
+      if (!owner || !repo || !issueNumber) {
+        return res.status(400).json({
+          success: false,
+          message:
+            "owner, repo and issueNumber are required",
+        });
+      }
+
+      const repoPath =
+        await getRepoPathOrFail(
+          userId,
+          repositoryId,
+          res
+        );
+
+      if (!repoPath) return;
+
+      const issue =
+        await getRepositoryIssue(
+          owner,
+          repo,
+          issueNumber
+        );
+
+      const solution =
+        await solveIssue({
+          issue,
+          repoPath,
+          repositoryId,
+        });
+
+      res.json({
+        success: true,
+        issue,
+        solution,
+      });
+    } catch (error) {
+      console.error(
+        "Issue Solver Error:",
+        error
+      );
+
+      res.status(500).json({
+        success: false,
+        message: error.message,
+      });
+    }
+  }
+);
+
+/* ==========================================================
+   ANALYZE REPOSITORY
+========================================================== */
+
+router.post(
+  "/analytics",
+  protect,
+  async (req, res) => {
+    console.log(
+      "📌 Analytics route reached"
+    );
+
+    try {
+      const { url } = req.body;
+
+      const userId = getUserId(req);
+
+      if (!userId) {
+        return res.status(401).json({
+          success: false,
+          message:
+            "Authenticated user not found.",
+        });
+      }
+
+      if (!url) {
+        return res.status(400).json({
+          success: false,
+          message:
+            "Repository URL is required.",
+        });
+      }
+
+      // Get GitHub repository information
+      const repo = await getRepositoryInfo(url);
+
+      if (!repo || !repo.owner || !repo.repo) {
+        return res.status(400).json({
+          success: false,
+          message: "Invalid GitHub repository URL.",
+        });
+      }
+
+      /*
+       * Check whether this repository already
+       * belongs to the logged-in user.
+       */
+      let repository = await Repository.findOne({
+        userId,
+        repoUrl: url.trim(),
+      });
+
+      let repositoryId;
+
+      if (repository) {
+        repositoryId = repository.repositoryId;
+
+        // Re-analysis
+        repository.status = "processing";
+        repository.analysisError = null;
+
+        await repository.save();
+
+        console.log(
+          "🔄 Re-analyzing existing repository:",
+          repositoryId
+        );
+      } else {
+        repositoryId = crypto.randomUUID();
+
+        repository = await Repository.create({
+          repositoryId,
+          userId,
+          repoUrl: url.trim(),
+          owner: repo.owner,
+          name: repo.repo,
+          status: "processing",
+        });
+
+        console.log(
+          "🆕 New repository created:",
+          repositoryId
+        );
+      }
+
+      console.log("👤 User:", userId);
+      console.log("📦 Repository:", repositoryId);
+
+      const result =
+        await analyzeRepository(
+          url,
+          userId,
+          repositoryId
+        );
+
+      /*
+       * Analysis successfully completed.
+       */
+      await Repository.findOneAndUpdate(
+        {
+          repositoryId,
+          userId,
+        },
+        {
+          status: "ready",
+          repoPath: result.repoPath,
+          lastAnalyzedAt: new Date(),
+          analysisError: null,
+        }
+      );
+
+      console.log(
+        "✅ Analysis complete for",
+        repositoryId
+      );
+
+      // Note: architecture, codeEvolution, hotspotInsights, and
+      // aiFileAnalysis are generated in the background by
+      // analyzeRepository() and are NOT part of its return value.
+      // They live on the session and are surfaced via the
+      // /analytics/:repositoryId/status polling route instead.
+      res.json({
+        success: true,
+        repositoryId,
+
+        stats: result.stats,
+        commitStatistics: result.commitStatistics,
+
+        contributors: result.contributors,
+        timeline: result.timeline,
+
+        fileAnalysis: result.fileAnalysis,
+        languageAnalysis: result.languageAnalysis,
+
+        hotspots: result.hotspots,
+        allScoredHotspots: result.allScoredHotspots,
+
+        branches: result.branches,
+
+        recentCommits: result.recentCommits,
+        allCommits: result.allCommits,
+
+        healthScore: result.healthScore,
+
+        // Background task states — the frontend should poll
+        // /analytics/:repositoryId/status for these.
+        architecturePending: true,
+        codeEvolutionPending: true,
+        hotspotInsightsPending: true,
+        vectorIndexingPending: true,
+        healthScorePending: true,
+      });
+    } catch (error) {
+      console.error(
+        "❌ Repository analysis failed:",
+        error
+      );
+
+      console.error(error.stack);
+
+      res.status(500).json({
+        success: false,
+        message: error.message,
+      });
+    }
+  }
+);
+
+/* ==========================================================
+   POLL ANALYSIS STATUS
+========================================================== */
+
+router.get(
+  "/analytics/:repositoryId/status",
+  protect,
+  (req, res) => {
+    const {
+      repositoryId,
+    } = req.params;
+
+    const userId =
+      getUserId(req);
+
+    if (!userId) {
+      return res.status(401).json({
+        success: false,
+        message:
+          "Authenticated user not found.",
       });
     }
 
-    const repoPath = getRepoPathOrFail(repositoryId, res);
-    if (!repoPath) return;
+    const session =
+      getAnalysisSession(
+        userId,
+        repositoryId
+      );
 
-    const data = await getFileHistory(repoPath, file);
-
-    res.json({
-      success: true,
-      data,
-    });
-  } catch (error) {
-    console.error("File History Error:", error);
-
-    res.status(500).json({
-      success: false,
-      message: error.message,
-    });
-  }
-});
-// ==========================================
-// Get Repository Pull Requests
-// ==========================================
-router.get("/pull-requests", async (req, res) => {
-  try {
-    const { owner, repo } = req.query;
-
-    if (!owner || !repo) {
-      return res.status(400).json({
+    if (!session) {
+      return res.status(404).json({
         success: false,
-        message: "owner and repo are required",
+        message:
+          "Session not found or expired.",
       });
     }
 
-    const pullRequests = await getRepositoryPullRequests(owner, repo);
+    res.json({
+      success: true,
+
+      repositoryId,
+
+      status:
+        session.status,
+
+      architecture:
+        session.architecture,
+
+      architecturePending:
+        session.architecturePending,
+
+      architectureError:
+        session.architectureError,
+
+      codeEvolution:
+        session.codeEvolution,
+
+      codeEvolutionPending:
+        session.codeEvolutionPending,
+
+      codeEvolutionError:
+        session.codeEvolutionError,
+
+      hotspotInsights:
+        session.hotspotInsights,
+
+      hotspotInsightsPending:
+        session.hotspotInsightsPending,
+
+      hotspotInsightsError:
+        session.hotspotInsightsError,
+
+      vectorIndexingPending:
+        session.vectorIndexingPending,
+
+      vectorIndexingError:
+        session.vectorIndexingError,
+
+      healthScore:
+        session.healthScore,
+
+      healthScorePending:
+        session.healthScorePending,
+
+      healthScoreError:
+        session.healthScoreError,
+
+      error:
+        session.error,
+    });
+  }
+);
+
+/* ==========================================================
+   FULL ANALYSIS SESSION
+========================================================== */
+
+router.get(
+  "/analytics/:repositoryId",
+  protect,
+  (req, res) => {
+    const {
+      repositoryId,
+    } = req.params;
+
+    const userId =
+      getUserId(req);
+
+    if (!userId) {
+      return res.status(401).json({
+        success: false,
+        message:
+          "Authenticated user not found.",
+      });
+    }
+
+    const session =
+      getAnalysisSession(
+        userId,
+        repositoryId
+      );
+
+    if (!session) {
+      return res.status(404).json({
+        success: false,
+        message:
+          "Session expired.",
+      });
+    }
 
     res.json({
       success: true,
-      pullRequests,
-    });
-  } catch (error) {
-    console.error("Pull request error:", error.message);
-
-    res.status(500).json({
-      success: false,
-      message: error.message || "Failed to fetch pull requests",
+      data: session,
     });
   }
-});
+);
+
+/* ==========================================================
+   SESSION RESTORE
+========================================================== */
+
+router.get(
+  "/analytics/:repositoryId/restore",
+  protect,
+  async (req, res) => {
+    try {
+      const { repositoryId } = req.params;
+      const userId = getUserId(req);
+
+      if (!userId) {
+        return res.status(401).json({
+          success: false,
+          message: "Authenticated user not found.",
+        });
+      }
+
+      const repository = await Repository.findOne({
+        repositoryId,
+        userId,
+      });
+
+      if (!repository) {
+        return res.status(404).json({
+          success: false,
+          message: "Repository not found.",
+        });
+      }
+
+      const session = getAnalysisSession(
+        userId,
+        repositoryId
+      );
+
+      if (session) {
+        return res.json({
+          success: true,
+          restored: true,
+          data: session,
+        });
+      }
+
+      // Session is gone (e.g. process restart or TTL expiry).
+      // This does not reconstruct the in-memory analysis — the
+      // frontend should prompt the user to re-run /analytics.
+      return res.status(404).json({
+        success: false,
+        restored: false,
+        message:
+          "Analysis session expired. Please analyze the repository again.",
+      });
+    } catch (error) {
+      console.error(
+        "Session restore error:",
+        error
+      );
+
+      return res.status(500).json({
+        success: false,
+        message: error.message,
+      });
+    }
+  }
+);
+
+/* ==========================================================
+   CALENDAR
+========================================================== */
+
+router.get(
+  "/calendar",
+  protect,
+  async (req, res) => {
+    try {
+      const {
+        repositoryId,
+      } = req.query;
+
+      const userId =
+        getUserId(req);
+
+      const repoPath =
+        await getRepoPathOrFail(
+          userId,
+          repositoryId,
+          res
+        );
+
+      if (!repoPath) return;
+
+      const calendar =
+        await getCommitCalendar(
+          repoPath
+        );
+
+      res.json(calendar);
+    } catch (err) {
+      console.error(err);
+
+      res.status(500).json({
+        success: false,
+        error:
+          "Unable to generate calendar",
+      });
+    }
+  }
+);
+
+/* ==========================================================
+   COMMIT DETAILS
+========================================================== */
+
+router.get(
+  "/commit/:hash",
+  protect,
+  async (req, res) => {
+    try {
+      const {
+        hash,
+      } = req.params;
+
+      const {
+        repositoryId,
+      } = req.query;
+
+      const userId =
+        getUserId(req);
+
+      const repoPath =
+        await getRepoPathOrFail(
+          userId,
+          repositoryId,
+          res
+        );
+
+      if (!repoPath) return;
+
+      const data =
+        await getCommitDetails(
+          repoPath,
+          hash
+        );
+
+      res.json({
+        success: true,
+        data,
+      });
+    } catch (error) {
+      console.error(error);
+
+      res.status(500).json({
+        success: false,
+        message: error.message,
+      });
+    }
+  }
+);
+
+/* ==========================================================
+   COMMIT DIFF
+========================================================== */
+
+router.get(
+  "/commit/:hash/diff",
+  protect,
+  async (req, res) => {
+    try {
+      const {
+        hash,
+      } = req.params;
+
+      const {
+        repositoryId,
+      } = req.query;
+
+      const userId =
+        getUserId(req);
+
+      const repoPath =
+        await getRepoPathOrFail(
+          userId,
+          repositoryId,
+          res
+        );
+
+      if (!repoPath) return;
+
+      const data =
+        await getCommitDiff(
+          repoPath,
+          hash
+        );
+
+      res.json({
+        success: true,
+        data,
+      });
+    } catch (error) {
+      console.error(error);
+
+      res.status(500).json({
+        success: false,
+        message: error.message,
+      });
+    }
+  }
+);
+
+/* ==========================================================
+   AI COMMIT SUMMARY
+========================================================== */
+
+router.get(
+  "/commit/:hash/summary",
+  protect,
+  async (req, res) => {
+    try {
+      const {
+        hash,
+      } = req.params;
+
+      const {
+        repositoryId,
+      } = req.query;
+
+      const userId =
+        getUserId(req);
+
+      const repoPath =
+        await getRepoPathOrFail(
+          userId,
+          repositoryId,
+          res
+        );
+
+      if (!repoPath) return;
+
+      const commit =
+        await getAICommitData(
+          repoPath,
+          hash
+        );
+
+      const summary =
+        await generateCommitSummary(
+          commit
+        );
+
+      res.json({
+        success: true,
+        data: summary,
+      });
+    } catch (error) {
+      console.error(
+        "AI Commit Summary Error:",
+        error
+      );
+
+      res.status(500).json({
+        success: false,
+        message: error.message,
+      });
+    }
+  }
+);
+
+/* ==========================================================
+   AI FILE EXPLANATION
+========================================================== */
+
+router.post(
+  "/file-explanation",
+  protect,
+  async (req, res) => {
+    try {
+      const {
+        filePath,
+        repositoryId,
+      } = req.body;
+
+      const userId =
+        getUserId(req);
+
+      if (!userId) {
+        return res.status(401).json({
+          success: false,
+          message: "Authenticated user not found.",
+        });
+      }
+
+      if (!filePath) {
+        return res.status(400).json({
+          success: false,
+          message:
+            "filePath is required",
+        });
+      }
+
+      if (!repositoryId) {
+        return res.status(400).json({
+          success: false,
+          message: "repositoryId is required.",
+        });
+      }
+
+      // 🔐 Verify repository belongs to logged-in user
+      const repository = await Repository.findOne({
+        repositoryId,
+        userId,
+      });
+
+      if (!repository) {
+        return res.status(403).json({
+          success: false,
+          message: "You do not have access to this repository.",
+        });
+      }
+
+      const session = getAnalysisSession(
+        userId,
+        repositoryId
+      );
+
+      if (!session || !session.repoPath) {
+        return res.status(404).json({
+          success: false,
+          message:
+            "Repository not analyzed yet, or session has expired.",
+        });
+      }
+
+      // Use previously cached AI file analysis if we have it,
+      // to avoid triggering another AI call for the same file.
+      const cached = getFileAIAnalysis(
+        userId,
+        repositoryId,
+        filePath
+      );
+
+      if (cached) {
+        return res.json({
+          success: true,
+          cached: true,
+          data: cached,
+        });
+      }
+
+      // Reuse the architecture already computed for this session
+      // instead of rebuilding it on every file click.
+      const architecture = session.architecture;
+
+      if (!architecture) {
+        return res.status(202).json({
+          success: false,
+          pending: true,
+          message:
+            "Repository architecture is still being generated.",
+        });
+      }
+
+      console.log(
+        "repoPath:",
+        session.repoPath
+      );
+
+      console.log(
+        "filePath:",
+        filePath
+      );
+
+      const explanation =
+        await explainFile(
+          session.repoPath,
+          filePath,
+          architecture,
+          repositoryId,
+          userId
+        );
+
+      saveFileAIAnalysis(
+        userId,
+        repositoryId,
+        filePath,
+        explanation
+      );
+
+      res.json({
+        success: true,
+        cached: false,
+        data: explanation,
+      });
+    } catch (error) {
+      console.error(
+        "File Explanation Error:",
+        error
+      );
+
+      res.status(500).json({
+        success: false,
+        message: error.message,
+      });
+    }
+  }
+);
+
+/* ==========================================================
+   HOTSPOT FILE HISTORY
+========================================================== */
+
+router.get(
+  "/hotspots/commits",
+  protect,
+  async (req, res) => {
+    try {
+      const {
+        file,
+        repositoryId,
+      } = req.query;
+
+      const userId =
+        getUserId(req);
+
+      if (!file) {
+        return res.status(400).json({
+          success: false,
+          message:
+            "file query param is required.",
+        });
+      }
+
+      const repoPath =
+        await getRepoPathOrFail(
+          userId,
+          repositoryId,
+          res
+        );
+
+      if (!repoPath) return;
+
+      const data =
+        await getFileHistory(
+          repoPath,
+          file
+        );
+
+      res.json({
+        success: true,
+        data,
+      });
+    } catch (error) {
+      console.error(
+        "File History Error:",
+        error
+      );
+
+      res.status(500).json({
+        success: false,
+        message: error.message,
+      });
+    }
+  }
+);
+
+/* ==========================================================
+   PULL REQUESTS
+========================================================== */
+
+router.get(
+  "/pull-requests",
+  protect,
+  async (req, res) => {
+    try {
+      const {
+        owner,
+        repo,
+      } = req.query;
+
+      if (!owner || !repo) {
+        return res.status(400).json({
+          success: false,
+          message:
+            "owner and repo are required",
+        });
+      }
+
+      const pullRequests =
+        await getRepositoryPullRequests(
+          owner,
+          repo
+        );
+
+      res.json({
+        success: true,
+        pullRequests,
+      });
+    } catch (error) {
+      console.error(
+        "Pull request error:",
+        error.message
+      );
+
+      res.status(500).json({
+        success: false,
+        message:
+          error.message ||
+          "Failed to fetch pull requests",
+      });
+    }
+  }
+);
 
 module.exports = router;

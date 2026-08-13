@@ -59,8 +59,11 @@ function log(...args) {
 
 const responseCache = new Map();
 
-function cacheKey(question, repositoryId) {
-  return `${repositoryId}::${question.trim().toLowerCase()}`;
+// CHANGE 2: Multi-tenant cache key incorporating userId
+function cacheKey(question, repositoryId, userId) {
+  return `${userId || "anonymous"}::${repositoryId}::${question
+    .trim()
+    .toLowerCase()}`;
 }
 
 function getFromCache(key) {
@@ -134,9 +137,6 @@ function sortByRelevance(documents, metadatas, distances) {
 
 // ==========================================
 // Remove duplicate chunks from same file
-//
-// This prevents sending too many chunks from
-// the same document to Groq.
 // ==========================================
 
 function removeDuplicateChunks(documents, metadatas, distances) {
@@ -151,8 +151,6 @@ function removeDuplicateChunks(documents, metadatas, distances) {
 
     const file = metadata.file || `Unknown-${i}`;
 
-    // Include chunk number so different useful chunks
-    // from the same file can still be kept.
     const chunk =
       metadata.chunk !== undefined
         ? metadata.chunk
@@ -537,8 +535,6 @@ If the context is insufficient, say so instead of guessing.
           ],
 
           temperature: 0.2,
-
-          // Reduced from 2048 to save tokens.
           max_tokens: 1200,
         }),
 
@@ -561,7 +557,6 @@ If the context is insufficient, say so instead of guessing.
     } catch (error) {
       lastError = error;
 
-      // Never retry rate-limit errors.
       const isRateLimit =
         error.status === 429 ||
         error.code === "rate_limit_exceeded";
@@ -601,9 +596,11 @@ If the context is insufficient, say so instead of guessing.
 // Ask Repository Assistant
 // ==========================================
 
+// CHANGE 1: Added userId parameter with a default value of null
 async function askRepositoryAssistant(
   question,
-  repositoryId
+  repositoryId,
+  userId = null
 ) {
   if (!question || !question.trim()) {
     throw new Error("Question is required.");
@@ -621,9 +618,11 @@ async function askRepositoryAssistant(
   // CACHE
   // ========================================
 
+  // CHANGE 2: Included userId when looking up/setting cache key
   const key = cacheKey(
     trimmedQuestion,
-    repositoryId
+    repositoryId,
+    userId
   );
 
   const cached = getFromCache(key);
@@ -647,16 +646,26 @@ async function askRepositoryAssistant(
     repositoryId
   );
 
+  if (userId) {
+    log(
+      "👤 User ID:",
+      userId
+    );
+  }
+
   try {
     // ========================================
     // STEP 1: Retrieve relevant chunks
     // ========================================
 
+    // CHANGE 3: Passed userId as 5th argument to searchDocuments
     const searchResults =
       await searchDocuments(
         trimmedQuestion,
         repositoryId,
-        RESULT_COUNT
+        RESULT_COUNT,
+        null,
+        userId
       );
 
     let documents =

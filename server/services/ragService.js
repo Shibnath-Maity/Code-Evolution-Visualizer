@@ -1,16 +1,17 @@
 const axios = require("axios");
 const { ChromaClient } = require("chromadb");
 
-const OLLAMA_URL = "http://localhost:11434";
+const OLLAMA_URL = process.env.OLLAMA_URL || "http://localhost:11434";
 const COLLECTION_NAME = "repository_knowledge";
+const DEFAULT_INDEX_VERSION = "v2";
 
 // ==========================================
 // Connect to ChromaDB
 // ==========================================
 
 const chroma = new ChromaClient({
-  host: "127.0.0.1",
-  port: 8000,
+  host: process.env.CHROMA_HOST || "127.0.0.1",
+  port: Number(process.env.CHROMA_PORT) || 8000,
   ssl: false,
 });
 
@@ -87,14 +88,13 @@ const CANDIDATE_POOL_SIZE =
 // ==========================================
 // Create Embedding using Ollama
 // ==========================================
+
 async function createEmbedding(text) {
   if (!text || !text.trim()) {
     throw new Error("Cannot create embedding: empty text.");
   }
 
   try {
-    console.log("Embedding input:", text);
-
     const response = await axios.post(`${OLLAMA_URL}/api/embed`, {
       model: "nomic-embed-text",
       input: text,
@@ -103,7 +103,6 @@ async function createEmbedding(text) {
     const embedding = response.data.embeddings?.[0];
 
     if (!embedding) {
-      console.error("Ollama returned:", response.data);
       throw new Error("Embedding not returned by Ollama.");
     }
 
@@ -126,7 +125,44 @@ async function getCollection() {
 }
 
 // ==========================================
-// Add Document to ChromaDB
+// Check if Repository is Already Indexed
+// ==========================================
+
+async function isRepositoryIndexed(
+  userId,
+  repositoryId,
+  indexVersion = DEFAULT_INDEX_VERSION
+) {
+  try {
+    if (!userId || !repositoryId) {
+      return false;
+    }
+
+    const collection = await getCollection();
+
+    const results = await collection.get({
+      where: {
+        $and: [
+          { userId: String(userId) },
+          { repositoryId: String(repositoryId) },
+          { indexVersion: String(indexVersion) },
+          { type: "repository_summary" },
+          { indexStatus: "complete" },
+        ],
+      },
+      limit: 1,
+      include: ["metadatas"],
+    });
+
+    return (results.ids || []).length > 0;
+  } catch (error) {
+    console.error("❌ Failed to check repository index status:", error.message);
+    return false;
+  }
+}
+
+// ==========================================
+// Add / Upsert Document to ChromaDB
 // ==========================================
 
 async function addDocument(id, text, metadata = {}) {
@@ -134,18 +170,17 @@ async function addDocument(id, text, metadata = {}) {
     const collection = await getCollection();
     const embedding = await createEmbedding(text);
 
-    console.log("📦 Metadata being stored:", metadata);
-
-    await collection.add({
+    // Using upsert instead of add prevents duplicate key errors
+    await collection.upsert({
       ids: [id],
       documents: [text],
       embeddings: [embedding],
       metadatas: [metadata],
     });
 
-    console.log(`Document added to ChromaDB: ${id}`);
+    console.log(`✓ Stored chunk in ChromaDB: ${id}`);
   } catch (error) {
-    console.error("ChromaDB Add Error:", error.message);
+    console.error(`ChromaDB Upsert Error [${id}]:`, error.message);
     throw error;
   }
 }
@@ -266,7 +301,7 @@ function extractQueryWords(q) {
 }
 
 const FILE_EXTENSION_PATTERN =
-/\.(js|jsx|ts|tsx|java|py|c|cpp|h|hpp|html|css|scss|json|md|xml|yml|yaml|sql)$/i;
+  /\.(js|jsx|ts|tsx|java|py|c|cpp|h|hpp|html|css|scss|json|md|xml|yml|yaml|sql)$/i;
 
 function findMentionedFileName(queryWords) {
   return queryWords.find((word) => FILE_EXTENSION_PATTERN.test(word));
@@ -402,18 +437,14 @@ function scoreCandidate({ document, metadata, distance, queryWords, q, signals, 
 }
 
 function logRanking(finalResults) {
-  console.log("\n🎯 Ranked Results:");
-
-  finalResults.forEach((item, index) => {
+  console.log("\n🎯 Top Ranked RAG Candidates:");
+  finalResults.slice(0, 5).forEach((item, index) => {
     const displayName =
       item.metadata?.type === "repository_summary"
         ? "REPOSITORY_SUMMARY"
         : item.metadata?.file || "unknown";
 
-    console.log(`${index + 1}. ${displayName}`);
-    console.log(`   Type: ${item.metadata?.type || "unknown"}`);
-    console.log(`   Score: ${item.score.toFixed(3)}`);
-    console.log(`   Distance: ${item.distance}`);
+    console.log(` ${index + 1}. ${displayName} | Score: ${item.score.toFixed(2)} | Type: ${item.metadata?.type || "unknown"}`);
   });
 }
 
@@ -425,38 +456,38 @@ async function searchDocuments(
   query,
   repositoryId,
   limit = 8,
-  targetFile = null
+  targetFile = null,
+  userId = null,
+  indexVersion = DEFAULT_INDEX_VERSION
 ) {
   try {
+    if (!repositoryId) {
+      throw new Error("repositoryId is required for RAG search.");
+    }
+
     const collection = await getCollection();
     const queryEmbedding = await createEmbedding(query);
 
-    console.log("========== QUERY EMBEDDING ==========");
-    console.log("Exists:", !!queryEmbedding);
-    console.log("Is Array:", Array.isArray(queryEmbedding));
-    console.log("Length:", queryEmbedding?.length);
-    console.log("First 5:", queryEmbedding?.slice(0, 5));
+    // Multi-tenant & scope filters
+    const filterConditions = [
+      { repositoryId: String(repositoryId) },
+    ];
 
-    console.log("Calling ChromaDB query...");
-
-    if (!repositoryId) {
-      throw new Error("repositoryId is undefined.");
+    if (userId) {
+      filterConditions.push({ userId: String(userId) });
     }
 
-    let where;
+    if (indexVersion) {
+      filterConditions.push({ indexVersion: String(indexVersion) });
+    }
 
     if (targetFile) {
-      where = {
-        $and: [
-          { repositoryId: String(repositoryId) },
-          { fileName: targetFile }
-        ]
-      };
-    } else {
-      where = {
-        repositoryId: String(repositoryId)
-      };
+      filterConditions.push({ fileName: String(targetFile) });
     }
+
+    const where = filterConditions.length === 1
+      ? filterConditions[0]
+      : { $and: filterConditions };
 
     const results = await collection.query({
       queryEmbeddings: [queryEmbedding],
@@ -464,12 +495,9 @@ async function searchDocuments(
       where,
     });
 
-    console.log("ChromaDB query successful!");
     const documents = results.documents?.[0] || [];
     const metadatas = results.metadatas?.[0] || [];
     const distances = results.distances?.[0] || [];
-
-    console.log(`📚 Chroma retrieved ${documents.length} candidates`);
 
     if (documents.length === 0) {
       return { documents: [[]], metadatas: [[]], distances: [[]] };
@@ -526,7 +554,6 @@ async function searchDocuments(
     }
 
     let finalLimit = limit;
-
     if (signals.isOverview) finalLimit = 12;
     if (signals.isCodeReview) finalLimit = 15;
     if (signals.isArchitecture) finalLimit = 12;
@@ -566,6 +593,7 @@ async function deleteCollection() {
 module.exports = {
   createEmbedding,
   getCollection,
+  isRepositoryIndexed,
   addDocument,
   searchDocuments,
   deleteCollection,
