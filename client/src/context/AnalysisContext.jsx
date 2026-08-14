@@ -97,13 +97,14 @@ export function AnalysisProvider({ children }) {
               status.codeEvolutionPending ?? prev.codeEvolutionPending,
             codeEvolutionError:
               status.codeEvolutionError ?? prev.codeEvolutionError,
-hotspotInsights:
-  status.hotspotInsights !== undefined
-    ? status.hotspotInsights
-    : status.hotspotInsight !== undefined
-    ? status.hotspotInsight
-    : prev.hotspotInsights,
-           
+
+            hotspotInsights:
+              status.hotspotInsights !== undefined
+                ? status.hotspotInsights
+                : status.hotspotInsight !== undefined
+                ? status.hotspotInsight
+                : prev.hotspotInsights,
+
             hotspotInsightsPending:
               status.hotspotInsightsPending ?? prev.hotspotInsightsPending,
             hotspotInsightsError:
@@ -127,13 +128,21 @@ hotspotInsights:
 
         /*
          * Stop polling when every active background task has finished.
+         *
+         * Treat an omitted pending flag the same as `false` (finished) -
+         * some backend responses stop sending a *Pending field once that
+         * job completes instead of explicitly sending false. Without this,
+         * polling could run forever if the backend ever omits a flag on
+         * completion instead of sending false.
          */
+        const isFinished = (pending) => pending === undefined || pending === false;
+
         const backgroundFinished =
-          status.architecturePending === false &&
-          status.codeEvolutionPending === false &&
-          status.hotspotInsightsPending === false &&
-          status.vectorIndexingPending === false &&
-          status.healthScorePending === false;
+          isFinished(status.architecturePending) &&
+          isFinished(status.codeEvolutionPending) &&
+          isFinished(status.hotspotInsightsPending) &&
+          isFinished(status.vectorIndexingPending) &&
+          isFinished(status.healthScorePending);
 
         if (backgroundFinished) {
           console.log("✅ All background analysis completed");

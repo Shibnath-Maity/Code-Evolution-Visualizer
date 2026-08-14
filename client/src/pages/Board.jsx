@@ -11,8 +11,6 @@ import {
   Check,
   Code2,
   Terminal,
-  Activity,
-  Layers,
   Sparkles,
   ArrowUpRight,
   ChevronRight,
@@ -26,6 +24,7 @@ import LanguageDistribution from "../components/LanguageDistribution";
 import ProjectHealthScore from "../components/ProjectHealthScore";
 import DownloadRepositoryReport from "../components/DownloadRepositoryReport";
 import RepositoryStructure from "../components/RepositoryStructure";
+import ArchitectureDiagram from "../components/ArchitectureDiagram";
 import { useAnalysis } from "../context/AnalysisContext";
 
 // ---- helpers -------------------------------------------------------------
@@ -176,6 +175,7 @@ function Board() {
     [repositoryId]
   );
 
+  // Destructure architecture from analysis context
   const {
     stats = {},
     contributors = {},
@@ -189,6 +189,24 @@ function Board() {
     repoInfo = null,
     repoUrl = "",
   } = analysis || {};
+
+  /*
+   * TEMPORARY DIAGNOSTIC LOGGING - architecture data boundary.
+   *
+   * Fires whenever the `architecture` object coming out of
+   * AnalysisContext changes (initial load, or a background-poll
+   * update once architectureService finishes). Use this to confirm
+   * whether an incorrect/generic diagram is caused by the backend
+   * response itself or by something downstream in this component /
+   * ArchitectureDiagram. Safe to remove once confirmed.
+   */
+  useEffect(() => {
+    if (architecture) {
+      console.log("ARCHITECTURE API RESPONSE:", architecture);
+      console.log("ARCHITECTURE NODES:", architecture?.flow?.nodes);
+      console.log("ARCHITECTURE EDGES:", architecture?.flow?.edges);
+    }
+  }, [architecture]);
 
   const displayedCommits = useMemo(() => {
     const search = searchTerm.trim().toLowerCase();
@@ -346,6 +364,9 @@ function Board() {
 
         {/* Repository Structure */}
         <RepositoryStructure architecture={architecture} />
+
+        {/* Interactive Architecture Flow Diagram */}
+        <ArchitectureDiagram architecture={architecture} />
 
         {/* Language Distribution */}
         <LanguageDistribution languageAnalysis={languageAnalysis} />

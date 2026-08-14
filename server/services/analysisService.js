@@ -171,7 +171,14 @@ function startBackgroundArchitectureAndEvolution(
   setImmediate(async () => {
     try {
       const architecture = buildArchitecture(repoPath);
-
+console.log(
+  `[Repo ${repositoryId}] 🏗️ Architecture result:`,
+  {
+    nodes: architecture?.flow?.nodes?.length,
+    edges: architecture?.flow?.edges?.length,
+    framework: architecture?.framework?.name,
+  }
+);
       if (!isSessionActive(userId, repositoryId, executionId)) return;
 
       updateAnalysisSession(userId, repositoryId, {
