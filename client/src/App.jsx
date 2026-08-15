@@ -1,7 +1,7 @@
 import { BrowserRouter, Routes, Route } from "react-router-dom";
 
 import { AnalysisProvider } from "./context/AnalysisContext";
-
+import { ThemeProvider } from "./context/ThemeContext";
 import Home from "./pages/Home";
 import Board from "./pages/Board";
 import DebugCenter from "./pages/DebugCenter";
@@ -21,32 +21,34 @@ import AppLayout from "./Layout/AppLayout";
 function App() {
   return (
     <BrowserRouter>
-      <AnalysisProvider>
-        <Routes>
-          {/* Public Pages */}
-          <Route path="/" element={<Home />} />
-          <Route path="/login" element={<Login />} />
-          <Route path="/register" element={<Register />} />
+      <ThemeProvider>
+        <AnalysisProvider>
+          <Routes>
+            {/* Public Pages */}
+            <Route path="/" element={<Home />} />
+            <Route path="/login" element={<Login />} />
+            <Route path="/register" element={<Register />} />
 
-          {/* Protected Pages */}
-          <Route
-            element={
-              <ProtectedRoute>
-                <AppLayout />
-              </ProtectedRoute>
-            }
-          >
-            <Route path="/dashboard" element={<Board />} />
-            <Route path="/debug-center" element={<DebugCenter />} />
-            <Route path="/commits" element={<Commits />} />
-            <Route path="/contributors" element={<Contributors />} />
-            <Route path="/hotspots" element={<Hotspots />} />
-            <Route path="/timeline" element={<Timeline />} />
-            <Route path="/ai-insights" element={<AIInsights />} />
-            <Route path="/settings" element={<Setting />} />
-          </Route>
-        </Routes>
-      </AnalysisProvider>
+            {/* Protected Pages */}
+            <Route
+              element={
+                <ProtectedRoute>
+                  <AppLayout />
+                </ProtectedRoute>
+              }
+            >
+              <Route path="/dashboard" element={<Board />} />
+              <Route path="/debug-center" element={<DebugCenter />} />
+              <Route path="/commits" element={<Commits />} />
+              <Route path="/contributors" element={<Contributors />} />
+              <Route path="/hotspots" element={<Hotspots />} />
+              <Route path="/timeline" element={<Timeline />} />
+              <Route path="/ai-insights" element={<AIInsights />} />
+              <Route path="/settings" element={<Setting />} />
+            </Route>
+          </Routes>
+        </AnalysisProvider>
+      </ThemeProvider>
     </BrowserRouter>
   );
 }

@@ -10,8 +10,8 @@ import {
   Settings,
   Home,
   LogOut,
-  Bot,
 } from "lucide-react";
+import logo from "../assets/logo.png";
 
 const NAV_SECTIONS = [
   {
@@ -80,8 +80,12 @@ function Sidebar() {
       {/* ================= Logo ================= */}
       <div className="relative border-b border-slate-800/80 p-6">
         <div className="flex items-center gap-3">
-          <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-gradient-to-br from-indigo-500 to-violet-600 shadow-lg shadow-indigo-950/50">
-            <Bot className="h-6 w-6 text-white" strokeWidth={2.25} />
+          <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-indigo-500 to-violet-600 shadow-lg shadow-indigo-950/50 overflow-hidden">
+            <img
+              src={logo}
+              alt="RepoIQ logo"
+              className="h-full w-full object-cover"
+            />
           </div>
 
           <div className="min-w-0">
