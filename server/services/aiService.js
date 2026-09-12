@@ -1,25 +1,42 @@
-const OLLAMA_URL = "http://localhost:11434";
+const GEMINI_API_KEY = process.env.GEMINI_API_KEY_AI;
+ GEMINI_MODEL = "gemini-3.6-flash";
+const GEMINI_API_URL = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent`;
 
-async function askOllama(question) {
-  const response = await fetch(`${OLLAMA_URL}/api/generate`, {
+async function askGemini(question) {
+  if (!GEMINI_API_KEY) {
+    throw new Error("Gemini error: GEMINI_API_KEY_AI is not set");
+  }
+
+  const response = await fetch(`${GEMINI_API_URL}?key=${GEMINI_API_KEY}`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
     },
     body: JSON.stringify({
-      model: "llama3.2",
-      prompt: question,
-      stream: false,
+      contents: [
+        {
+          role: "user",
+          parts: [{ text: question }],
+        },
+      ],
     }),
   });
 
   if (!response.ok) {
-    throw new Error(`Ollama error: ${response.status}`);
+    const errText = await response.text();
+    throw new Error(`Gemini error: ${response.status} - ${errText}`);
   }
 
   const data = await response.json();
 
-  return data.response;
+  // Gemini returns candidates[0].content.parts[0].text
+  const text = data?.candidates?.[0]?.content?.parts?.[0]?.text ?? "";
+
+  if (!text) {
+    console.warn("Gemini returned empty text. Raw response:", JSON.stringify(data, null, 2));
+  }
+
+  return text;
 }
 
 
@@ -28,42 +45,54 @@ async function askOllama(question) {
 // ==========================================
 
 async function analyzeRepository(repositoryData) {
-
   const prompt = `
 You are an AI software engineering assistant inside a Code Evolution Visualizer.
 
 Analyze the following repository data.
 
 Repository statistics:
-${JSON.stringify(repositoryData.stats, null, 2)}
+${JSON.stringify(repositoryData.stats || {}, null, 2)}
 
 Contributors:
-${JSON.stringify(repositoryData.contributors, null, 2)}
+${JSON.stringify(repositoryData.contributors || [], null, 2)}
 
 Recent commit history:
-${JSON.stringify(repositoryData.timeline?.slice(0, 30), null, 2)}
+${JSON.stringify(repositoryData.timeline?.slice(0, 30) || [], null, 2)}
 
-Give a useful developer-oriented analysis.
+File changes:
+${JSON.stringify(repositoryData.fileChanges?.slice(0, 30) || [], null, 2)}
 
-Include:
+Respond using EXACTLY these section headers, each on its own line, in this order.
+Do not add markdown symbols like ** around the headers. Do not skip a section.
 
-1. Development activity
-2. Commit patterns
-3. Contributor activity
-4. Code growth
-5. Possible automated commits
-6. Potential concerns
-7. Suggestions for improving the repository
+SUMMARY:
+<2-3 sentence overview of the repository's overall health and activity>
 
-Keep the answer clear and practical.
+DEVELOPMENT_ACTIVITY:
+<commit frequency, most active periods, contributor activity>
+
+CODE_HEALTH:
+<code growth, maintainability signals, anything concerning in the stats>
+
+HOTSPOTS:
+<files that change most often, based on file changes data>
+
+COMMIT_QUALITY:
+<commit message quality, size of commits, possible automated/bot commits>
+
+RECOMMENDATIONS:
+<practical, actionable suggestions for improving the repository>
+
+RISK:
+<potential risks or concerns, or "No significant risks identified" if none>
+
 Do not invent information that is not present in the data.
 `;
 
-  return await askOllama(prompt);
+  return await askGemini(prompt);
 }
 
-
 module.exports = {
-  askOllama,
+  askGemini,
   analyzeRepository,
 };

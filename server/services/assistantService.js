@@ -17,7 +17,7 @@ const groq = GROQ_API_KEY
 // ==========================================
 
 const CHAT_MODEL =
-  process.env.ASSISTANT_CHAT_MODEL || "llama-3.3-70b-versatile";
+  process.env.ASSISTANT_CHAT_MODEL || "openai/gpt-oss-120b";
 
 // Keep retrieval small to reduce Groq token usage.
 const RESULT_COUNT =

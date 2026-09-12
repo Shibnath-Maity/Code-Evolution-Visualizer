@@ -21,13 +21,13 @@ import {
 
 // Maps section headers to UI display metadata
 const SECTION_META = {
-  SUMMARY: { title: "Summary", icon: Sparkles, accent: "bg-indigo-50 text-indigo-600" },
-  DEVELOPMENT_ACTIVITY: { title: "Development Activity", icon: Clock, accent: "bg-blue-50 text-blue-600" },
-  CODE_HEALTH: { title: "Code Health", icon: ShieldCheck, accent: "bg-emerald-50 text-emerald-600" },
-  HOTSPOTS: { title: "Hotspots", icon: FileCode, accent: "bg-orange-50 text-orange-600" },
-  COMMIT_QUALITY: { title: "Commit Quality", icon: GitCommitHorizontal, accent: "bg-amber-50 text-amber-600" },
-  RECOMMENDATIONS: { title: "Recommendations", icon: Lightbulb, accent: "bg-amber-50 text-amber-600" },
-  RISK: { title: "Risk", icon: AlertTriangle, accent: "bg-red-50 text-red-600" },
+  SUMMARY: { title: "Summary", icon: Sparkles, bar: "bg-sky-500", text: "text-sky-600" },
+  DEVELOPMENT_ACTIVITY: { title: "Development Activity", icon: Clock, bar: "bg-cyan-500", text: "text-cyan-600" },
+  CODE_HEALTH: { title: "Code Health", icon: ShieldCheck, bar: "bg-teal-500", text: "text-teal-600" },
+  HOTSPOTS: { title: "Hotspots", icon: FileCode, bar: "bg-blue-500", text: "text-blue-600" },
+  COMMIT_QUALITY: { title: "Commit Quality", icon: GitCommitHorizontal, bar: "bg-indigo-400", text: "text-indigo-600" },
+  RECOMMENDATIONS: { title: "Recommendations", icon: Lightbulb, bar: "bg-amber-400", text: "text-amber-600" },
+  RISK: { title: "Risk", icon: AlertTriangle, bar: "bg-rose-400", text: "text-rose-600" },
 };
 
 const SECTION_ORDER = Object.keys(SECTION_META);
@@ -116,31 +116,27 @@ function FormattedText({ text }) {
   );
 }
 
-function QuickFactCard({ icon: Icon, label, value, sub }) {
+function QuickFactStat({ icon: Icon, label, value, isLast }) {
   return (
-    <div className="bg-white rounded-2xl p-5 shadow-sm border border-slate-100 flex items-start gap-3">
-      <div className="h-9 w-9 rounded-lg bg-indigo-50 flex items-center justify-center shrink-0">
-        <Icon className="h-4 w-4 text-indigo-600" />
-      </div>
+    <div className={`flex items-center gap-3 py-4 px-5 ${!isLast ? "sm:border-r border-slate-100" : ""}`}>
+      <Icon className="h-4 w-4 text-sky-500 shrink-0" strokeWidth={2} />
       <div className="min-w-0">
-        <p className="text-xs text-slate-400">{label}</p>
-        <p className="text-sm font-semibold text-slate-900 truncate">{value}</p>
-        <p className="text-xs text-slate-400">{sub}</p>
+        <p className="text-[11px] text-slate-400 leading-none mb-1">{label}</p>
+        <p className="text-sm font-semibold text-slate-900 truncate leading-none">{value}</p>
       </div>
     </div>
   );
 }
 
 function AnalysisSectionCard({ sectionKey, content }) {
-  const meta = SECTION_META[sectionKey] || { title: sectionKey, icon: Sparkles, accent: "bg-slate-100 text-slate-600" };
+  const meta = SECTION_META[sectionKey] || { title: sectionKey, icon: Sparkles, bar: "bg-slate-400", text: "text-slate-600" };
   const Icon = meta.icon;
 
   return (
-    <div className="bg-white rounded-2xl p-5 shadow-sm border border-slate-100">
+    <div className="relative bg-white rounded-xl pl-5 pr-5 py-4 border border-slate-100 overflow-hidden">
+      <div className={`absolute left-0 top-0 bottom-0 w-1 ${meta.bar}`} />
       <div className="flex items-center gap-2 mb-3">
-        <div className={`h-8 w-8 rounded-lg flex items-center justify-center shrink-0 ${meta.accent}`}>
-          <Icon className="h-4 w-4" />
-        </div>
+        <Icon className={`h-4 w-4 ${meta.text}`} strokeWidth={2} />
         <h3 className="text-sm font-semibold text-slate-900">{meta.title}</h3>
       </div>
       <FormattedText text={content} />
@@ -150,11 +146,12 @@ function AnalysisSectionCard({ sectionKey, content }) {
 
 function AnalysisSkeleton() {
   return (
-    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
       {[0, 1, 2, 3].map((i) => (
-        <div key={i} className="bg-white rounded-2xl p-5 shadow-sm border border-slate-100 animate-pulse">
+        <div key={i} className="relative bg-white rounded-xl pl-5 pr-5 py-4 border border-slate-100 overflow-hidden animate-pulse">
+          <div className="absolute left-0 top-0 bottom-0 w-1 bg-slate-200" />
           <div className="flex items-center gap-2 mb-4">
-            <div className="h-8 w-8 rounded-lg bg-slate-100" />
+            <div className="h-4 w-4 rounded-full bg-slate-100" />
             <div className="h-3 w-24 rounded bg-slate-100" />
           </div>
           <div className="space-y-2">
@@ -242,10 +239,10 @@ function AIInsights() {
   })();
 
   const quickFacts = [
-    { icon: Calendar, label: "Most Active Day", value: mostActiveDay, sub: "Based on commit history" },
-    { icon: Clock, label: "Most Active Hour", value: mostActiveHour, sub: "Based on commit history" },
-    { icon: FileCode, label: "Most Modified File", value: mostModifiedFile, sub: "Based on file changes" },
-    { icon: GitCommitHorizontal, label: "Total Commits", value: stats.totalCommits || 0, sub: "Repository history" },
+    { icon: Calendar, label: "Most Active Day", value: mostActiveDay },
+    { icon: Clock, label: "Most Active Hour", value: mostActiveHour },
+    { icon: FileCode, label: "Most Modified File", value: mostModifiedFile },
+    { icon: GitCommitHorizontal, label: "Total Commits", value: stats.totalCommits || 0 },
   ];
 
   async function generateAIAnalysis() {
@@ -272,6 +269,9 @@ function AIInsights() {
             }
           : null,
         stats: repositoryData.stats || {},
+
+        // Contributors, so the backend's Contributor Activity section has data
+        contributors: repositoryData.contributors || [],
 
         // Capped commit summary
         timeline: (repositoryData.timeline || [])
@@ -310,48 +310,28 @@ function AIInsights() {
   const sections = parseAnalysis(analysis);
 
   return (
-    <div className="p-8 max-w-6xl mx-auto">
-      {/* Header */}
-      <div className="flex items-center justify-between mb-2 gap-4">
+    <div className="max-w-6xl mx-auto p-8">
+      {/* Header — light text since this app's page canvas is dark */}
+      <div className="flex items-center justify-between mb-1 gap-4">
         <div className="flex items-center gap-3">
-          <h1 className="text-3xl font-bold text-slate-900">AI Insights</h1>
-          <span className="text-[10px] uppercase font-semibold text-indigo-600 bg-indigo-50 px-2 py-1 rounded-full">
+          <h1 className="text-2xl font-semibold text-white tracking-tight">AI Insights</h1>
+          <span className="text-[10px] font-semibold text-sky-300 bg-sky-500/10 border border-sky-500/30 px-2 py-0.5 rounded-full">
             Beta
           </span>
         </div>
-
-        <button
-          onClick={generateAIAnalysis}
-          disabled={loading || !repositoryData}
-          title={!repositoryData ? "Analyze a repository first" : undefined}
-          className="flex items-center gap-2 px-4 py-2 rounded-xl bg-indigo-600 text-white text-sm font-medium hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed transition shrink-0"
-        >
-          {loading ? (
-            <>
-              <Loader2 className="h-4 w-4 animate-spin" />
-              Analyzing...
-            </>
-          ) : (
-            <>
-              <RefreshCw className="h-4 w-4" />
-              {analysis ? "Re-analyze Repository" : "Analyze Repository"}
-            </>
-          )}
-        </button>
       </div>
-
-      <p className="text-slate-500 mt-2 mb-8">
+      <p className="text-slate-400 text-sm mb-8">
         Get AI-powered insights about your repository.
       </p>
 
       {/* No repository connected state */}
       {!repositoryData && (
-        <div className="bg-white rounded-2xl p-10 shadow-sm border border-slate-100 flex flex-col items-center text-center">
-          <div className="h-12 w-12 rounded-xl bg-slate-50 flex items-center justify-center mb-4">
-            <FolderGit2 className="h-6 w-6 text-slate-400" />
+        <div className="rounded-2xl border border-dashed border-slate-700 p-12 flex flex-col items-center text-center">
+          <div className="h-11 w-11 rounded-full bg-white/5 flex items-center justify-center mb-4">
+            <FolderGit2 className="h-5 w-5 text-slate-500" />
           </div>
-          <h2 className="text-base font-semibold text-slate-900">No repository connected</h2>
-          <p className="text-sm text-slate-500 mt-1 max-w-sm">
+          <h2 className="text-sm font-semibold text-white">No repository connected</h2>
+          <p className="text-sm text-slate-400 mt-1 max-w-sm">
             Analyze a repository from the dashboard first, then come back here to generate AI insights for it.
           </p>
         </div>
@@ -361,79 +341,104 @@ function AIInsights() {
         <div className="space-y-6">
           {/* Error Banner */}
           {error && (
-            <div className="flex items-start gap-2 p-4 rounded-xl border border-red-200 bg-red-50 text-red-600 text-sm">
+            <div className="flex items-start gap-2 p-4 rounded-xl border border-rose-200 bg-rose-50 text-rose-600 text-sm">
               <AlertCircle className="h-4 w-4 mt-0.5 shrink-0" />
               <span>{error}</span>
             </div>
           )}
 
-          {/* AI Summary Section */}
-          <div className="bg-white rounded-2xl p-6 shadow-sm border border-slate-100">
-            <div className="flex items-center justify-between flex-wrap gap-2">
-              <div className="flex items-center gap-2">
-                <Sparkles className="h-5 w-5 text-indigo-600" />
-                <h2 className="text-xl font-semibold text-slate-900">AI Repository Analysis</h2>
-              </div>
-              {lastAnalyzedAt && !loading && (
-                <span className="text-xs text-slate-400">
-                  Last analyzed {lastAnalyzedAt.toLocaleTimeString()}
-                </span>
-              )}
-            </div>
+          {/* Quick Facts strip */}
+          <div className="rounded-xl border border-slate-100 bg-white grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 divide-y sm:divide-y-0 divide-slate-100">
+            {quickFacts.map((fact, i) => (
+              <QuickFactStat key={fact.label} {...fact} isLast={i === quickFacts.length - 1} />
+            ))}
+          </div>
 
-            <div className="mt-5">
-              {loading ? (
-                <>
-                  <div className="flex items-center gap-3 text-slate-500 pb-4">
-                    <Loader2 className="h-5 w-5 animate-spin text-indigo-600" />
-                    <span>AI is analyzing your repository...</span>
+          {/* AI Analysis Panel — hero treatment */}
+          <div className="relative rounded-2xl overflow-hidden bg-gradient-to-br from-slate-900 via-slate-900 to-sky-950 text-white">
+            <div
+              className="absolute inset-0 opacity-40"
+              style={{
+                backgroundImage:
+                  "radial-gradient(circle at 15% 20%, rgba(56,189,248,0.35), transparent 45%), radial-gradient(circle at 85% 75%, rgba(45,212,191,0.25), transparent 45%)",
+              }}
+            />
+            <div className="relative p-6">
+              <div className="flex items-center justify-between flex-wrap gap-4">
+                <div className="flex items-center gap-2.5">
+                  <div className="h-8 w-8 rounded-lg bg-white/10 flex items-center justify-center">
+                    <Sparkles className="h-4 w-4 text-sky-300" />
                   </div>
-                  <AnalysisSkeleton />
-                </>
-              ) : analysis ? (
-                <div>
-                  <div className="flex items-center gap-2 mb-4">
-                    <Bot className="h-5 w-5 text-indigo-600" />
-                    <span className="font-medium text-slate-900">AI Repository Analysis</span>
+                  <div>
+                    <h2 className="text-base font-semibold">Repository Analysis</h2>
+                    {lastAnalyzedAt && !loading && (
+                      <p className="text-xs text-slate-400">
+                        Last analyzed {lastAnalyzedAt.toLocaleTimeString()}
+                      </p>
+                    )}
                   </div>
+                </div>
 
-                  {sections.length > 0 ? (
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      {sections.map((section) => (
-                        <AnalysisSectionCard key={section.key} sectionKey={section.key} content={section.content} />
-                      ))}
-                    </div>
+                <button
+                  onClick={generateAIAnalysis}
+                  disabled={loading || !repositoryData}
+                  title={!repositoryData ? "Analyze a repository first" : undefined}
+                  className="flex items-center gap-2 px-4 py-2 rounded-lg bg-sky-400 text-slate-900 text-sm font-semibold hover:bg-sky-300 disabled:opacity-40 disabled:cursor-not-allowed transition shrink-0"
+                >
+                  {loading ? (
+                    <>
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                      Analyzing
+                    </>
                   ) : (
-                    <div className="bg-slate-50 rounded-xl p-5">
-                      <FormattedText text={analysis} />
-                    </div>
+                    <>
+                      <RefreshCw className="h-4 w-4" />
+                      {analysis ? "Re-analyze" : "Analyze Repository"}
+                    </>
                   )}
-                </div>
-              ) : (
-                <div className="flex flex-col items-center text-center py-10">
-                  <div className="h-11 w-11 rounded-xl bg-indigo-50 flex items-center justify-center mb-3">
-                    <Sparkles className="h-5 w-5 text-indigo-600" />
-                  </div>
-                  <p className="text-sm text-slate-500 max-w-sm">
-                    Click <span className="font-medium text-indigo-600">Analyze Repository</span> to let your AI
-                    assistant generate a summary, development activity breakdown, and recommendations for this
-                    codebase.
-                  </p>
-                </div>
+                </button>
+              </div>
+
+              {!analysis && !loading && (
+                <p className="text-sm text-slate-400 mt-4 max-w-md">
+                  Generate a summary, development activity breakdown, and recommendations for this codebase.
+                </p>
               )}
             </div>
           </div>
 
-          {/* Quick Facts */}
-          <div>
-            <h2 className="text-sm font-semibold text-slate-500 uppercase tracking-wide mb-3">
-              Quick Facts
-            </h2>
-            <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
-              {quickFacts.map((fact) => (
-                <QuickFactCard key={fact.label} {...fact} />
-              ))}
-            </div>
+          {/* Results */}
+          <div className="mt-2">
+            {loading ? (
+              <>
+                <div className="flex items-center gap-3 text-slate-300 pb-4 text-sm">
+                  <Loader2 className="h-4 w-4 animate-spin text-sky-400" />
+                  <span>AI is analyzing your repository...</span>
+                </div>
+                <AnalysisSkeleton />
+              </>
+            ) : analysis ? (
+              <div>
+                <div className="flex items-center gap-2 mb-3">
+                  <Bot className="h-4 w-4 text-sky-400" />
+                  <span className="text-xs font-medium uppercase tracking-wide text-slate-400">
+                    Findings
+                  </span>
+                </div>
+
+                {sections.length > 0 ? (
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                    {sections.map((section) => (
+                      <AnalysisSectionCard key={section.key} sectionKey={section.key} content={section.content} />
+                    ))}
+                  </div>
+                ) : (
+                  <div className="bg-white rounded-xl border border-slate-100 p-5">
+                    <FormattedText text={analysis} />
+                  </div>
+                )}
+              </div>
+            ) : null}
           </div>
 
           {/* AI Assistant Chatbot */}

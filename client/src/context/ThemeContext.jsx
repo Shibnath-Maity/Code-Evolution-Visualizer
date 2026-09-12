@@ -1,53 +1,68 @@
-import { createContext, useContext, useEffect, useState } from "react";
+import {
+  createContext,
+  useContext,
+  useEffect,
+  useState,
+} from "react";
 
 const ThemeContext = createContext();
 
 export function ThemeProvider({ children }) {
   const [theme, setTheme] = useState(() => {
-    return localStorage.getItem("repoiq_theme") || "dark";
+    return localStorage.getItem("repoiq_theme") || "system";
   });
 
   useEffect(() => {
     const root = document.documentElement;
 
-    if (theme === "dark") {
-      root.classList.add("dark");
-    } else if (theme === "light") {
-      root.classList.remove("dark");
-    } else {
-      const systemDark = window.matchMedia(
+    const applyTheme = (mode) => {
+      let isDark = false;
+
+      if (mode === "dark") {
+        isDark = true;
+      }
+
+      if (mode === "system") {
+        isDark = window.matchMedia(
+          "(prefers-color-scheme: dark)"
+        ).matches;
+      }
+
+      root.classList.toggle("dark", isDark);
+    };
+
+    applyTheme(theme);
+
+    if (theme === "system") {
+      const mediaQuery = window.matchMedia(
         "(prefers-color-scheme: dark)"
-      ).matches;
-
-      root.classList.toggle("dark", systemDark);
-    }
-
-    localStorage.setItem("repoiq_theme", theme);
-  }, [theme]);
-
-  useEffect(() => {
-    if (theme !== "system") return;
-
-    const media = window.matchMedia(
-      "(prefers-color-scheme: dark)"
-    );
-
-    const handleChange = (event) => {
-      document.documentElement.classList.toggle(
-        "dark",
-        event.matches
       );
-    };
 
-    media.addEventListener("change", handleChange);
+      const handleChange = () => applyTheme("system");
 
-    return () => {
-      media.removeEventListener("change", handleChange);
-    };
+      mediaQuery.addEventListener("change", handleChange);
+
+      return () => {
+        mediaQuery.removeEventListener(
+          "change",
+          handleChange
+        );
+      };
+    }
   }, [theme]);
+
+  const changeTheme = (newTheme) => {
+    setTheme(newTheme);
+    localStorage.setItem("repoiq_theme", newTheme);
+  };
 
   return (
-    <ThemeContext.Provider value={{ theme, setTheme }}>
+    <ThemeContext.Provider
+      value={{
+        theme,
+        changeTheme,
+      }}
+    >
       {children}
     </ThemeContext.Provider>
   );

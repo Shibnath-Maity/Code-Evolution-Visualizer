@@ -1,8 +1,10 @@
 const express = require("express");
+
 const {
-  askOllama,
+  askCohere,
   analyzeRepository,
 } = require("../services/aiService");
+
 const protect = require("../middleware/authMiddleware");
 
 const router = express.Router();
@@ -117,7 +119,7 @@ router.post("/chat", protect, async (req, res) => {
   log("💬 Chat question:", trimmedQuestion);
 
   try {
-    const answer = await askOllama(trimmedQuestion);
+    const answer = await askCohere(trimmedQuestion);
 
     return res.json({
       answer,
@@ -128,12 +130,12 @@ router.post("/chat", protect, async (req, res) => {
     if (isUnavailableError(error)) {
       return res.status(503).json({
         error:
-          "AI service is currently unavailable. Is Ollama running?",
+          "AI service is currently unavailable. Please try again shortly.",
       });
     }
 
     return res.status(500).json({
-      error: "Failed to get response from Ollama",
+      error: "Failed to get AI response",
     });
   }
 });
@@ -185,7 +187,7 @@ router.post("/analyze-repository", protect, async (req, res) => {
     if (isUnavailableError(error)) {
       return res.status(503).json({
         error:
-          "AI service is currently unavailable. Is Ollama running?",
+          "AI service is currently unavailable. Please try again shortly.",
       });
     }
 

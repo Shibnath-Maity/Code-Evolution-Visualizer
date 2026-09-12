@@ -3,8 +3,8 @@ const Groq = require("groq-sdk");
 const groq = new Groq({
   apiKey: process.env.GROQ_API_KEY,
 });
+const MODEL = process.env.GROQ_MODEL || "openai/gpt-oss-120b";
 
-const MODEL = process.env.GROQ_MODEL || "llama-3.3-70b-versatile";
 
 // Groq (like most providers) has a context window. A raw diff on a large
 // commit can blow past it, causing the request to fail outright instead of

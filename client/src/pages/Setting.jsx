@@ -24,25 +24,25 @@ function PasswordInput({
 }) {
   return (
     <div>
-      <label className="text-xs font-medium text-slate-400">
+      <label className="text-xs font-medium text-slate-500 dark:text-slate-400">
         {label}
       </label>
 
       <div className="relative mt-1">
-        <Lock className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-600 pointer-events-none" />
+        <Lock className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400 dark:text-slate-600 pointer-events-none" />
 
         <input
           type={show ? "text" : "password"}
           value={value}
           onChange={onChange}
           placeholder={placeholder}
-          className="w-full px-10 pr-11 py-2.5 rounded-lg border border-slate-800 bg-slate-950/60 text-sm text-slate-200 placeholder:text-slate-600 outline-none transition-all focus:border-indigo-500/70 focus:ring-2 focus:ring-indigo-500/10"
+          className="w-full px-10 pr-11 py-2.5 rounded-lg border border-slate-200 bg-white text-sm text-slate-900 placeholder:text-slate-400 outline-none transition-all focus:border-cyan-500/70 focus:ring-2 focus:ring-cyan-500/10 dark:border-slate-800 dark:bg-slate-950/60 dark:text-slate-200 dark:placeholder:text-slate-600"
         />
 
         <button
           type="button"
           onClick={onToggle}
-          className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-600 hover:text-slate-300 transition-colors"
+          className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 transition-colors dark:text-slate-600 dark:hover:text-slate-300"
           aria-label={show ? "Hide password" : "Show password"}
         >
           {show ? (
@@ -332,7 +332,7 @@ function Settings() {
   };
 
   return (
-    <div className="min-h-full bg-slate-950 text-slate-100 p-4 sm:p-6 lg:p-8 transition-colors duration-300">
+    <div className="min-h-full bg-slate-50 text-slate-900 p-4 sm:p-6 lg:p-8 transition-colors duration-300 dark:bg-slate-950 dark:text-slate-100">
 
       {/* ==================================================
           Header
@@ -342,18 +342,18 @@ function Settings() {
         <div className="flex items-center justify-between gap-4">
 
           <div>
-            <h1 className="text-3xl font-bold text-white">
+            <h1 className="text-3xl font-bold text-slate-900 dark:text-white">
               Settings
             </h1>
 
-            <p className="text-slate-500 mt-2">
+            <p className="text-slate-500 mt-2 dark:text-slate-500">
               Manage your RepoIQ account settings.
             </p>
           </div>
 
           {hasChanges && (
-            <div className="hidden sm:flex items-center gap-2 text-xs font-medium text-amber-400 bg-amber-500/10 px-3 py-2 rounded-full border border-amber-500/20">
-              <span className="h-2 w-2 rounded-full bg-amber-400 animate-pulse" />
+            <div className="hidden sm:flex items-center gap-2 text-xs font-medium text-amber-600 bg-amber-500/10 px-3 py-2 rounded-full border border-amber-500/20 dark:text-amber-400">
+              <span className="h-2 w-2 rounded-full bg-amber-500 animate-pulse dark:bg-amber-400" />
               Unsaved changes
             </div>
           )}
@@ -365,16 +365,16 @@ function Settings() {
           Profile
       ================================================== */}
 
-      <section className="bg-slate-900/70 rounded-2xl p-6 shadow-xl mb-6 border border-slate-800 transition-all duration-300 hover:border-slate-700">
+      <section className="bg-white rounded-2xl p-6 shadow-sm mb-6 border border-cyan-100 transition-all duration-300 hover:border-cyan-200 dark:bg-slate-900/70 dark:border-slate-800 dark:shadow-xl dark:hover:border-slate-700">
 
         {/* Section Header */}
 
         <div className="mb-6">
-          <h2 className="text-xl font-semibold text-white">
+          <h2 className="text-xl font-semibold text-slate-900 dark:text-white">
             Profile
           </h2>
 
-          <p className="text-sm text-slate-500 mt-1">
+          <p className="text-sm text-slate-500 mt-1 dark:text-slate-500">
             Manage your personal information.
           </p>
         </div>
@@ -389,10 +389,10 @@ function Settings() {
               <img
                 src={profile.avatar}
                 alt={profile.name || "Profile"}
-                className="h-16 w-16 rounded-full object-cover ring-4 ring-indigo-500/10"
+                className="h-16 w-16 rounded-full object-cover ring-4 ring-cyan-500/10"
               />
             ) : (
-              <div className="h-16 w-16 rounded-full bg-gradient-to-br from-indigo-500 to-violet-600 flex items-center justify-center text-white text-lg font-bold ring-4 ring-indigo-500/10">
+              <div className="h-16 w-16 rounded-full bg-gradient-to-br from-cyan-500 to-sky-600 flex items-center justify-center text-white text-lg font-bold ring-4 ring-cyan-500/10">
                 {getInitials()}
               </div>
             )}
@@ -401,13 +401,14 @@ function Settings() {
               className="
                 absolute -bottom-1 -right-1
                 h-7 w-7 rounded-full
-                bg-indigo-600
+                bg-cyan-600
                 flex items-center justify-center
-                border-2 border-slate-900
+                border-2 border-white
                 cursor-pointer
-                hover:bg-indigo-500
+                hover:bg-cyan-500
                 hover:scale-110
                 transition-all
+                dark:border-slate-900
               "
             >
               <Camera className="h-3.5 w-3.5 text-white" />
@@ -424,15 +425,15 @@ function Settings() {
 
           <div>
 
-            <p className="text-sm font-semibold text-white">
+            <p className="text-sm font-semibold text-slate-900 dark:text-white">
               {profile.name || "Your Name"}
             </p>
 
-            <p className="text-xs text-slate-500 mt-1">
+            <p className="text-xs text-slate-500 mt-1 dark:text-slate-500">
               {profile.email || "No email"}
             </p>
 
-            <label className="inline-block mt-2 text-xs text-indigo-400 font-medium cursor-pointer hover:text-indigo-300">
+            <label className="inline-block mt-2 text-xs text-cyan-600 font-medium cursor-pointer hover:text-cyan-500 dark:text-cyan-400 dark:hover:text-cyan-300">
 
               Change profile photo
 
@@ -456,7 +457,7 @@ function Settings() {
           {/* Full Name */}
 
           <div>
-            <label className="text-xs font-medium text-slate-400">
+            <label className="text-xs font-medium text-slate-500 dark:text-slate-400">
               Full Name
             </label>
 
@@ -473,15 +474,19 @@ function Settings() {
               className="
                 mt-1 w-full px-3 py-2.5
                 rounded-lg
-                border border-slate-800
-                bg-slate-950/60
-                text-sm text-slate-200
-                placeholder:text-slate-600
+                border border-slate-200
+                bg-white
+                text-sm text-slate-900
+                placeholder:text-slate-400
                 outline-none
                 transition-all
-                focus:border-indigo-500/70
+                focus:border-cyan-500/70
                 focus:ring-2
-                focus:ring-indigo-500/10
+                focus:ring-cyan-500/10
+                dark:border-slate-800
+                dark:bg-slate-950/60
+                dark:text-slate-200
+                dark:placeholder:text-slate-600
               "
             />
           </div>
@@ -489,7 +494,7 @@ function Settings() {
           {/* Username */}
 
           <div>
-            <label className="text-xs font-medium text-slate-400">
+            <label className="text-xs font-medium text-slate-500 dark:text-slate-400">
               Username
             </label>
 
@@ -506,15 +511,19 @@ function Settings() {
               className="
                 mt-1 w-full px-3 py-2.5
                 rounded-lg
-                border border-slate-800
-                bg-slate-950/60
-                text-sm text-slate-200
-                placeholder:text-slate-600
+                border border-slate-200
+                bg-white
+                text-sm text-slate-900
+                placeholder:text-slate-400
                 outline-none
                 transition-all
-                focus:border-indigo-500/70
+                focus:border-cyan-500/70
                 focus:ring-2
-                focus:ring-indigo-500/10
+                focus:ring-cyan-500/10
+                dark:border-slate-800
+                dark:bg-slate-950/60
+                dark:text-slate-200
+                dark:placeholder:text-slate-600
               "
             />
           </div>
@@ -523,13 +532,13 @@ function Settings() {
 
           <div className="sm:col-span-2">
 
-            <label className="text-xs font-medium text-slate-400">
+            <label className="text-xs font-medium text-slate-500 dark:text-slate-400">
               Email Address
             </label>
 
             <div className="relative">
 
-              <Mail className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-600" />
+              <Mail className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400 dark:text-slate-600" />
 
               <input
                 type="email"
@@ -538,17 +547,20 @@ function Settings() {
                 className="
                   mt-1 w-full px-10 py-2.5
                   rounded-lg
-                  border border-slate-800
-                  bg-slate-900
-                  text-sm text-slate-400
+                  border border-slate-200
+                  bg-slate-50
+                  text-sm text-slate-500
                   outline-none
                   cursor-not-allowed
+                  dark:border-slate-800
+                  dark:bg-slate-900
+                  dark:text-slate-400
                 "
               />
 
             </div>
 
-            <p className="text-[11px] text-slate-600 mt-1">
+            <p className="text-[11px] text-slate-400 mt-1 dark:text-slate-600">
               This email comes from your registered account.
             </p>
 
@@ -558,7 +570,7 @@ function Settings() {
 
           <div className="sm:col-span-2">
 
-            <label className="text-xs font-medium text-slate-400">
+            <label className="text-xs font-medium text-slate-500 dark:text-slate-400">
               Bio
             </label>
 
@@ -575,16 +587,20 @@ function Settings() {
               className="
                 mt-1 w-full px-3 py-2.5
                 rounded-lg
-                border border-slate-800
-                bg-slate-950/60
-                text-sm text-slate-200
-                placeholder:text-slate-600
+                border border-slate-200
+                bg-white
+                text-sm text-slate-900
+                placeholder:text-slate-400
                 outline-none
                 transition-all
-                focus:border-indigo-500/70
+                focus:border-cyan-500/70
                 focus:ring-2
-                focus:ring-indigo-500/10
+                focus:ring-cyan-500/10
                 resize-none
+                dark:border-slate-800
+                dark:bg-slate-950/60
+                dark:text-slate-200
+                dark:placeholder:text-slate-600
               "
             />
 
@@ -596,7 +612,7 @@ function Settings() {
 
         <div className="flex items-center justify-between mt-5 gap-4">
 
-          <p className="text-xs text-slate-600">
+          <p className="text-xs text-slate-400 dark:text-slate-600">
             Save your profile changes when you're ready.
           </p>
 
@@ -614,8 +630,8 @@ function Settings() {
                 saved
                   ? "bg-emerald-600 text-white"
                   : hasChanges
-                  ? "bg-indigo-600 text-white hover:bg-indigo-500 hover:shadow-lg hover:shadow-indigo-600/20"
-                  : "bg-slate-800 text-slate-600 cursor-not-allowed"
+                  ? "bg-cyan-600 text-white hover:bg-cyan-500 hover:shadow-lg hover:shadow-cyan-600/20"
+                  : "bg-slate-200 text-slate-400 cursor-not-allowed dark:bg-slate-800 dark:text-slate-600"
               }
             `}
           >
@@ -640,22 +656,22 @@ function Settings() {
           Security
       ================================================== */}
 
-      <section className="bg-slate-900/70 rounded-2xl p-6 shadow-xl border border-slate-800 transition-all duration-300 hover:border-slate-700">
+      <section className="bg-white rounded-2xl p-6 shadow-sm border border-cyan-100 transition-all duration-300 hover:border-cyan-200 dark:bg-slate-900/70 dark:border-slate-800 dark:shadow-xl dark:hover:border-slate-700">
 
         {/* Security Header */}
 
         <div className="flex items-start gap-3 mb-6">
 
-          <div className="h-10 w-10 rounded-xl bg-indigo-500/10 flex items-center justify-center shrink-0">
-            <ShieldCheck className="h-5 w-5 text-indigo-400" />
+          <div className="h-10 w-10 rounded-xl bg-cyan-100 flex items-center justify-center shrink-0 dark:bg-cyan-500/10">
+            <ShieldCheck className="h-5 w-5 text-cyan-600 dark:text-cyan-400" />
           </div>
 
           <div>
-            <h2 className="text-xl font-semibold text-white">
+            <h2 className="text-xl font-semibold text-slate-900 dark:text-white">
               Security
             </h2>
 
-            <p className="text-sm text-slate-500 mt-1">
+            <p className="text-sm text-slate-500 mt-1 dark:text-slate-500">
               Keep your RepoIQ account secure.
             </p>
           </div>
@@ -665,9 +681,9 @@ function Settings() {
         {/* Password Error */}
 
         {passwordError && (
-          <div className="mb-5 flex items-start gap-3 rounded-xl border border-rose-500/20 bg-rose-500/10 p-3.5 text-sm text-rose-300">
+          <div className="mb-5 flex items-start gap-3 rounded-xl border border-rose-200 bg-rose-50 p-3.5 text-sm text-rose-700 dark:border-rose-500/20 dark:bg-rose-500/10 dark:text-rose-300">
 
-            <AlertCircle className="h-4 w-4 shrink-0 mt-0.5 text-rose-400" />
+            <AlertCircle className="h-4 w-4 shrink-0 mt-0.5 text-rose-500 dark:text-rose-400" />
 
             <span>
               {passwordError}
@@ -679,9 +695,9 @@ function Settings() {
         {/* Password Success */}
 
         {passwordMessage && (
-          <div className="mb-5 flex items-start gap-3 rounded-xl border border-emerald-500/20 bg-emerald-500/10 p-3.5 text-sm text-emerald-300">
+          <div className="mb-5 flex items-start gap-3 rounded-xl border border-emerald-200 bg-emerald-50 p-3.5 text-sm text-emerald-700 dark:border-emerald-500/20 dark:bg-emerald-500/10 dark:text-emerald-300">
 
-            <Check className="h-4 w-4 shrink-0 mt-0.5 text-emerald-400" />
+            <Check className="h-4 w-4 shrink-0 mt-0.5 text-emerald-500 dark:text-emerald-400" />
 
             <span>
               {passwordMessage}
@@ -742,7 +758,7 @@ function Settings() {
             }
           />
 
-          <p className="text-xs text-slate-600">
+          <p className="text-xs text-slate-400 dark:text-slate-600">
             Your new password must contain at least 8 characters.
           </p>
 
@@ -754,14 +770,14 @@ function Settings() {
               flex items-center gap-2
               px-4 py-2.5
               rounded-lg
-              bg-indigo-600
+              bg-cyan-600
               text-white
               text-sm
               font-medium
-              hover:bg-indigo-500
+              hover:bg-cyan-500
               transition-all
               hover:shadow-lg
-              hover:shadow-indigo-600/20
+              hover:shadow-cyan-600/20
               disabled:opacity-60
               disabled:cursor-not-allowed
             "
@@ -793,11 +809,14 @@ function Settings() {
           flex items-center gap-2
           px-4 py-3
           rounded-xl
-          bg-slate-800
-          border border-slate-700
-          text-white text-sm
+          bg-white
+          border border-cyan-100
+          text-slate-900 text-sm
           shadow-2xl
           transition-all duration-500
+          dark:bg-slate-800
+          dark:border-slate-700
+          dark:text-white
           ${
             saved
               ? "translate-y-0 opacity-100"
@@ -805,7 +824,7 @@ function Settings() {
           }
         `}
       >
-        <Check className="h-4 w-4 text-emerald-400" />
+        <Check className="h-4 w-4 text-emerald-500 dark:text-emerald-400" />
         Settings saved successfully
       </div>
     </div>

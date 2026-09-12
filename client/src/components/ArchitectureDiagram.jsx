@@ -1,4 +1,4 @@
-import React, { useMemo, useState, useCallback, useEffect, useRef } from "react";
+import React, { useMemo, useState, useCallback, useRef } from "react";
 import {
   ReactFlow,
   Background,
@@ -9,26 +9,45 @@ import {
   MarkerType,
   BackgroundVariant,
 } from "@xyflow/react";
+import {
+  User,
+  Layout,
+  Server,
+  DoorOpen,
+  Globe,
+  Shield,
+  Target,
+  Cpu,
+  Database,
+  Wrench,
+  TestTube,
+  Box,
+  RotateCcw,
+  Sparkles,
+  X,
+  AlertTriangle,
+  Boxes,
+} from "lucide-react";
 
 import "@xyflow/react/dist/style.css";
 
 /* ==========================================================
-   THEME & STYLING CONFIGURATION
+   THEME & CONFIGURATION
 ========================================================== */
 
 const NODE_CONFIG = {
-  actor: { icon: "👤", title: "User", color: "#3b82f6" },
-  frontend: { icon: "💻", title: "Frontend", color: "#06b6d4" },
-  backend: { icon: "🖥️", title: "Backend", color: "#8b5cf6" },
-  entry: { icon: "🚪", title: "Entry Point", color: "#10b981" },
-  api: { icon: "🌐", title: "API Gateway", color: "#f59e0b" },
-  middleware: { icon: "🛡️", title: "Middleware", color: "#ec4899" },
-  controller: { icon: "🎯", title: "Controller", color: "#6366f1" },
-  service: { icon: "⚙️", title: "Service", color: "#14b8a6" },
-  database: { icon: "🗄️", title: "Database", color: "#f43f5e" },
-  utility: { icon: "🔧", title: "Utility", color: "#64748b" },
-  test: { icon: "🧪", title: "Tests", color: "#a855f7" },
-  default: { icon: "📦", title: "Module", color: "#64748b" },
+  actor: { icon: User, title: "User", color: "#3b82f6" },
+  frontend: { icon: Layout, title: "Frontend", color: "#06b6d4" },
+  backend: { icon: Server, title: "Backend", color: "#8b5cf6" },
+  entry: { icon: DoorOpen, title: "Entry Point", color: "#10b981" },
+  api: { icon: Globe, title: "API Gateway", color: "#f59e0b" },
+  middleware: { icon: Shield, title: "Middleware", color: "#ec4899" },
+  controller: { icon: Target, title: "Controller", color: "#6366f1" },
+  service: { icon: Cpu, title: "Service", color: "#14b8a6" },
+  database: { icon: Database, title: "Database", color: "#f43f5e" },
+  utility: { icon: Wrench, title: "Utility", color: "#64748b" },
+  test: { icon: TestTube, title: "Tests", color: "#a855f7" },
+  default: { icon: Box, title: "Module", color: "#64748b" },
 };
 
 /* ==========================================================
@@ -37,126 +56,67 @@ const NODE_CONFIG = {
 
 function ArchitectureNode({ data, selected }) {
   const config = NODE_CONFIG[data?.type] || NODE_CONFIG.default;
+  const Icon = config.icon;
 
   return (
     <div
-      style={{
-        width: "200px",
-        boxSizing: "border-box",
-        padding: "10px 14px",
-        borderRadius: "12px",
-        background: selected ? "#1e293b" : "#0f172a",
-        border: `1px solid ${selected ? config.color : "rgba(255, 255, 255, 0.12)"}`,
-        boxShadow: selected
-          ? `0 0 16px ${config.color}44, 0 6px 20px rgba(0, 0, 0, 0.4)`
-          : "0 6px 18px rgba(0, 0, 0, 0.3)",
-        transition: "all 0.2s cubic-bezier(0.16, 1, 0.3, 1)",
-        backdropFilter: "blur(12px)",
-        position: "relative",
-      }}
+      className={`w-[220px] rounded-xl p-3.5 transition-all duration-200 border backdrop-blur-md relative group ${
+        selected
+          ? "bg-slate-900/90 border-indigo-500 shadow-[0_0_20px_rgba(99,102,241,0.25)] ring-1 ring-indigo-500/50"
+          : "bg-slate-900/70 border-slate-800 hover:border-slate-700 shadow-lg shadow-black/40"
+      }`}
     >
+      {/* Accent Glow Line */}
       <div
+        className="absolute top-0 left-3 right-3 h-[2px] rounded-full"
         style={{
-          position: "absolute",
-          top: 0,
-          left: "12px",
-          right: "12px",
-          height: "2px",
           background: `linear-gradient(90deg, transparent, ${config.color}, transparent)`,
-          borderRadius: "2px",
         }}
       />
 
       <Handle
         type="target"
         position={Position.Left}
-        style={{
-          width: "8px",
-          height: "8px",
-          background: config.color,
-          border: "2px solid #0f172a",
-        }}
+        className="!w-2.5 !h-2.5 !bg-slate-900 !border-2"
+        style={{ borderColor: config.color }}
       />
 
-      <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
-        {/* ICON CONTAINER FIXED */}
+      <div className="flex items-center gap-3">
         <div
+          className="w-9 h-9 rounded-lg flex items-center justify-center shrink-0 transition-transform group-hover:scale-105"
           style={{
-            width: "32px",
-            height: "32px",
-            borderRadius: "8px",
-            background: `${config.color}25`,
-            border: `1px solid ${config.color}40`,
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            fontSize: "16px",
-            lineHeight: "1",
-            color: "#ffffff",
-            flexShrink: 0,
-            userSelect: "none",
+            backgroundColor: `${config.color}15`,
+            border: `1px solid ${config.color}35`,
+            color: config.color,
           }}
         >
-          {config.icon}
+          <Icon size={18} />
         </div>
 
-        <div style={{ flexGrow: 1, minWidth: 0 }}>
-          <div
-            style={{
-              fontSize: "12px",
-              fontWeight: 600,
-              color: "#f8fafc",
-              whiteSpace: "nowrap",
-              overflow: "hidden",
-              textOverflow: "ellipsis",
-            }}
-          >
+        <div className="min-w-0 flex-1">
+          <h4 className="text-xs font-semibold text-slate-100 truncate tracking-tight">
             {data?.label || config.title}
-          </div>
-
-          <div
-            style={{
-              fontSize: "9px",
-              fontWeight: 600,
-              color: config.color,
-              textTransform: "uppercase",
-              letterSpacing: "0.5px",
-              marginTop: "1px",
-            }}
+          </h4>
+          <span
+            className="text-[10px] font-mono font-bold uppercase tracking-wider block mt-0.5"
+            style={{ color: config.color }}
           >
             {data?.type || "module"}
-          </div>
+          </span>
         </div>
       </div>
 
       {data?.description && (
-        <div
-          style={{
-            marginTop: "8px",
-            paddingTop: "6px",
-            borderTop: "1px solid rgba(255, 255, 255, 0.06)",
-            fontSize: "10px",
-            lineHeight: 1.35,
-            color: "#94a3b8",
-            display: "-webkit-box",
-            WebkitLineClamp: 2,
-            WebkitBoxOrient: "vertical",
-            overflow: "hidden",
-          }}
-        >
+        <p className="mt-2.5 pt-2 border-t border-slate-800/80 text-[11px] leading-relaxed text-slate-400 line-clamp-2">
           {data.description}
-        </div>
+        </p>
       )}
 
       <Handle
         type="source"
         position={Position.Right}
-        style={{
-          width: "8px",
-          height: "8px",
-          background: config.color,
-          border: "2px solid #0f172a",
-        }}
+        className="!w-2.5 !h-2.5 !bg-slate-900 !border-2"
+        style={{ borderColor: config.color }}
       />
     </div>
   );
@@ -200,7 +160,7 @@ function sanitizeArchitectureData(rawNodes, rawEdges) {
 }
 
 /* ==========================================================
-   COMPACT AUTOMATIC NODE LAYOUT
+   AUTOMATIC NODE LAYOUT
 ========================================================== */
 
 function computeLayout(rawNodes, rawEdges) {
@@ -228,21 +188,18 @@ function computeLayout(rawNodes, rawEdges) {
   const distinctRanks = [...new Set(rawNodes.map((n) => depth.get(n.id) || 0))].sort((a, b) => a - b);
   const rankIndex = new Map(distinctRanks.map((rank, index) => [rank, index]));
 
-  const MAX_COLUMNS_PER_ROW = 6;
-  const columnWidth = 240;
-  const rowHeight = 140;
-  const bandGap = 90;
-
-  const columnOf = (compactRank) => compactRank % MAX_COLUMNS_PER_ROW;
-  const bandOf = (compactRank) => Math.floor(compactRank / MAX_COLUMNS_PER_ROW);
+  const MAX_COLUMNS_PER_ROW = 5;
+  const columnWidth = 260;
+  const rowHeight = 150;
+  const bandGap = 100;
 
   const cellMap = new Map();
 
   rawNodes.forEach((node) => {
     const rawRank = depth.get(node.id) || 0;
     const compactRank = rankIndex.get(rawRank) ?? 0;
-    const column = columnOf(compactRank);
-    const band = bandOf(compactRank);
+    const column = compactRank % MAX_COLUMNS_PER_ROW;
+    const band = Math.floor(compactRank / MAX_COLUMNS_PER_ROW);
     const key = `${band}:${column}`;
 
     if (!cellMap.has(key)) cellMap.set(key, []);
@@ -274,9 +231,8 @@ function computeLayout(rawNodes, rawEdges) {
       positioned.push({
         ...node,
         type: "architecture",
-        // CRITICAL FIX: Providing explicit dimensions allows MiniMap to render node shapes properly
-        width: 200,
-        height: 70,
+        width: 220,
+        height: 80,
         position: {
           x: column * columnWidth,
           y: yBase + row * rowHeight - totalHeight / 2,
@@ -298,13 +254,9 @@ function computeLayout(rawNodes, rawEdges) {
    MAIN COMPONENT
 ========================================================== */
 
-function ArchitectureDiagram({ architecture, height = 650, error = null }) {
+export default function ArchitectureDiagram({ architecture, height = 650, error = null }) {
   const [selectedNode, setSelectedNode] = useState(null);
   const reactFlowInstanceRef = useRef(null);
-
-  useEffect(() => {
-    setSelectedNode(null);
-  }, [architecture]);
 
   const rawNodes = architecture?.flow?.nodes || [];
   const rawEdges = architecture?.flow?.edges || [];
@@ -324,23 +276,23 @@ function ArchitectureDiagram({ architecture, height = 650, error = null }) {
       animated: true,
       markerEnd: {
         type: MarkerType.ArrowClosed,
-        color: "#3b82f6",
+        color: "#6366f1",
         width: 14,
         height: 14,
       },
       style: {
-        stroke: "#3b82f6",
+        stroke: "#6366f1",
         strokeWidth: 1.5,
-        opacity: 0.65,
+        opacity: 0.6,
       },
       labelStyle: {
         fill: "#94a3b8",
-        fontSize: 9,
+        fontSize: 10,
         fontWeight: 600,
       },
       labelBgStyle: {
         fill: "#0f172a",
-        fillOpacity: 0.85,
+        fillOpacity: 0.9,
         rx: 4,
       },
     }));
@@ -380,27 +332,16 @@ function ArchitectureDiagram({ architecture, height = 650, error = null }) {
   if (error) {
     return (
       <div
-        style={{
-          height,
-          borderRadius: "18px",
-          border: "1px solid rgba(239, 68, 68, 0.2)",
-          background: "#0f172a",
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
-          flexDirection: "column",
-          gap: "8px",
-          padding: "24px",
-          textAlign: "center",
-        }}
+        style={{ height }}
+        className="w-full rounded-2xl border border-rose-500/20 bg-slate-950 flex flex-col items-center justify-center p-6 text-center gap-2"
       >
-        <div style={{ fontSize: "28px" }}>⚠️</div>
-        <div style={{ fontWeight: 600, color: "#f87171" }}>
-          Couldn't load architecture
+        <div className="w-12 h-12 rounded-xl bg-rose-500/10 border border-rose-500/20 text-rose-400 flex items-center justify-center mb-1">
+          <AlertTriangle size={24} />
         </div>
-        <div style={{ fontSize: "12px", color: "#fca5a5", maxWidth: "360px" }}>
-          {typeof error === "string" ? error : "Something went wrong while analyzing this repository."}
-        </div>
+        <h3 className="text-sm font-semibold text-rose-400">Couldn't load architecture</h3>
+        <p className="text-xs text-rose-300/70 max-w-sm">
+          {typeof error === "string" ? error : "An error occurred while building the system architecture map."}
+        </p>
       </div>
     );
   }
@@ -408,130 +349,69 @@ function ArchitectureDiagram({ architecture, height = 650, error = null }) {
   if (!architecture || sanitized.nodes.length === 0) {
     return (
       <div
-        style={{
-          height,
-          borderRadius: "18px",
-          border: "1px solid rgba(255, 255, 255, 0.08)",
-          background: "#0f172a",
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
-          flexDirection: "column",
-          gap: "8px",
-          color: "#64748b",
-        }}
+        style={{ height }}
+        className="w-full rounded-2xl border border-slate-800 bg-slate-950 flex flex-col items-center justify-center p-6 text-center gap-2"
       >
-        <div style={{ fontSize: "28px" }}>🏗️</div>
-        <div style={{ fontWeight: 600, color: "#94a3b8" }}>
-          {!architecture ? "Architecture is not available yet" : "No architecture flow detected"}
+        <div className="w-12 h-12 rounded-xl bg-slate-900 border border-slate-800 text-slate-500 flex items-center justify-center mb-1">
+          <Boxes size={24} />
         </div>
-        <div style={{ fontSize: "12px", color: "#64748b" }}>
-          Analyze a repository to generate the architecture visualization.
-        </div>
+        <h3 className="text-sm font-semibold text-slate-300">
+          {!architecture ? "No architecture available" : "No architecture flow detected"}
+        </h3>
+        <p className="text-xs text-slate-500 max-w-sm">
+          Execute a repository analysis to visualize backend services, pipelines, and component flows.
+        </p>
       </div>
     );
   }
 
-  const riskColors =
-    riskLevel === "High"
-      ? { bg: "rgba(239, 68, 68, 0.1)", fg: "#f87171", border: "rgba(239, 68, 68, 0.2)" }
-      : riskLevel === "Medium"
-      ? { bg: "rgba(245, 158, 11, 0.1)", fg: "#fbbf24", border: "rgba(245, 158, 11, 0.2)" }
-      : { bg: "rgba(16, 185, 129, 0.1)", fg: "#34d399", border: "rgba(16, 185, 129, 0.2)" };
+  const riskBadgeStyles = {
+    High: "bg-rose-500/10 text-rose-400 border-rose-500/20",
+    Medium: "bg-amber-500/10 text-amber-400 border-amber-500/20",
+    Low: "bg-emerald-500/10 text-emerald-400 border-emerald-500/20",
+  }[riskLevel] || "bg-emerald-500/10 text-emerald-400 border-emerald-500/20";
 
   return (
     <div
-      style={{
-        width: "100%",
-        height,
-        display: "flex",
-        flexDirection: "column",
-        borderRadius: "18px",
-        overflow: "hidden",
-        border: "1px solid rgba(255, 255, 255, 0.08)",
-        background: "#0b0f17",
-        boxSizing: "border-box",
-      }}
+      style={{ height }}
+      className="w-full flex flex-col rounded-2xl border border-slate-800 bg-slate-950 overflow-hidden shadow-2xl relative"
     >
-      {/* HEADER BAR */}
-      <div
-        style={{
-          flexShrink: 0,
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "space-between",
-          padding: "12px 20px",
-          background: "rgba(15, 23, 42, 0.85)",
-          backdropFilter: "blur(12px)",
-          borderBottom: "1px solid rgba(255, 255, 255, 0.08)",
-          zIndex: 10,
-        }}
-      >
+      {/* Header Bar */}
+      <div className="px-5 py-3.5 bg-slate-900/80 border-b border-slate-800 backdrop-blur-md flex items-center justify-between z-10 shrink-0">
         <div>
-          <div style={{ fontSize: "14px", fontWeight: 700, color: "#f8fafc" }}>
+          <h3 className="text-sm font-bold text-slate-100 flex items-center gap-2">
             Repository Architecture
-          </div>
-          <div style={{ marginTop: "2px", fontSize: "11px", color: "#94a3b8" }}>
-            {architecture?.framework?.name ? `${architecture.framework.name} · ` : ""}
-            {nodes.length} components · {edges.length} relationships
-          </div>
+          </h3>
+          <p className="text-xs text-slate-400 mt-0.5 font-mono">
+            {architecture?.framework?.name && `${architecture.framework.name} · `}
+            {nodes.length} components · {edges.length} connections
+          </p>
         </div>
 
-        <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
+        <div className="flex items-center gap-2">
           {typeof architecture?.score === "number" && (
-            <span
-              style={{
-                fontSize: "10px",
-                fontWeight: 600,
-                padding: "3px 9px",
-                borderRadius: "999px",
-                background: "rgba(59, 130, 246, 0.1)",
-                color: "#60a5fa",
-                border: "1px solid rgba(59, 130, 246, 0.2)",
-              }}
-            >
-              Score {architecture.score}
+            <span className="text-[11px] font-semibold px-2.5 py-0.5 rounded-full bg-indigo-500/10 text-indigo-400 border border-indigo-500/20 font-mono">
+              Score: {architecture.score}
             </span>
           )}
 
-          <span
-            style={{
-              fontSize: "10px",
-              fontWeight: 600,
-              padding: "3px 9px",
-              borderRadius: "999px",
-              background: riskColors.bg,
-              color: riskColors.fg,
-              border: `1px solid ${riskColors.border}`,
-            }}
-          >
+          <span className={`text-[11px] font-semibold px-2.5 py-0.5 rounded-full border ${riskBadgeStyles}`}>
             {riskLevel} Risk
           </span>
 
           <button
+            type="button"
             onClick={handleResetView}
-            title="Reset view"
-            style={{
-              display: "flex",
-              alignItems: "center",
-              gap: "4px",
-              fontSize: "10px",
-              fontWeight: 600,
-              padding: "3px 9px",
-              borderRadius: "999px",
-              background: "rgba(255, 255, 255, 0.04)",
-              color: "#cbd5e1",
-              border: "1px solid rgba(255, 255, 255, 0.1)",
-              cursor: "pointer",
-            }}
+            className="inline-flex items-center gap-1.5 text-xs font-medium px-3 py-1 rounded-lg bg-slate-800/80 border border-slate-700/60 text-slate-300 hover:bg-slate-800 hover:text-white transition"
           >
-            <span style={{ fontSize: "11px" }}>⟳</span> Reset View
+            <RotateCcw size={12} />
+            <span>Reset</span>
           </button>
         </div>
       </div>
 
-      {/* CANVAS CONTAINER */}
-      <div style={{ flex: 1, position: "relative", width: "100%", minHeight: 0 }}>
+      {/* ReactFlow Canvas */}
+      <div className="flex-1 relative w-full min-h-0">
         <ReactFlow
           nodes={nodes}
           edges={edges}
@@ -543,127 +423,65 @@ function ArchitectureDiagram({ architecture, height = 650, error = null }) {
           minZoom={0.15}
           maxZoom={1.8}
         >
-          <Background variant={BackgroundVariant.Dots} gap={20} size={1} color="#334155" />
-          <Controls />
-          
-          {/* MINIMAP FIXED WITH DYNAMIC NODE COLORS */}
+          <Background variant={BackgroundVariant.Dots} gap={24} size={1} color="#334155" />
+          <Controls className="!bg-slate-900 !border-slate-800 !shadow-xl !rounded-xl overflow-hidden [&>button]:!bg-slate-900 [&>button]:!border-slate-800 [&>button]:!text-slate-300 hover:[&>button]:!bg-slate-800" />
+
           <MiniMap
             pannable
             zoomable
-            nodeColor={(node) => NODE_CONFIG[node.data?.type]?.color || "#3b82f6"}
-            nodeStrokeColor={(node) => NODE_CONFIG[node.data?.type]?.color || "#3b82f6"}
+            nodeColor={(n) => NODE_CONFIG[n.data?.type]?.color || "#6366f1"}
+            nodeStrokeColor={(n) => NODE_CONFIG[n.data?.type]?.color || "#6366f1"}
             nodeStrokeWidth={2}
-            nodeBorderRadius={4}
-            maskColor="rgba(11, 15, 23, 0.7)"
-            style={{
-              background: "#0f172a",
-              borderRadius: "12px",
-              border: "1px solid rgba(255,255,255,0.08)",
-            }}
+            nodeBorderRadius={6}
+            maskColor="rgba(2, 6, 23, 0.75)"
+            className="!bg-slate-900/90 !border-slate-800 !rounded-xl !overflow-hidden"
           />
         </ReactFlow>
 
-        {/* FLOATING LEGEND PANEL */}
+        {/* Legend */}
         {legendTypes.length > 0 && (
-          <div
-            style={{
-              position: "absolute",
-              top: 16,
-              left: 16,
-              zIndex: 10,
-              padding: "8px 12px",
-              borderRadius: "10px",
-              background: "rgba(15, 23, 42, 0.8)",
-              backdropFilter: "blur(12px)",
-              border: "1px solid rgba(255, 255, 255, 0.08)",
-              display: "flex",
-              flexWrap: "wrap",
-              gap: "10px",
-              maxWidth: "340px",
-            }}
-          >
-            {legendTypes.map((type) => (
-              <div key={type} style={{ display: "flex", alignItems: "center", gap: "5px" }}>
-                <span style={{ fontSize: "12px", color: "#ffffff" }}>
-                  {NODE_CONFIG[type]?.icon}
-                </span>
-                <span
-                  style={{
-                    fontSize: "10px",
-                    color: "#94a3b8",
-                    textTransform: "capitalize",
-                  }}
-                >
-                  {type}
-                </span>
-              </div>
-            ))}
+          <div className="absolute top-4 left-4 z-10 p-2.5 rounded-xl bg-slate-900/80 border border-slate-800/80 backdrop-blur-md flex flex-wrap gap-3 max-w-md shadow-lg">
+            {legendTypes.map((type) => {
+              const cfg = NODE_CONFIG[type] || NODE_CONFIG.default;
+              const Icon = cfg.icon;
+              return (
+                <div key={type} className="flex items-center gap-1.5 text-slate-300">
+                  <Icon size={12} style={{ color: cfg.color }} />
+                  <span className="text-[11px] font-medium capitalize text-slate-400">{type}</span>
+                </div>
+              );
+            })}
           </div>
         )}
 
-        {/* FLOATING SELECTED NODE DETAILS PANEL */}
+        {/* Selected Node Drawer */}
         {selectedNode && (
-          <div
-            style={{
-              position: "absolute",
-              right: 16,
-              top: 16,
-              width: "260px",
-              padding: "14px",
-              borderRadius: "12px",
-              background: "rgba(15, 23, 42, 0.9)",
-              backdropFilter: "blur(16px)",
-              border: "1px solid rgba(255, 255, 255, 0.1)",
-              boxShadow: "0 16px 32px rgba(0,0,0,0.5)",
-              zIndex: 20,
-            }}
-          >
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-              <div style={{ fontSize: "13px", fontWeight: 700, color: "#f8fafc" }}>
-                {selectedNode.data?.label}
+          <div className="absolute right-4 top-4 z-20 w-72 p-4 rounded-xl bg-slate-900/95 border border-slate-800 backdrop-blur-md shadow-2xl space-y-3 animate-in fade-in slide-in-from-right-4 duration-200">
+            <div className="flex items-start justify-between gap-2">
+              <div>
+                <h4 className="text-sm font-bold text-slate-100">{selectedNode.data?.label}</h4>
+                <span
+                  className="text-[10px] font-mono font-bold uppercase tracking-wider inline-block mt-1 px-2 py-0.5 rounded border"
+                  style={{
+                    backgroundColor: `${NODE_CONFIG[selectedNode.data?.type]?.color}15`,
+                    borderColor: `${NODE_CONFIG[selectedNode.data?.type]?.color}30`,
+                    color: NODE_CONFIG[selectedNode.data?.type]?.color,
+                  }}
+                >
+                  {selectedNode.data?.type}
+                </span>
               </div>
-
               <button
+                type="button"
                 onClick={() => setSelectedNode(null)}
-                style={{
-                  border: "none",
-                  background: "transparent",
-                  cursor: "pointer",
-                  fontSize: "16px",
-                  color: "#64748b",
-                  padding: 0,
-                }}
+                className="p-1 rounded-lg hover:bg-slate-800 text-slate-400 hover:text-slate-200 transition"
               >
-                ×
+                <X size={14} />
               </button>
             </div>
 
-            <div
-              style={{
-                marginTop: "6px",
-                display: "inline-block",
-                padding: "2px 6px",
-                borderRadius: "4px",
-                background: `${NODE_CONFIG[selectedNode.data?.type]?.color || "#64748b"}20`,
-                color: NODE_CONFIG[selectedNode.data?.type]?.color || "#94a3b8",
-                fontSize: "9px",
-                fontWeight: 600,
-                textTransform: "uppercase",
-                border: `1px solid ${NODE_CONFIG[selectedNode.data?.type]?.color || "#64748b"}40`,
-              }}
-            >
-              {selectedNode.data?.type}
-            </div>
-
             {selectedNode.data?.description && (
-              <p
-                style={{
-                  marginTop: "10px",
-                  fontSize: "11px",
-                  lineHeight: 1.4,
-                  color: "#94a3b8",
-                }}
-              >
+              <p className="text-xs text-slate-300 leading-relaxed pt-2 border-t border-slate-800">
                 {selectedNode.data.description}
               </p>
             )}
@@ -673,5 +491,3 @@ function ArchitectureDiagram({ architecture, height = 650, error = null }) {
     </div>
   );
 }
-
-export default ArchitectureDiagram;

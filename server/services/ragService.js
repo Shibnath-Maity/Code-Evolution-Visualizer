@@ -1,22 +1,41 @@
-const { GoogleGenAI } = require("@google/genai");
+const { CohereClientV2 } = require("cohere-ai");
 const { ChromaClient } = require("chromadb");
 
-const COLLECTION_NAME = "repository_knowledge";
+// ==========================================
+// RAG / EMBEDDING CONFIGURATION
+// ==========================================
 
 // IMPORTANT:
-// This must be changed when the embedding model changes.
-// Existing Ollama embeddings must NOT be mixed with Gemini embeddings.
-const DEFAULT_INDEX_VERSION = "v3-gemini-embedding-2";
+// Cohere embeddings must NOT be mixed with old
+// Ollama / Gemini / Voyage embeddings.
+//
+// Use a separate collection and index version.
+const COLLECTION_NAME = "repository_knowledge_cohere";
 
-const GEMINI_EMBEDDING_MODEL = "gemini-embedding-2";
-const GEMINI_EMBEDDING_DIMENSION = 768;
+const DEFAULT_INDEX_VERSION = "v5-cohere-embed-v4";
 
-const aiRag = new GoogleGenAI({
-  apiKey: process.env.GEMINI_API_RAG,
+// Cohere embedding model
+const COHERE_EMBEDDING_MODEL = "embed-v4.0";
+
+// 1024 is a good balance for RAG + ChromaDB.
+const COHERE_EMBEDDING_DIMENSION = 1024;
+
+// ==========================================
+// Cohere AI
+// ==========================================
+
+if (!process.env.COHERE_API_KEY) {
+  console.warn(
+    "⚠️ WARNING: COHERE_API_KEY is not configured."
+  );
+}
+
+const cohere = new CohereClientV2({
+  token: process.env.COHERE_API_KEY,
 });
 
 // ==========================================
-// Connect to ChromaDB
+// ChromaDB
 // ==========================================
 
 const chroma = new ChromaClient({
@@ -26,7 +45,7 @@ const chroma = new ChromaClient({
 });
 
 // ==========================================
-// Config: manifest files & scoring weights
+// Config: manifest files
 // ==========================================
 
 const MANIFEST_FILES = new Set([
@@ -40,6 +59,10 @@ const MANIFEST_FILES = new Set([
   "go.mod",
 ]);
 
+// ==========================================
+// Code extensions
+// ==========================================
+
 const CODE_EXTENSIONS = new Set([
   ".js",
   ".jsx",
@@ -47,17 +70,55 @@ const CODE_EXTENSIONS = new Set([
   ".tsx",
   ".java",
   ".py",
+  ".c",
+  ".cpp",
+  ".h",
+  ".hpp",
 ]);
+
+// ==========================================
+// Config extensions
+// ==========================================
 
 const CONFIG_EXTENSIONS = new Set([
   ".json",
   ".xml",
   ".yaml",
   ".yml",
+  ".toml",
+  ".ini",
+  ".properties",
 ]);
+
+// ==========================================
+// Candidate pool
+// ==========================================
+
+const CANDIDATE_POOL_SIZE =
+  Number(process.env.RAG_CANDIDATE_POOL_SIZE) || 30;
+
+// ==========================================
+// Embedding input types
+// ==========================================
+//
+// Cohere embed-v4.0 supports:
+// search_document -> documents being indexed
+// search_query    -> user's search query
+//
+// ==========================================
+
+const TASK_TYPES = {
+  DOCUMENT: "search_document",
+  QUERY: "search_query",
+};
+
+// ==========================================
+// Ranking weights
+// ==========================================
 
 const WEIGHTS = {
   semantic: 5,
+
   keywordInText: 1,
   keywordInFile: 4,
   keywordInFileName: 5,
@@ -102,62 +163,72 @@ const WEIGHTS = {
   codeReviewSummaryBoost: 35,
 };
 
-const CANDIDATE_POOL_SIZE =
-  Number(process.env.RAG_CANDIDATE_POOL_SIZE) || 30;
-
 // ==========================================
-// Task types Gemini expects for asymmetric retrieval.
-// DOCUMENT = content being indexed/stored.
-// QUERY    = the user's search text at retrieval time.
-// Mixing these up doesn't error — it just quietly degrades
-// retrieval quality, so every call site below is explicit.
+// Create Cohere Embedding
 // ==========================================
 
-const TASK_TYPES = {
-  DOCUMENT: "RETRIEVAL_DOCUMENT",
-  QUERY: "RETRIEVAL_QUERY",
-};
-
-// ==========================================
-// Create Embedding using Gemini Embedding 2
-// ==========================================
-
-async function createEmbedding(text, taskType = TASK_TYPES.DOCUMENT) {
+async function createEmbedding(
+  text,
+  taskType = TASK_TYPES.DOCUMENT
+) {
   if (!text || !text.trim()) {
-    throw new Error("Cannot create embedding: empty text.");
+    throw new Error(
+      "Cannot create embedding: empty text."
+    );
   }
 
-  if (!process.env.GEMINI_API_RAG) {
-    throw new Error("GEMINI_API_RAG is not configured.");
+  if (!process.env.COHERE_API_KEY) {
+    throw new Error(
+      "COHERE_API_KEY is not configured."
+    );
   }
 
   try {
-    const response = await aiRag.models.embedContent({
-      model: GEMINI_EMBEDDING_MODEL,
-      contents: text,
-      config: {
-        outputDimensionality: GEMINI_EMBEDDING_DIMENSION,
-        taskType,
-      },
-    });
+    const inputType =
+      taskType === TASK_TYPES.QUERY
+        ? "search_query"
+        : "search_document";
 
-    const embedding = response.embeddings?.[0]?.values;
+    const response =
+      await cohere.embed({
+        model: COHERE_EMBEDDING_MODEL,
 
-    if (!embedding || embedding.length === 0) {
-      throw new Error("Embedding not returned by Gemini.");
+        inputType,
+
+        embeddingTypes: ["float"],
+
+        outputDimension:
+          COHERE_EMBEDDING_DIMENSION,
+
+        texts: [text],
+      });
+
+    const embedding =
+      response.embeddings?.float?.[0];
+
+    if (
+      !embedding ||
+      embedding.length === 0
+    ) {
+      throw new Error(
+        "Embedding not returned by Cohere."
+      );
     }
 
-    if (embedding.length !== GEMINI_EMBEDDING_DIMENSION) {
+    if (
+      embedding.length !==
+      COHERE_EMBEDDING_DIMENSION
+    ) {
       throw new Error(
         `Unexpected embedding dimension: ${embedding.length}. ` +
-        `Expected ${GEMINI_EMBEDDING_DIMENSION}.`
+        `Expected ${COHERE_EMBEDDING_DIMENSION}.`
       );
     }
 
     return embedding;
   } catch (error) {
     console.error(
-      "❌ Gemini RAG Embedding Error:",
+      "❌ Cohere RAG Embedding Error:",
       error.message || error
     );
 
@@ -177,7 +248,7 @@ async function getCollection() {
 }
 
 // ==========================================
-// Check if Repository is Already Indexed
+// Check Repository Indexed
 // ==========================================
 
 async function isRepositoryIndexed(
@@ -190,23 +261,43 @@ async function isRepositoryIndexed(
       return false;
     }
 
-    const collection = await getCollection();
+    const collection =
+      await getCollection();
 
-    const results = await collection.get({
-      where: {
-        $and: [
-          { userId: String(userId) },
-          { repositoryId: String(repositoryId) },
-          { indexVersion: String(indexVersion) },
-          { type: "repository_summary" },
-          { indexStatus: "complete" },
-        ],
-      },
-      limit: 1,
-      include: ["metadatas"],
-    });
+    const results =
+      await collection.get({
+        where: {
+          $and: [
+            {
+              userId: String(userId),
+            },
+            {
+              repositoryId:
+                String(repositoryId),
+            },
+            {
+              indexVersion:
+                String(indexVersion),
+            },
+            {
+              type:
+                "repository_summary",
+            },
+            {
+              indexStatus:
+                "complete",
+            },
+          ],
+        },
 
-    return (results.ids || []).length > 0;
+        limit: 1,
+
+        include: ["metadatas"],
+      });
+
+    return (
+      (results.ids || []).length > 0
+    );
   } catch (error) {
     console.error(
       "❌ Failed to check repository index status:",
@@ -218,46 +309,71 @@ async function isRepositoryIndexed(
 }
 
 // ==========================================
-// Add / Upsert Document to ChromaDB
+// Add / Upsert Document
 // ==========================================
-//
-// indexVersion is stamped automatically so a caller can never
-// forget it and silently write a chunk that searchDocuments'
-// strict indexVersion filter will then never return. Pass
-// { indexVersion: "..." } in metadata to override explicitly
-// (e.g. backfilling under a different version on purpose).
 
-async function addDocument(id, text, metadata = {}) {
+async function addDocument(
+  id,
+  text,
+  metadata = {}
+) {
   try {
     if (!metadata.repositoryId) {
       throw new Error(
-        `addDocument(${id}): metadata.repositoryId is required ` +
-        `— searchDocuments always filters by repositoryId, so a ` +
-        `chunk stored without it can never be retrieved.`
+        `addDocument(${id}): metadata.repositoryId is required.`
       );
     }
 
-    const collection = await getCollection();
+    const collection =
+      await getCollection();
 
-    const embedding = await createEmbedding(
-      text,
-      TASK_TYPES.DOCUMENT
-    );
+    // ==========================================
+    // Create document embedding
+    // ==========================================
+
+    const embedding =
+      await createEmbedding(
+        text,
+        TASK_TYPES.DOCUMENT
+      );
+
+    // ==========================================
+    // Final metadata
+    // ==========================================
 
     const finalMetadata = {
-      indexVersion: DEFAULT_INDEX_VERSION,
-      embeddingModel: GEMINI_EMBEDDING_MODEL,
+      indexVersion:
+        DEFAULT_INDEX_VERSION,
+
+      embeddingModel:
+        COHERE_EMBEDDING_MODEL,
+
+      embeddingDimension:
+        COHERE_EMBEDDING_DIMENSION,
+
+      embeddingProvider:
+        "cohere",
+
       ...metadata,
     };
 
+    // ==========================================
+    // Store in ChromaDB
+    // ==========================================
+
     await collection.upsert({
       ids: [id],
+
       documents: [text],
+
       embeddings: [embedding],
+
       metadatas: [finalMetadata],
     });
 
-    console.log(`✓ Stored chunk in ChromaDB: ${id}`);
+    console.log(
+      `✓ Stored Cohere chunk in ChromaDB: ${id}`
+    );
   } catch (error) {
     console.error(
       `ChromaDB Upsert Error [${id}]:`,
@@ -269,7 +385,7 @@ async function addDocument(id, text, metadata = {}) {
 }
 
 // ==========================================
-// Query classification helpers
+// Normalize Query
 // ==========================================
 
 function normalizeQuery(query) {
@@ -279,97 +395,114 @@ function normalizeQuery(query) {
     .trim();
 }
 
+// ==========================================
+// Includes Any
+// ==========================================
+
 function includesAny(text, phrases) {
-  return phrases.some((phrase) => text.includes(phrase));
+  return phrases.some((phrase) =>
+    text.includes(phrase)
+  );
 }
 
+// ==========================================
+// Question Classification
+// ==========================================
+
 function classifyQuestion(q) {
-  const isOverview = includesAny(q, [
-    "overview",
-    "repository overview",
-    "project overview",
-    "repository structure",
-    "project structure",
-    "main components",
-    "main parts",
-    "what does this repo contain",
-    "what does this repository contain",
-    "what does this project contain",
-    "how is this repository organized",
-    "how is this project organized",
-  ]);
+  const isOverview =
+    includesAny(q, [
+      "overview",
+      "repository overview",
+      "project overview",
+      "repository structure",
+      "project structure",
+      "main components",
+      "main parts",
+      "what does this repo contain",
+      "what does this repository contain",
+      "what does this project contain",
+      "how is this repository organized",
+      "how is this project organized",
+    ]);
 
-  const isTechnology = includesAny(q, [
-    "technology",
-    "technologies",
-    "framework",
-    "frameworks",
-    "library",
-    "libraries",
-    "database",
-    "databases",
-    "language",
-    "languages",
-    "tech stack",
-    "stack",
-  ]);
+  const isTechnology =
+    includesAny(q, [
+      "technology",
+      "technologies",
+      "framework",
+      "frameworks",
+      "library",
+      "libraries",
+      "database",
+      "databases",
+      "language",
+      "languages",
+      "tech stack",
+      "stack",
+    ]);
 
-  const isDependency = includesAny(q, [
-    "dependency",
-    "dependencies",
-    "package",
-    "packages",
-    "external library",
-    "external libraries",
-  ]);
+  const isDependency =
+    includesAny(q, [
+      "dependency",
+      "dependencies",
+      "package",
+      "packages",
+      "external library",
+      "external libraries",
+    ]);
 
-  const isApi = includesAny(q, [
-    "api",
-    "endpoint",
-    "endpoints",
-    "route",
-    "routes",
-    "controller",
-    "controllers",
-  ]);
+  const isApi =
+    includesAny(q, [
+      "api",
+      "endpoint",
+      "endpoints",
+      "route",
+      "routes",
+      "controller",
+      "controllers",
+    ]);
 
-  const isArchitecture = includesAny(q, [
-    "architecture",
-    "flow",
-    "components interact",
-    "how does the project work",
-    "how does this project work",
-    "how do the components interact",
-  ]);
+  const isArchitecture =
+    includesAny(q, [
+      "architecture",
+      "flow",
+      "components interact",
+      "how does the project work",
+      "how does this project work",
+      "how do the components interact",
+    ]);
 
-  const isFileQuestion = includesAny(q, [
-    "file",
-    "files",
-    "folder",
-    "directory",
-    "directories",
-  ]);
+  const isFileQuestion =
+    includesAny(q, [
+      "file",
+      "files",
+      "folder",
+      "directory",
+      "directories",
+    ]);
 
-  const isCodeReview = includesAny(q, [
-    "improvement",
-    "improve",
-    "refactor",
-    "review",
-    "code quality",
-    "best practice",
-    "bug",
-    "optimize",
-    "suggest",
-    "issue",
-    "issues",
-    "problem",
-    "problems",
-    "security",
-    "performance",
-    "maintainability",
-    "readability",
-    "clean code",
-  ]);
+  const isCodeReview =
+    includesAny(q, [
+      "improvement",
+      "improve",
+      "refactor",
+      "review",
+      "code quality",
+      "best practice",
+      "bug",
+      "optimize",
+      "suggest",
+      "issue",
+      "issues",
+      "problem",
+      "problems",
+      "security",
+      "performance",
+      "maintainability",
+      "readability",
+      "clean code",
+    ]);
 
   return {
     isOverview,
@@ -382,23 +515,35 @@ function classifyQuestion(q) {
   };
 }
 
+// ==========================================
+// Extract Query Words
+// ==========================================
+
 function extractQueryWords(q) {
   return q
     .split(/[^a-zA-Z0-9_.-]+/)
-    .filter((word) => word.length > 2);
+    .filter(
+      (word) => word.length > 2
+    );
 }
 
-const FILE_EXTENSION_PATTERN =
-  /\.(js|jsx|ts|tsx|java|py|c|cpp|h|hpp|html|css|scss|json|md|xml|yml|yaml|sql)$/i;
+// ==========================================
+// File Name Detection
+// ==========================================
 
-function findMentionedFileName(queryWords) {
+const FILE_EXTENSION_PATTERN =
+  /\.(js|jsx|ts|tsx|java|py|c|cpp|h|hpp|html|css|scss|json|md|xml|yml|yaml|sql|gradle|toml|ini|properties)$/i;
+
+function findMentionedFileName(
+  queryWords
+) {
   return queryWords.find((word) =>
     FILE_EXTENSION_PATTERN.test(word)
   );
 }
 
 // ==========================================
-// Scoring
+// Candidate Scoring
 // ==========================================
 
 function scoreCandidate({
@@ -410,24 +555,30 @@ function scoreCandidate({
   signals,
   possibleFileName,
 }) {
-  const text = document.toLowerCase();
+  const text =
+    document.toLowerCase();
 
-  const file = (metadata.file || "")
-    .toLowerCase()
-    .replace(/\\/g, "/");
+  const file =
+    (metadata.file || "")
+      .toLowerCase()
+      .replace(/\\/g, "/");
 
-  const fileName = (metadata.fileName || "")
-    .toLowerCase();
+  const fileName =
+    (metadata.fileName || "")
+      .toLowerCase();
 
-  const directory = (metadata.directory || "")
-    .toLowerCase()
-    .replace(/\\/g, "/");
+  const directory =
+    (metadata.directory || "")
+      .toLowerCase()
+      .replace(/\\/g, "/");
 
-  const extension = (metadata.extension || "")
-    .toLowerCase();
+  const extension =
+    (metadata.extension || "")
+      .toLowerCase();
 
-  const type = (metadata.type || "")
-    .toLowerCase();
+  const type =
+    (metadata.type || "")
+      .toLowerCase();
 
   const {
     isOverview,
@@ -446,9 +597,12 @@ function scoreCandidate({
   // Semantic similarity
   // ==========================================
 
-  const semanticSimilarity = Math.max(0, 1 - distance);
+  const semanticSimilarity =
+    Math.max(0, 1 - distance);
 
-  score += semanticSimilarity * WEIGHTS.semantic;
+  score +=
+    semanticSimilarity *
+    WEIGHTS.semantic;
 
   // ==========================================
   // Keyword matching
@@ -456,19 +610,27 @@ function scoreCandidate({
 
   for (const word of queryWords) {
     if (text.includes(word)) {
-      score += WEIGHTS.keywordInText;
+      score +=
+        WEIGHTS.keywordInText;
     }
 
     if (file.includes(word)) {
-      score += WEIGHTS.keywordInFile;
+      score +=
+        WEIGHTS.keywordInFile;
     }
 
-    if (fileName.includes(word)) {
-      score += WEIGHTS.keywordInFileName;
+    if (
+      fileName.includes(word)
+    ) {
+      score +=
+        WEIGHTS.keywordInFileName;
     }
 
-    if (directory.includes(word)) {
-      score += WEIGHTS.keywordInDirectory;
+    if (
+      directory.includes(word)
+    ) {
+      score +=
+        WEIGHTS.keywordInDirectory;
     }
   }
 
@@ -476,45 +638,67 @@ function scoreCandidate({
   // Exact file targeting
   // ==========================================
 
-  if (possibleFileName && fileName === possibleFileName) {
-    score += isSpecificFileQuestion
-      ? WEIGHTS.exactFileNameMatch
-      : WEIGHTS.exactFileNameMatch * 0.6;
+  if (
+    possibleFileName &&
+    fileName === possibleFileName
+  ) {
+    score +=
+      isSpecificFileQuestion
+        ? WEIGHTS.exactFileNameMatch
+        : WEIGHTS.exactFileNameMatch *
+          0.6;
   } else if (
     isSpecificFileQuestion &&
     possibleFileName &&
-    file.endsWith("/" + possibleFileName)
+    file.endsWith(
+      "/" + possibleFileName
+    )
   ) {
-    score += WEIGHTS.fileEndsWithName;
+    score +=
+      WEIGHTS.fileEndsWithName;
   }
 
-  if (file && q.includes(file)) {
-    score += WEIGHTS.exactPathMentioned;
+  if (
+    file &&
+    q.includes(file)
+  ) {
+    score +=
+      WEIGHTS.exactPathMentioned;
   }
 
-  if (fileName && q.includes(fileName)) {
-    score += WEIGHTS.fileNameMentioned;
+  if (
+    fileName &&
+    q.includes(fileName)
+  ) {
+    score +=
+      WEIGHTS.fileNameMentioned;
   }
 
   // ==========================================
   // Repository summary
   // ==========================================
 
-  if (type === "repository_summary") {
+  if (
+    type === "repository_summary"
+  ) {
     if (isOverview) {
-      score += WEIGHTS.summaryOverview;
+      score +=
+        WEIGHTS.summaryOverview;
     }
 
     if (isTechnology) {
-      score += WEIGHTS.summaryTechnology;
+      score +=
+        WEIGHTS.summaryTechnology;
     }
 
     if (isFileQuestion) {
-      score += WEIGHTS.summaryFileQuestion;
+      score +=
+        WEIGHTS.summaryFileQuestion;
     }
 
     if (isArchitecture) {
-      score += WEIGHTS.summaryArchitecture;
+      score +=
+        WEIGHTS.summaryArchitecture;
     }
 
     if (
@@ -523,62 +707,84 @@ function scoreCandidate({
       !isFileQuestion &&
       !isArchitecture
     ) {
-      score += WEIGHTS.summaryGeneric;
+      score +=
+        WEIGHTS.summaryGeneric;
     }
   }
 
   // ==========================================
-  // README boost
+  // README
   // ==========================================
 
-  if (fileName === "readme.md") {
+  if (
+    fileName === "readme.md"
+  ) {
     if (
       isOverview ||
       isTechnology ||
       isArchitecture
     ) {
-      score += WEIGHTS.readmeCore;
+      score +=
+        WEIGHTS.readmeCore;
     }
 
     if (isDependency) {
-      score += WEIGHTS.readmeDependency;
+      score +=
+        WEIGHTS.readmeDependency;
     }
   }
 
   // ==========================================
-  // Technology question
+  // Technology
   // ==========================================
 
   if (isTechnology) {
-    if (type === "repository_summary") {
-      score += WEIGHTS.techSummaryBoost;
+    if (
+      type === "repository_summary"
+    ) {
+      score +=
+        WEIGHTS.techSummaryBoost;
     }
 
-    if (MANIFEST_FILES.has(fileName)) {
-      score += WEIGHTS.techManifestBoost;
+    if (
+      MANIFEST_FILES.has(fileName)
+    ) {
+      score +=
+        WEIGHTS.techManifestBoost;
     }
 
-    if (CONFIG_EXTENSIONS.has(extension)) {
-      score += WEIGHTS.techConfigExtBoost;
+    if (
+      CONFIG_EXTENSIONS.has(
+        extension
+      )
+    ) {
+      score +=
+        WEIGHTS.techConfigExtBoost;
     }
   }
 
   // ==========================================
-  // Dependency question
+  // Dependencies
   // ==========================================
 
   if (isDependency) {
-    if (MANIFEST_FILES.has(fileName)) {
-      score += WEIGHTS.dependencyManifestBoost;
+    if (
+      MANIFEST_FILES.has(fileName)
+    ) {
+      score +=
+        WEIGHTS.dependencyManifestBoost;
     }
 
-    if (fileName === "readme.md") {
-      score += WEIGHTS.dependencyReadmeBoost;
+    if (
+      fileName === "readme.md"
+    ) {
+      score +=
+        WEIGHTS.dependencyReadmeBoost;
     }
   }
 
   // ==========================================
-  // API question
+  // API
   // ==========================================
 
   if (isApi) {
@@ -597,7 +803,8 @@ function scoreCandidate({
         file.includes(hint)
       )
     ) {
-      score += WEIGHTS.apiPathMatch;
+      score +=
+        WEIGHTS.apiPathMatch;
     }
 
     const nameHints = [
@@ -612,21 +819,28 @@ function scoreCandidate({
         fileName.includes(hint)
       )
     ) {
-      score += WEIGHTS.apiFileNameMatch;
+      score +=
+        WEIGHTS.apiFileNameMatch;
     }
 
-    if (CODE_EXTENSIONS.has(extension)) {
-      score += WEIGHTS.apiExtensionMatch;
+    if (
+      CODE_EXTENSIONS.has(extension)
+    ) {
+      score +=
+        WEIGHTS.apiExtensionMatch;
     }
   }
 
   // ==========================================
-  // Architecture question
+  // Architecture
   // ==========================================
 
   if (isArchitecture) {
-    if (type === "repository_summary") {
-      score += WEIGHTS.architectureSummary;
+    if (
+      type === "repository_summary"
+    ) {
+      score +=
+        WEIGHTS.architectureSummary;
     }
 
     const corePaths = [
@@ -646,11 +860,15 @@ function scoreCandidate({
         file.includes(hint)
       )
     ) {
-      score += WEIGHTS.architectureCorePath;
+      score +=
+        WEIGHTS.architectureCorePath;
     }
 
-    if (fileName === "readme.md") {
-      score += WEIGHTS.architectureReadme;
+    if (
+      fileName === "readme.md"
+    ) {
+      score +=
+        WEIGHTS.architectureReadme;
     }
   }
 
@@ -659,17 +877,21 @@ function scoreCandidate({
   // ==========================================
 
   if (isFileQuestion) {
-    if (type === "repository_summary") {
-      score += WEIGHTS.fileQuestionSummary;
+    if (
+      type === "repository_summary"
+    ) {
+      score +=
+        WEIGHTS.fileQuestionSummary;
     }
 
     if (fileName) {
-      score += WEIGHTS.fileQuestionHasFileName;
+      score +=
+        WEIGHTS.fileQuestionHasFileName;
     }
   }
 
   // ==========================================
-  // Plain source code
+  // Generic source code
   // ==========================================
 
   if (
@@ -680,24 +902,32 @@ function scoreCandidate({
     !isArchitecture &&
     !isFileQuestion
   ) {
-    score += WEIGHTS.sourceCodeGeneric;
+    score +=
+      WEIGHTS.sourceCodeGeneric;
   }
 
   // ==========================================
-  // Code review question
+  // Code review
   // ==========================================
 
   if (isCodeReview) {
     if (type === "source") {
-      score += WEIGHTS.codeReviewSource;
+      score +=
+        WEIGHTS.codeReviewSource;
     }
 
-    if (CODE_EXTENSIONS.has(extension)) {
-      score += WEIGHTS.codeReviewExtension;
+    if (
+      CODE_EXTENSIONS.has(extension)
+    ) {
+      score +=
+        WEIGHTS.codeReviewExtension;
     }
 
-    if (type === "repository_summary") {
-      score += WEIGHTS.codeReviewSummaryBoost;
+    if (
+      type === "repository_summary"
+    ) {
+      score +=
+        WEIGHTS.codeReviewSummaryBoost;
     }
   }
 
@@ -709,20 +939,31 @@ function scoreCandidate({
 // ==========================================
 
 function logRanking(finalResults) {
-  console.log("\n🎯 Top Ranked RAG Candidates:");
+  console.log(
+    "\n🎯 Top Ranked RAG Candidates:"
+  );
 
   finalResults
     .slice(0, 5)
     .forEach((item, index) => {
       const displayName =
-        item.metadata?.type === "repository_summary"
+        item.metadata?.type ===
+        "repository_summary"
           ? "REPOSITORY_SUMMARY"
-          : item.metadata?.file || "unknown";
+          : item.metadata?.file ||
+            "unknown";
 
       console.log(
         ` ${index + 1}. ${displayName} | ` +
         `Score: ${item.score.toFixed(2)} | ` +
-        `Type: ${item.metadata?.type || "unknown"}`
+        `Distance: ${
+          item.distance?.toFixed(4) ??
+          "N/A"
+        } | ` +
+        `Type: ${
+          item.metadata?.type ||
+          "unknown"
+        }`
       );
     });
 }
@@ -737,7 +978,8 @@ async function searchDocuments(
   limit = 8,
   targetFile = null,
   userId = null,
-  indexVersion = DEFAULT_INDEX_VERSION
+  indexVersion =
+    DEFAULT_INDEX_VERSION
 ) {
   try {
     if (!repositoryId) {
@@ -746,22 +988,27 @@ async function searchDocuments(
       );
     }
 
-    const collection = await getCollection();
-
-    // Gemini creates the query embedding using the QUERY task type,
-    // matching the DOCUMENT task type used when chunks were indexed.
-    const queryEmbedding = await createEmbedding(
-      query,
-      TASK_TYPES.QUERY
-    );
+    const collection =
+      await getCollection();
 
     // ==========================================
-    // Multi-tenant & scope filters
+    // Create QUERY embedding
+    // ==========================================
+
+    const queryEmbedding =
+      await createEmbedding(
+        query,
+        TASK_TYPES.QUERY
+      );
+
+    // ==========================================
+    // Build filters
     // ==========================================
 
     const filterConditions = [
       {
-        repositoryId: String(repositoryId),
+        repositoryId:
+          String(repositoryId),
       },
     ];
 
@@ -773,13 +1020,15 @@ async function searchDocuments(
 
     if (indexVersion) {
       filterConditions.push({
-        indexVersion: String(indexVersion),
+        indexVersion:
+          String(indexVersion),
       });
     }
 
     if (targetFile) {
       filterConditions.push({
-        fileName: String(targetFile),
+        fileName:
+          String(targetFile),
       });
     }
 
@@ -791,27 +1040,45 @@ async function searchDocuments(
           };
 
     // ==========================================
-    // Vector search
+    // Chroma Vector Search
     // ==========================================
 
-    const results = await collection.query({
-      queryEmbeddings: [queryEmbedding],
-      nResults: targetFile
-        ? 3
-        : CANDIDATE_POOL_SIZE,
-      where,
-    });
+    const results =
+      await collection.query({
+        queryEmbeddings: [
+          queryEmbedding,
+        ],
+
+        nResults: targetFile
+          ? 3
+          : CANDIDATE_POOL_SIZE,
+
+        where,
+      });
 
     const documents =
-      results.documents?.[0] || [];
+      results.documents?.[0] ||
+      [];
 
     const metadatas =
-      results.metadatas?.[0] || [];
+      results.metadatas?.[0] ||
+      [];
 
     const distances =
-      results.distances?.[0] || [];
+      results.distances?.[0] ||
+      [];
 
-    if (documents.length === 0) {
+    // ==========================================
+    // No results
+    // ==========================================
+
+    if (
+      documents.length === 0
+    ) {
+      console.log(
+        `⚠️ No RAG documents found for repository ${repositoryId}`
+      );
+
       return {
         documents: [[]],
         metadatas: [[]],
@@ -823,7 +1090,8 @@ async function searchDocuments(
     // Query analysis
     // ==========================================
 
-    const q = normalizeQuery(query);
+    const q =
+      normalizeQuery(query);
 
     const questionType =
       classifyQuestion(q);
@@ -832,52 +1100,69 @@ async function searchDocuments(
       extractQueryWords(q);
 
     const possibleFileName =
-      findMentionedFileName(queryWords);
+      findMentionedFileName(
+        queryWords
+      );
 
     const signals = {
       ...questionType,
 
       isSpecificFileQuestion:
         !!possibleFileName ||
-        q.includes("implementation of") ||
+        q.includes(
+          "implementation of"
+        ) ||
         q.includes("code in") ||
-        q.includes("explain the code") ||
-        q.includes("explain this file"),
+        q.includes(
+          "explain the code"
+        ) ||
+        q.includes(
+          "explain this file"
+        ),
     };
 
     // ==========================================
     // Rank candidates
     // ==========================================
 
-    const ranked = documents
-      .map((document, index) => {
-        const metadata =
-          metadatas[index] || {};
-
-        const distance =
-          distances[index] ?? 1;
-
-        const score =
-          scoreCandidate({
+    const ranked =
+      documents
+        .map(
+          (
             document,
-            metadata,
-            distance,
-            queryWords,
-            q,
-            signals,
-            possibleFileName,
-          });
+            index
+          ) => {
+            const metadata =
+              metadatas[index] ||
+              {};
 
-        return {
-          document,
-          metadata,
-          distance,
-          score,
-        };
-      })
-      .sort(
-        (a, b) => b.score - a.score
-      );
+            const distance =
+              distances[index] ??
+              1;
+
+            const score =
+              scoreCandidate({
+                document,
+                metadata,
+                distance,
+                queryWords,
+                q,
+                signals,
+                possibleFileName,
+              });
+
+            return {
+              document,
+              metadata,
+              distance,
+              score,
+            };
+          }
+        )
+        .sort(
+          (a, b) =>
+            b.score - a.score
+        );
 
     // ==========================================
     // Prioritize repository summary
@@ -891,14 +1176,17 @@ async function searchDocuments(
     ) {
       const summaryIndex =
         ranked.findIndex(
-          (r) =>
-            r.metadata.type ===
+          (item) =>
+            item.metadata?.type ===
             "repository_summary"
         );
 
       if (summaryIndex > 0) {
         const [summary] =
-          ranked.splice(summaryIndex, 1);
+          ranked.splice(
+            summaryIndex,
+            1
+          );
 
         ranked.unshift(summary);
       }
@@ -923,36 +1211,48 @@ async function searchDocuments(
     }
 
     const finalResults =
-      ranked.slice(0, finalLimit);
-
-    logRanking(finalResults);
+      ranked.slice(
+        0,
+        finalLimit
+      );
 
     // ==========================================
-    // Return results
+    // Log ranking
+    // ==========================================
+
+    logRanking(
+      finalResults
+    );
+
+    // ==========================================
+    // Return
     // ==========================================
 
     return {
       documents: [
         finalResults.map(
-          (item) => item.document
+          (item) =>
+            item.document
         ),
       ],
 
       metadatas: [
         finalResults.map(
-          (item) => item.metadata
+          (item) =>
+            item.metadata
         ),
       ],
 
       distances: [
         finalResults.map(
-          (item) => item.distance
+          (item) =>
+            item.distance
         ),
       ],
     };
   } catch (error) {
     console.error(
-      "ChromaDB Search Error:",
+      "❌ ChromaDB Search Error:",
       error.message
     );
 
@@ -961,7 +1261,7 @@ async function searchDocuments(
 }
 
 // ==========================================
-// Delete ChromaDB Collection
+// Delete Collection
 // ==========================================
 
 async function deleteCollection() {
@@ -971,10 +1271,14 @@ async function deleteCollection() {
     });
 
     console.log(
-      "🗑️ Collection deleted"
+      "🗑️ Cohere RAG collection deleted:"
+    );
+
+    console.log(
+      `   ${COLLECTION_NAME}`
     );
   } catch (error) {
-    console.log(
+    console.error(
       "Collection delete error:",
       error.message
     );

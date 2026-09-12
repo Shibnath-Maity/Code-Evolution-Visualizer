@@ -1,9 +1,19 @@
 const fs = require("fs");
 const path = require("path");
-const { addDocument, isRepositoryIndexed } = require("./ragService");
 
-// Schema version for RAG indices
-const INDEX_VERSION = "v3-gemini-embedding-2";
+const {
+  addDocument,
+  isRepositoryIndexed,
+} = require("./ragService");
+
+// ==========================================
+// RAG Index Version
+// ==========================================
+// IMPORTANT:
+// This must match DEFAULT_INDEX_VERSION
+// inside ragService.js.
+
+const INDEX_VERSION = "v5-cohere-embed-v4";
 
 // ==========================================
 // Directories to ignore
@@ -23,7 +33,7 @@ const IGNORED_DIRS = [
 ];
 
 // ==========================================
-// Files to index (matched by extension)
+// Files to index
 // ==========================================
 
 const ALLOWED_EXTENSIONS = [
@@ -52,8 +62,10 @@ const ALLOWED_EXTENSIONS = [
   ".ini",
 ];
 
-// Files that should always be indexed even though they don't have
-// (or don't rely on) a normal extension.
+// ==========================================
+// Special files
+// ==========================================
+
 const SPECIAL_FILES = [
   "Dockerfile",
   "Makefile",
@@ -78,7 +90,10 @@ const SPECIAL_FILES = [
   ".env.example",
 ];
 
-// Lockfiles: index as a single truncated chunk
+// ==========================================
+// Lock files
+// ==========================================
+
 const LOCKFILES = new Set([
   "package-lock.json",
   "yarn.lock",
@@ -87,18 +102,20 @@ const LOCKFILES = new Set([
   "Cargo.lock",
 ]);
 
-// Skip files bigger than this entirely (bytes)
-const MAX_FILE_SIZE_BYTES = 1.5 * 1024 * 1024; // 1.5MB
+// ==========================================
+// Limits
+// ==========================================
 
-// Cap how much of a lockfile we actually embed
+const MAX_FILE_SIZE_BYTES = 1.5 * 1024 * 1024;
+
 const LOCKFILE_MAX_CHARS = 4000;
 
-// How many files to embed concurrently
 const INDEX_CONCURRENCY = 5;
 
 // ==========================================
 // Detect programming language
 // ==========================================
+
 function detectLanguage(extension, fileName = "") {
   const languages = {
     ".js": "JavaScript",
@@ -132,17 +149,24 @@ function detectLanguage(extension, fileName = "") {
     Jenkinsfile: "Jenkins",
     Procfile: "Procfile",
     ".env.example": "Environment Configuration",
+
     "requirements.txt": "Python Dependencies",
+
     "go.mod": "Go Modules",
     "go.sum": "Go Dependencies",
+
     "Cargo.toml": "Rust Cargo",
     "Cargo.lock": "Rust Dependencies",
+
     "pom.xml": "Maven",
+
     "package.json": "Node.js Configuration",
     "package-lock.json": "NPM Lockfile",
     "yarn.lock": "Yarn Lockfile",
     "pnpm-lock.yaml": "PNPM Lockfile",
+
     "composer.json": "PHP Composer",
+
     Gemfile: "Ruby Dependencies",
     "Gemfile.lock": "Ruby Dependencies",
   };
@@ -158,57 +182,100 @@ function detectLanguage(extension, fileName = "") {
 // Find source files recursively
 // ==========================================
 
-function getSourceFiles(directory, repoRoot = directory, seenRealPaths = new Set()) {
+function getSourceFiles(
+  directory,
+  repoRoot = directory,
+  seenRealPaths = new Set()
+) {
   let files = [];
 
   let realPath;
+
   try {
     realPath = fs.realpathSync(directory);
   } catch (err) {
-    console.error(`⚠️ Could not resolve ${directory}:`, err.message);
+    console.error(
+      `⚠️ Could not resolve ${directory}:`,
+      err.message
+    );
+
     return files;
   }
+
   if (seenRealPaths.has(realPath)) {
     return files;
   }
+
   seenRealPaths.add(realPath);
 
   let entries;
+
   try {
-    entries = fs.readdirSync(directory, { withFileTypes: true });
+    entries = fs.readdirSync(directory, {
+      withFileTypes: true,
+    });
   } catch (err) {
-    console.error(`⚠️ Could not read directory ${directory}:`, err.message);
+    console.error(
+      `⚠️ Could not read directory ${directory}:`,
+      err.message
+    );
+
     return files;
   }
 
   for (const entry of entries) {
-    const fullPath = path.join(directory, entry.name);
+    const fullPath = path.join(
+      directory,
+      entry.name
+    );
 
+    // Ignore directories
     if (entry.isDirectory()) {
-      if (IGNORED_DIRS.includes(entry.name)) {
+      if (
+        IGNORED_DIRS.includes(entry.name)
+      ) {
         continue;
       }
 
-      files = files.concat(getSourceFiles(fullPath, repoRoot, seenRealPaths));
+      files = files.concat(
+        getSourceFiles(
+          fullPath,
+          repoRoot,
+          seenRealPaths
+        )
+      );
+
       continue;
     }
 
+    // Ignore symbolic links
     if (entry.isSymbolicLink()) {
       continue;
     }
 
-    if (SPECIAL_FILES.includes(entry.name) || LOCKFILES.has(entry.name)) {
+    // Special files / lockfiles
+    if (
+      SPECIAL_FILES.includes(entry.name) ||
+      LOCKFILES.has(entry.name)
+    ) {
       files.push(fullPath);
       continue;
     }
 
-    const extension = path.extname(entry.name).toLowerCase();
+    const extension =
+      path.extname(entry.name).toLowerCase();
 
-    if (!ALLOWED_EXTENSIONS.includes(extension)) {
+    if (
+      !ALLOWED_EXTENSIONS.includes(extension)
+    ) {
       continue;
     }
 
-    if (entry.name.toLowerCase() === "stats.json") {
+    // Ignore generated stats file
+    if (
+      entry.name.toLowerCase() ===
+      "stats.json"
+    ) {
       continue;
     }
 
@@ -219,88 +286,183 @@ function getSourceFiles(directory, repoRoot = directory, seenRealPaths = new Set
 }
 
 // ==========================================
-// Smart chunking (overlap + prefers newline boundaries)
+// Smart chunking
 // ==========================================
 
-function chunkCode(content, chunkSize = 3000, overlap = 200) {
+function chunkCode(
+  content,
+  chunkSize = 3000,
+  overlap = 200
+) {
   if (content.length <= chunkSize) {
     return [content];
   }
 
   const chunks = [];
+
   let start = 0;
 
   while (start < content.length) {
-    let end = Math.min(start + chunkSize, content.length);
+    let end = Math.min(
+      start + chunkSize,
+      content.length
+    );
 
+    // Prefer newline boundary
     if (end < content.length) {
-      const lastNewline = content.lastIndexOf("\n", end);
-      if (lastNewline > start + chunkSize * 0.5) {
+      const lastNewline =
+        content.lastIndexOf(
+          "\n",
+          end
+        );
+
+      if (
+        lastNewline >
+        start + chunkSize * 0.5
+      ) {
         end = lastNewline + 1;
       }
     }
 
-    chunks.push(content.slice(start, end));
+    chunks.push(
+      content.slice(start, end)
+    );
 
-    if (end >= content.length) break;
+    if (end >= content.length) {
+      break;
+    }
 
-    start = Math.max(end - overlap, start + 1);
+    start = Math.max(
+      end - overlap,
+      start + 1
+    );
   }
 
   return chunks;
 }
 
 // ==========================================
-// Concurrency-limited async map
+// Concurrency limited map
 // ==========================================
 
-async function mapWithConcurrency(items, limit, worker) {
-  const results = new Array(items.length);
+async function mapWithConcurrency(
+  items,
+  limit,
+  worker
+) {
+  const results =
+    new Array(items.length);
+
   let nextIndex = 0;
 
   async function runNext() {
-    while (nextIndex < items.length) {
-      const currentIndex = nextIndex++;
-      results[currentIndex] = await worker(items[currentIndex], currentIndex);
+    while (
+      nextIndex < items.length
+    ) {
+      const currentIndex =
+        nextIndex++;
+
+      results[currentIndex] =
+        await worker(
+          items[currentIndex],
+          currentIndex
+        );
     }
   }
 
-  const workers = Array.from({ length: Math.min(limit, items.length) }, runNext);
+  const workers = Array.from(
+    {
+      length: Math.min(
+        limit,
+        items.length
+      ),
+    },
+    runNext
+  );
+
   await Promise.all(workers);
 
   return results;
 }
 
 // ==========================================
-// Index a single file
+// Index one file
 // ==========================================
 
-async function indexFile(filePath, repoPath, userId, repositoryId) {
-  const relativePath = path.relative(repoPath, filePath);
-  const fileName = path.basename(filePath);
-  const extension = path.extname(fileName).toLowerCase();
-  const directory = path.dirname(relativePath);
+async function indexFile(
+  filePath,
+  repoPath,
+  userId,
+  repositoryId
+) {
+  const relativePath =
+    path.relative(
+      repoPath,
+      filePath
+    );
+
+  const fileName =
+    path.basename(filePath);
+
+  const extension =
+    path.extname(fileName)
+      .toLowerCase();
+
+  const directory =
+    path.dirname(relativePath);
+
+  // ----------------------------------------
+  // File stats
+  // ----------------------------------------
 
   let stats;
+
   try {
     stats = fs.statSync(filePath);
   } catch (err) {
-    console.error(`⚠️ Could not stat ${filePath}:`, err.message);
+    console.error(
+      `⚠️ Could not stat ${filePath}:`,
+      err.message
+    );
+
     return null;
   }
 
-  if (stats.size > MAX_FILE_SIZE_BYTES) {
+  // ----------------------------------------
+  // File size check
+  // ----------------------------------------
+
+  if (
+    stats.size >
+    MAX_FILE_SIZE_BYTES
+  ) {
     console.log(
-      `⏭️ Skipping ${relativePath} (${Math.round(stats.size / 1024)}KB exceeds size limit)`
+      `⏭️ Skipping ${relativePath} ` +
+        `(${Math.round(
+          stats.size / 1024
+        )}KB exceeds size limit)`
     );
+
     return null;
   }
+
+  // ----------------------------------------
+  // Read file
+  // ----------------------------------------
 
   let content;
+
   try {
-    content = fs.readFileSync(filePath, "utf-8");
+    content = fs.readFileSync(
+      filePath,
+      "utf-8"
+    );
   } catch (error) {
-    console.error(`⚠️ Could not process ${filePath}:`, error.message);
+    console.error(
+      `⚠️ Could not process ${filePath}:`,
+      error.message
+    );
+
     return null;
   }
 
@@ -308,16 +470,45 @@ async function indexFile(filePath, repoPath, userId, repositoryId) {
     return null;
   }
 
-  const language = detectLanguage(extension, fileName);
-  const isLockfile = LOCKFILES.has(fileName);
+  // ----------------------------------------
+  // Language
+  // ----------------------------------------
+
+  const language =
+    detectLanguage(
+      extension,
+      fileName
+    );
+
+  // ----------------------------------------
+  // Chunk
+  // ----------------------------------------
+
+  const isLockfile =
+    LOCKFILES.has(fileName);
 
   const chunks = isLockfile
-    ? [content.slice(0, LOCKFILE_MAX_CHARS)]
+    ? [
+        content.slice(
+          0,
+          LOCKFILE_MAX_CHARS
+        ),
+      ]
     : chunkCode(content);
 
-  console.log(`📄 ${relativePath} → ${chunks.length} chunk(s)`);
+  console.log(
+    `📄 ${relativePath} → ${chunks.length} chunk(s)`
+  );
 
-  for (let i = 0; i < chunks.length; i++) {
+  // ----------------------------------------
+  // Store chunks
+  // ----------------------------------------
+
+  for (
+    let i = 0;
+    i < chunks.length;
+    i++
+  ) {
     const documentText = `
 Repository ID: ${repositoryId}
 
@@ -328,37 +519,64 @@ Language: ${language}
 Extension: ${extension}
 
 Repository Source Code:
+
 This document is part of a software repository.
-The following content comes from the file:
+
+The following content comes from:
+
 ${relativePath}
 
 Code / Content:
+
 ${chunks[i]}
 `;
 
-    // Explicitly scope chunk IDs by user + repo + chunk index to prevent collisions
-    const chunkId = `${userId}_${repositoryId}_${relativePath.replace(/[^a-zA-Z0-9]/g, "_")}_${i}`;
+    // Unique ID
+    const chunkId =
+      `${userId}_${repositoryId}_` +
+      `${relativePath.replace(
+        /[^a-zA-Z0-9]/g,
+        "_"
+      )}_${i}`;
 
-    await addDocument(chunkId, documentText, {
-      userId: String(userId),
-      repositoryId: String(repositoryId),
-      file: relativePath,
-      directory,
-      fileName,
-      chunk: i,
-      totalChunks: chunks.length,
-      type: "source",
-      language,
-      extension,
-      indexVersion: INDEX_VERSION,
-    });
+    await addDocument(
+      chunkId,
+      documentText,
+      {
+        userId: String(userId),
+
+        repositoryId:
+          String(repositoryId),
+
+        file: relativePath,
+
+        directory,
+
+        fileName,
+
+        chunk: i,
+
+        totalChunks:
+          chunks.length,
+
+        type: "source",
+
+        language,
+
+        extension,
+
+        indexVersion:
+          INDEX_VERSION,
+      }
+    );
   }
 
   return {
     file: relativePath,
     language,
     extension,
-    chunkCount: chunks.length,
+    chunkCount:
+      chunks.length,
   };
 }
 
@@ -366,26 +584,47 @@ ${chunks[i]}
 // Index entire repository
 // ==========================================
 
-async function indexRepository(repoPath, userId, repositoryId) {
+async function indexRepository(
+  repoPath,
+  userId,
+  repositoryId
+) {
   try {
+    // ----------------------------------------
+    // Validate
+    // ----------------------------------------
+
     if (!repositoryId) {
-      throw new Error("repositoryId is required for indexing");
-    }
-    if (!userId) {
-      throw new Error("userId is required for indexing");
+      throw new Error(
+        "repositoryId is required for indexing"
+      );
     }
 
-    // Check if user + repository combination is already indexed at current INDEX_VERSION
-    const alreadyIndexed = await isRepositoryIndexed(
-      String(userId),
-      String(repositoryId),
-      INDEX_VERSION
-    );
+    if (!userId) {
+      throw new Error(
+        "userId is required for indexing"
+      );
+    }
+
+    // ----------------------------------------
+    // Check existing index
+    // ----------------------------------------
+
+    const alreadyIndexed =
+      await isRepositoryIndexed(
+        String(userId),
+        String(repositoryId),
+        INDEX_VERSION
+      );
 
     if (alreadyIndexed) {
       console.log(
-        `♻️ Repository ${repositoryId} for user ${userId} already indexed (v:${INDEX_VERSION}). Skipping RAG indexing.`
+        `♻️ Repository ${repositoryId} ` +
+          `for user ${userId} already indexed ` +
+          `(v:${INDEX_VERSION}). ` +
+          `Skipping RAG indexing.`
       );
+
       return {
         skipped: true,
         files: 0,
@@ -393,72 +632,246 @@ async function indexRepository(repoPath, userId, repositoryId) {
       };
     }
 
-    console.log("\n🔍 Starting repository indexing...");
-    console.log("Repository:", repoPath);
-    console.log("User ID:", userId);
-    console.log("Repository ID:", repositoryId);
+    // ----------------------------------------
+    // Start indexing
+    // ----------------------------------------
 
-    const files = getSourceFiles(repoPath);
+    console.log(
+      "\n🔍 Starting repository indexing..."
+    );
 
-    console.log(`📁 Found ${files.length} indexable files`);
-    const frameworks = new Set();
+    console.log(
+      "Repository:",
+      repoPath
+    );
 
-    for (const filePath of files) {
-      if (path.basename(filePath) === "package.json") {
+    console.log(
+      "User ID:",
+      userId
+    );
+
+    console.log(
+      "Repository ID:",
+      repositoryId
+    );
+
+    console.log(
+      "Embedding:",
+      "Cohere"
+    );
+
+    console.log(
+      "Index Version:",
+      INDEX_VERSION
+    );
+
+    // ----------------------------------------
+    // Find files
+    // ----------------------------------------
+
+    const files =
+      getSourceFiles(repoPath);
+
+    console.log(
+      `📁 Found ${files.length} indexable files`
+    );
+
+    // ----------------------------------------
+    // Detect frameworks
+    // ----------------------------------------
+
+    const frameworks =
+      new Set();
+
+    for (
+      const filePath of files
+    ) {
+      if (
+        path.basename(
+          filePath
+        ) === "package.json"
+      ) {
         try {
-          const pkg = JSON.parse(fs.readFileSync(filePath, "utf8"));
+          const pkg =
+            JSON.parse(
+              fs.readFileSync(
+                filePath,
+                "utf8"
+              )
+            );
 
           const deps = {
-            ...(pkg.dependencies || {}),
-            ...(pkg.devDependencies || {}),
+            ...(pkg.dependencies ||
+              {}),
+            ...(pkg.devDependencies ||
+              {}),
           };
 
-          if (deps.react) frameworks.add("React");
-          if (deps.express) frameworks.add("Express");
-          if (deps.vite) frameworks.add("Vite");
-          if (deps.tailwindcss) frameworks.add("Tailwind CSS");
-          if (deps.axios) frameworks.add("Axios");
-          if (deps.mongoose) frameworks.add("Mongoose");
-          if (deps["react-router-dom"]) frameworks.add("React Router");
-          if (deps.recharts) frameworks.add("Recharts");
+          if (deps.react) {
+            frameworks.add(
+              "React"
+            );
+          }
+
+          if (deps.express) {
+            frameworks.add(
+              "Express"
+            );
+          }
+
+          if (deps.vite) {
+            frameworks.add(
+              "Vite"
+            );
+          }
+
+          if (
+            deps.tailwindcss
+          ) {
+            frameworks.add(
+              "Tailwind CSS"
+            );
+          }
+
+          if (deps.axios) {
+            frameworks.add(
+              "Axios"
+            );
+          }
+
+          if (deps.mongoose) {
+            frameworks.add(
+              "Mongoose"
+            );
+          }
+
+          if (
+            deps[
+              "react-router-dom"
+            ]
+          ) {
+            frameworks.add(
+              "React Router"
+            );
+          }
+
+          if (deps.recharts) {
+            frameworks.add(
+              "Recharts"
+            );
+          }
+
+          if (deps.next) {
+            frameworks.add(
+              "Next.js"
+            );
+          }
+
+          if (deps.typescript) {
+            frameworks.add(
+              "TypeScript"
+            );
+          }
         } catch (err) {
-          console.error("Failed to parse package.json:", err.message);
+          console.error(
+            "Failed to parse package.json:",
+            err.message
+          );
         }
       }
     }
 
-    console.log("Detected Frameworks:", [...frameworks]);
-
-    const results = await mapWithConcurrency(files, INDEX_CONCURRENCY, (filePath) =>
-      indexFile(filePath, repoPath, userId, repositoryId).catch((error) => {
-        console.error(`⚠️ Could not process ${filePath}:`, error.message);
-        return null;
-      })
+    console.log(
+      "Detected Frameworks:",
+      [...frameworks]
     );
 
-    const indexed = results.filter(Boolean);
-    const totalChunks = indexed.reduce((sum, r) => sum + r.chunkCount, 0);
+    // ----------------------------------------
+    // Index files
+    // ----------------------------------------
 
-    const repositoryFiles = indexed.map(({ file, language, extension }) => ({
-      file,
-      language,
-      extension,
-    }));
+    const results =
+      await mapWithConcurrency(
+        files,
+        INDEX_CONCURRENCY,
+        (filePath) =>
+          indexFile(
+            filePath,
+            repoPath,
+            userId,
+            repositoryId
+          ).catch((error) => {
+            console.error(
+              `⚠️ Could not process ${filePath}:`,
+              error.message
+            );
+
+            return null;
+          })
+      );
+
+    // ----------------------------------------
+    // Results
+    // ----------------------------------------
+
+    const indexed =
+      results.filter(Boolean);
+
+    const totalChunks =
+      indexed.reduce(
+        (sum, result) =>
+          sum + result.chunkCount,
+        0
+      );
+
+    const repositoryFiles =
+      indexed.map(
+        ({
+          file,
+          language,
+          extension,
+        }) => ({
+          file,
+          language,
+          extension,
+        })
+      );
+
+    // ----------------------------------------
+    // Language statistics
+    // ----------------------------------------
 
     const languageStats = {};
-    for (const { language } of indexed) {
-      languageStats[language] = (languageStats[language] || 0) + 1;
+
+    for (
+      const { language } of indexed
+    ) {
+      languageStats[language] =
+        (languageStats[language] ||
+          0) + 1;
     }
 
-    // ==========================================
-    // Create Repository Summary
-    // ==========================================
+    // ----------------------------------------
+    // Repository summary
+    // ----------------------------------------
 
-    const languageSummary = Object.entries(languageStats)
-      .map(([language, count]) => `${language}: ${count} files`)
-      .join("\n");
+    const languageSummary =
+      Object.entries(
+        languageStats
+      )
+        .map(
+          ([language, count]) =>
+            `${language}: ${count} files`
+        )
+        .join("\n");
 
-    const fileSummary = repositoryFiles.map((item) => `- ${item.file} (${item.language})`).join("\n");
+    const fileSummary =
+      repositoryFiles
+        .map(
+          (item) =>
+            `- ${item.file} (${item.language})`
+        )
+        .join("\n");
 
     const repositorySummary = `
 Repository Overview
@@ -466,8 +879,17 @@ Repository Overview
 Repository ID:
 ${repositoryId}
 
+Embedding Model:
+Cohere
+
+Index Version:
+${INDEX_VERSION}
+
 Total indexable files:
 ${files.length}
+
+Total indexed files:
+${indexed.length}
 
 Total indexed chunks:
 ${totalChunks}
@@ -476,30 +898,77 @@ Languages:
 ${languageSummary}
 
 Frameworks:
-${[...frameworks].join(", ") || "None detected"}
+${
+  [...frameworks].join(", ") ||
+  "None detected"
+}
 
 Files in repository:
 ${fileSummary}
 `;
 
-    console.log("\n📋 Creating repository summary...");
+    console.log(
+      "\n📋 Creating repository summary..."
+    );
 
-    const summaryId = `${userId}_${repositoryId}_${INDEX_VERSION}_repository_summary`;
+    // ----------------------------------------
+    // Summary ID
+    // ----------------------------------------
 
-    await addDocument(summaryId, repositorySummary, {
-      userId: String(userId),
-      repositoryId: String(repositoryId),
-      type: "repository_summary",
-      totalFiles: files.length,
-      totalChunks,
-      languages: Object.keys(languageStats).join(", "),
-      frameworks: [...frameworks].join(", "),
-      indexVersion: INDEX_VERSION,
-    });
+    const summaryId =
+      `${userId}_${repositoryId}_` +
+      `${INDEX_VERSION}_repository_summary`;
 
-    console.log("✅ Repository summary added to ChromaDB");
-    console.log("✅ Repository indexed successfully");
-    console.log(`📦 Total chunks stored: ${totalChunks}`);
+    // ----------------------------------------
+    // Store summary
+    // ----------------------------------------
+
+    await addDocument(
+      summaryId,
+      repositorySummary,
+      {
+        userId: String(userId),
+
+        repositoryId:
+          String(repositoryId),
+
+        type:
+          "repository_summary",
+
+        totalFiles:
+          files.length,
+
+        totalChunks,
+
+        languages:
+          Object.keys(
+            languageStats
+          ).join(", "),
+
+        frameworks:
+          [...frameworks].join(
+            ", "
+          ),
+
+        indexVersion:
+          INDEX_VERSION,
+
+        indexStatus:
+          "complete",
+      }
+    );
+
+    console.log(
+      "✅ Repository summary added to ChromaDB"
+    );
+
+    console.log(
+      "✅ Repository indexed successfully"
+    );
+
+    console.log(
+      `📦 Total chunks stored: ${totalChunks}`
+    );
 
     return {
       skipped: false,
@@ -507,10 +976,18 @@ ${fileSummary}
       chunks: totalChunks,
     };
   } catch (error) {
-    console.error("❌ Repository indexing failed:", error.message);
+    console.error(
+      "❌ Repository indexing failed:",
+      error.message
+    );
+
     throw error;
   }
 }
+
+// ==========================================
+// Exports
+// ==========================================
 
 module.exports = {
   getSourceFiles,

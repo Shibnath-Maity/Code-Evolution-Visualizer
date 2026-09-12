@@ -15,6 +15,13 @@ import {
   CheckCircle2,
   ChevronLeft,
   ChevronRight,
+  ShieldAlert,
+  Layers,
+  Cpu,
+  Code2,
+  Workflow,
+  Wrench,
+  Link2,
 } from "lucide-react";
 
 import API from "../services/api";
@@ -28,13 +35,12 @@ const SORT_OPTIONS = [
   { key: "deletions", label: "Deletions" },
 ];
 
-const RANK_STYLES = [
-  "bg-amber-100 text-amber-700",
-  "bg-slate-200 text-slate-600",
-  "bg-orange-100 text-orange-700",
+const RANK_BADGES = [
+  "border-amber-500/30 bg-amber-500/10 text-amber-400 ring-1 ring-amber-500/20",
+  "border-slate-400/30 bg-slate-400/10 text-slate-300 ring-1 ring-slate-400/20",
+  "border-orange-500/30 bg-orange-500/10 text-orange-400 ring-1 ring-orange-500/20",
 ];
 
-// Helper to safely retrieve file path across various backend object keys
 function getFilePath(file) {
   if (!file) return "";
   return (
@@ -47,45 +53,30 @@ function getFilePath(file) {
   );
 }
 
-// Safely coerce any AI-returned value (string, number, array, or
-// {name, description}-shaped object) into renderable text. Prevents
-// "Objects are not valid as a React child" crashes when the AI backend
-// returns structured objects instead of plain strings.
 function safeText(value) {
   if (value == null) return "";
-
   if (typeof value === "string" || typeof value === "number") {
     return String(value);
   }
-
   if (Array.isArray(value)) {
     return value.map(safeText).filter(Boolean).join(", ");
   }
-
   if (typeof value === "object") {
     if (value.name && value.description) {
       return `${value.name}: ${value.description}`;
     }
-
-    if (value.name) {
-      return String(value.name);
-    }
-
-    if (value.description) {
-      return String(value.description);
-    }
-
+    if (value.name) return String(value.name);
+    if (value.description) return String(value.description);
     return JSON.stringify(value);
   }
-
   return String(value);
 }
 
 function riskLevel(churn, maxChurn) {
   if (maxChurn === 0) {
     return {
-      label: "Low",
-      style: "bg-emerald-50 text-emerald-600",
+      label: "Low Risk",
+      style: "border-emerald-500/20 bg-emerald-500/10 text-emerald-400",
     };
   }
 
@@ -93,21 +84,21 @@ function riskLevel(churn, maxChurn) {
 
   if (ratio > 0.66) {
     return {
-      label: "High",
-      style: "bg-red-50 text-red-600",
+      label: "High Risk",
+      style: "border-rose-500/20 bg-rose-500/10 text-rose-400",
     };
   }
 
   if (ratio > 0.33) {
     return {
-      label: "Medium",
-      style: "bg-amber-50 text-amber-600",
+      label: "Medium Risk",
+      style: "border-amber-500/20 bg-amber-500/10 text-amber-400",
     };
   }
 
   return {
-    label: "Low",
-    style: "bg-emerald-50 text-emerald-600",
+    label: "Low Risk",
+    style: "border-emerald-500/20 bg-emerald-500/10 text-emerald-400",
   };
 }
 
@@ -115,11 +106,12 @@ function riskLevel(churn, maxChurn) {
    HELPERS FOR AI RESULT
 ------------------------------------------------------- */
 
-function SectionTitle({ title }) {
+function SectionHeader({ icon: Icon, title }) {
   return (
-    <p className="text-xs font-bold uppercase tracking-wide text-indigo-600 mb-2">
-      {title}
-    </p>
+    <div className="flex items-center gap-2 mb-3 text-xs font-bold uppercase tracking-wider text-indigo-400">
+      {Icon && <Icon size={14} className="text-indigo-400" />}
+      <span>{title}</span>
+    </div>
   );
 }
 
@@ -127,8 +119,8 @@ function BulletList({ items }) {
   return (
     <ul className="space-y-2">
       {items.map((item, index) => (
-        <li key={index} className="flex gap-2 text-sm text-slate-700">
-          <span className="text-indigo-500 mt-1">•</span>
+        <li key={index} className="flex items-start gap-2.5 text-xs text-slate-300 leading-relaxed">
+          <span className="w-1.5 h-1.5 rounded-full bg-indigo-500 mt-1.5 shrink-0" />
           <span>{safeText(item)}</span>
         </li>
       ))}
@@ -145,12 +137,12 @@ function AIExplanation({ explanation }) {
 
   if (typeof explanation === "string") {
     return (
-      <div className="mt-4 rounded-xl border border-indigo-100 bg-indigo-50/40 p-5">
+      <div className="mt-4 rounded-xl border border-indigo-500/20 bg-indigo-950/20 p-5 backdrop-blur-sm">
         <div className="flex items-center gap-2 mb-3">
-          <Sparkles size={18} className="text-indigo-600" />
-          <h4 className="font-semibold text-slate-800">AI File Analysis</h4>
+          <Sparkles size={16} className="text-indigo-400 animate-pulse" />
+          <h4 className="text-sm font-semibold text-slate-100">AI Architectural Assessment</h4>
         </div>
-        <p className="text-sm text-slate-700 whitespace-pre-wrap leading-relaxed">
+        <p className="text-xs text-slate-300 whitespace-pre-wrap leading-relaxed font-mono">
           {explanation}
         </p>
       </div>
@@ -178,43 +170,42 @@ function AIExplanation({ explanation }) {
   } = explanation;
 
   return (
-    <div className="mt-4 rounded-xl border border-indigo-100 bg-white shadow-sm overflow-hidden">
+    <div className="mt-4 rounded-xl border border-slate-800 bg-slate-900/90 shadow-2xl overflow-hidden backdrop-blur-md">
       {/* Header */}
-      <div className="px-5 py-4 bg-indigo-50 border-b border-indigo-100">
+      <div className="px-5 py-3.5 bg-slate-900/50 border-b border-slate-800 flex items-center justify-between">
         <div className="flex items-center gap-3">
-          <div className="w-9 h-9 rounded-lg bg-indigo-600 text-white flex items-center justify-center">
-            <Sparkles size={18} />
+          <div className="w-8 h-8 rounded-lg bg-indigo-600/20 border border-indigo-500/30 text-indigo-400 flex items-center justify-center">
+            <Sparkles size={16} />
           </div>
-
           <div>
-            <h4 className="font-bold text-slate-800">AI File Analysis</h4>
-            <p className="text-xs text-slate-500">
-              Architectural and code understanding
-            </p>
+            <h4 className="text-sm font-bold text-slate-100">AI File Intelligence</h4>
+            <p className="text-[11px] text-slate-400">Deep structural and behavioral code insights</p>
           </div>
-
-          {role && (
-            <span className="ml-auto px-3 py-1 rounded-full bg-white border border-indigo-200 text-xs font-semibold text-indigo-600">
-              {safeText(role)}
-            </span>
-          )}
         </div>
+
+        {role && (
+          <span className="px-3 py-1 rounded-full bg-indigo-500/10 border border-indigo-500/20 text-indigo-300 text-[11px] font-medium">
+            {safeText(role)}
+          </span>
+        )}
       </div>
 
       <div className="p-5 space-y-6">
         {/* Purpose */}
         {purpose && (
           <div>
-            <SectionTitle title="Purpose" />
-            <p className="text-sm text-slate-700 leading-relaxed">{safeText(purpose)}</p>
+            <SectionHeader icon={Cpu} title="Core Purpose" />
+            <p className="text-xs text-slate-300 leading-relaxed bg-slate-950/40 border border-slate-800/80 p-3.5 rounded-lg">
+              {safeText(purpose)}
+            </p>
           </div>
         )}
 
         {/* Summary */}
         {summary && (
           <div>
-            <SectionTitle title="Overview" />
-            <p className="text-sm text-slate-700 leading-relaxed whitespace-pre-wrap">
+            <SectionHeader icon={Layers} title="Overview" />
+            <p className="text-xs text-slate-300 leading-relaxed whitespace-pre-wrap">
               {safeText(summary)}
             </p>
           </div>
@@ -223,7 +214,7 @@ function AIExplanation({ explanation }) {
         {/* Responsibilities */}
         {Array.isArray(responsibilities) && responsibilities.length > 0 && (
           <div>
-            <SectionTitle title="Responsibilities" />
+            <SectionHeader icon={CheckCircle2} title="Responsibilities" />
             <BulletList items={responsibilities} />
           </div>
         )}
@@ -231,11 +222,11 @@ function AIExplanation({ explanation }) {
         {/* Workflow */}
         {Array.isArray(workflow) && workflow.length > 0 && (
           <div>
-            <SectionTitle title="Workflow" />
+            <SectionHeader icon={Workflow} title="Execution Workflow" />
             <ol className="space-y-2">
               {workflow.map((item, index) => (
-                <li key={index} className="flex gap-3 text-sm text-slate-700">
-                  <span className="flex-shrink-0 w-6 h-6 rounded-full bg-indigo-50 text-indigo-600 flex items-center justify-center text-xs font-bold">
+                <li key={index} className="flex items-start gap-3 text-xs text-slate-300">
+                  <span className="shrink-0 w-5 h-5 rounded-md bg-indigo-500/10 border border-indigo-500/20 text-indigo-400 flex items-center justify-center text-[10px] font-bold">
                     {index + 1}
                   </span>
                   <span className="pt-0.5">{safeText(item)}</span>
@@ -245,177 +236,112 @@ function AIExplanation({ explanation }) {
           </div>
         )}
 
-        {/* Components */}
-        {Array.isArray(components) && components.length > 0 && (
-          <div>
-            <SectionTitle title="Components" />
-            <div className="space-y-2">
-              {components.map((item, index) => (
-                <div
-                  key={index}
-                  className="rounded-lg bg-slate-50 border border-slate-100 p-3"
-                >
-                  <p className="font-semibold text-sm text-slate-800">
-                    {safeText(item?.name || item)}
-                  </p>
-                  {item?.description && (
-                    <p className="text-sm text-slate-600 mt-1">
-                      {safeText(item.description)}
-                    </p>
-                  )}
+        {/* Components & Functions */}
+        {(Array.isArray(components) && components.length > 0) ||
+        (Array.isArray(importantFunctions) && importantFunctions.length > 0) ? (
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {Array.isArray(components) && components.length > 0 && (
+              <div>
+                <SectionHeader icon={Layers} title="Sub-Components" />
+                <div className="space-y-2">
+                  {components.map((item, index) => (
+                    <div key={index} className="rounded-lg bg-slate-950/60 border border-slate-800 p-3">
+                      <p className="font-semibold text-xs text-slate-200">
+                        {safeText(item?.name || item)}
+                      </p>
+                      {item?.description && (
+                        <p className="text-[11px] text-slate-400 mt-1">
+                          {safeText(item.description)}
+                        </p>
+                      )}
+                    </div>
+                  ))}
                 </div>
-              ))}
-            </div>
-          </div>
-        )}
+              </div>
+            )}
 
-        {/* Important Functions */}
-        {Array.isArray(importantFunctions) && importantFunctions.length > 0 && (
-          <div>
-            <SectionTitle title="Important Functions" />
-            <div className="space-y-2">
-              {importantFunctions.map((item, index) => (
-                <div
-                  key={index}
-                  className="rounded-lg bg-purple-50/50 border border-purple-100 p-3"
-                >
-                  <p className="font-semibold text-sm text-slate-800">
-                    {safeText(item?.name || item)}
-                  </p>
-                  {item?.description && (
-                    <p className="text-sm text-slate-600 mt-1">
-                      {safeText(item.description)}
-                    </p>
-                  )}
+            {Array.isArray(importantFunctions) && importantFunctions.length > 0 && (
+              <div>
+                <SectionHeader icon={Code2} title="Key Functions" />
+                <div className="space-y-2">
+                  {importantFunctions.map((item, index) => (
+                    <div key={index} className="rounded-lg bg-indigo-950/20 border border-indigo-900/40 p-3">
+                      <p className="font-mono text-xs font-semibold text-indigo-300">
+                        {safeText(item?.name || item)}
+                      </p>
+                      {item?.description && (
+                        <p className="text-[11px] text-slate-400 mt-1">
+                          {safeText(item.description)}
+                        </p>
+                      )}
+                    </div>
+                  ))}
                 </div>
-              ))}
-            </div>
+              </div>
+            )}
           </div>
-        )}
+        ) : null}
 
         {/* Dependencies */}
         {Array.isArray(dependencies) && dependencies.length > 0 && (
           <div>
-            <SectionTitle title="Dependencies" />
-            <div className="flex flex-wrap gap-2">
+            <SectionHeader icon={Link2} title="Dependencies" />
+            <div className="flex flex-wrap gap-1.5">
               {dependencies.map((item, index) => (
                 <span
                   key={index}
-                  className="px-3 py-1.5 rounded-lg bg-slate-100 text-slate-700 text-xs font-medium"
+                  className="px-2.5 py-1 rounded-md bg-slate-800/80 border border-slate-700/60 text-slate-300 text-[11px] font-mono"
                 >
                   {safeText(item)}
                 </span>
               ))}
             </div>
-          </div>
-        )}
-
-        {/* Design Patterns */}
-        {Array.isArray(designPatterns) && designPatterns.length > 0 && (
-          <div>
-            <SectionTitle title="Design Patterns" />
-            <BulletList items={designPatterns} />
-          </div>
-        )}
-
-        {/* Data Flow */}
-        {Array.isArray(dataFlow) && dataFlow.length > 0 && (
-          <div>
-            <SectionTitle title="Data Flow" />
-            <ol className="space-y-2">
-              {dataFlow.map((item, index) => (
-                <li key={index} className="flex gap-3 text-sm text-slate-700">
-                  <span className="text-indigo-600 font-bold">→</span>
-                  <span>{safeText(item)}</span>
-                </li>
-              ))}
-            </ol>
           </div>
         )}
 
         {/* Risk Analysis */}
         {(risk || (Array.isArray(risks) && risks.length > 0)) && (
-          <div>
-            <SectionTitle title="Risk Analysis" />
+          <div className="rounded-xl bg-rose-950/10 border border-rose-900/30 p-4">
+            <SectionHeader icon={ShieldAlert} title="Security & Stability Risk" />
             {risk && (
               <div className="flex items-center gap-2 mb-3">
-                {String(safeText(risk)).toLowerCase() === "high" ? (
-                  <AlertTriangle size={18} className="text-red-500" />
-                ) : (
-                  <CheckCircle2 size={18} className="text-emerald-500" />
-                )}
-                <span
-                  className={`px-3 py-1 rounded-full text-xs font-semibold ${
-                    String(safeText(risk)).toLowerCase() === "high"
-                      ? "bg-red-50 text-red-600"
-                      : String(safeText(risk)).toLowerCase() === "medium"
-                      ? "bg-amber-50 text-amber-600"
-                      : "bg-emerald-50 text-emerald-600"
-                  }`}
-                >
+                <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold tracking-wide uppercase border border-rose-500/30 bg-rose-500/10 text-rose-400">
                   {safeText(risk)}
                 </span>
               </div>
             )}
-            {Array.isArray(risks) && risks.length > 0 && (
-              <BulletList items={risks} />
-            )}
+            {Array.isArray(risks) && risks.length > 0 && <BulletList items={risks} />}
           </div>
         )}
 
-        {/* Improvements */}
+        {/* Improvements & Best Practices */}
         {Array.isArray(improvements) && improvements.length > 0 && (
           <div>
-            <SectionTitle title="Recommended Improvements" />
+            <SectionHeader icon={Wrench} title="Suggested Improvements" />
             <BulletList items={improvements} />
           </div>
         )}
 
-        {/* Related Files */}
-        {Array.isArray(relatedFiles) && relatedFiles.length > 0 && (
-          <div>
-            <SectionTitle title="Related Files" />
-            <div className="flex flex-wrap gap-2">
-              {relatedFiles.map((item, index) => (
-                <span
-                  key={index}
-                  className="px-3 py-1.5 rounded-lg bg-blue-50 text-blue-700 text-xs font-medium"
-                >
-                  {safeText(item)}
-                </span>
-              ))}
-            </div>
-          </div>
-        )}
-
-        {/* Complexity + Maintainability */}
+        {/* Metrics Grid */}
         {(complexity || maintainability) && (
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3 pt-2">
             {complexity && (
-              <div className="rounded-xl bg-slate-50 border border-slate-100 p-4">
-                <p className="text-xs font-semibold uppercase tracking-wide text-indigo-600 mb-2">
-                  Complexity
+              <div className="rounded-lg bg-slate-950/40 border border-slate-800 p-3">
+                <p className="text-[10px] font-bold uppercase tracking-wider text-indigo-400 mb-1">
+                  Complexity Score
                 </p>
-                <p className="text-sm text-slate-700">{safeText(complexity)}</p>
+                <p className="text-xs text-slate-300 font-mono">{safeText(complexity)}</p>
               </div>
             )}
 
             {maintainability && (
-              <div className="rounded-xl bg-slate-50 border border-slate-100 p-4">
-                <p className="text-xs font-semibold uppercase tracking-wide text-indigo-600 mb-2">
-                  Maintainability
+              <div className="rounded-lg bg-slate-950/40 border border-slate-800 p-3">
+                <p className="text-[10px] font-bold uppercase tracking-wider text-indigo-400 mb-1">
+                  Maintainability Index
                 </p>
-                <p className="text-sm text-slate-700">{safeText(maintainability)}</p>
+                <p className="text-xs text-slate-300 font-mono">{safeText(maintainability)}</p>
               </div>
             )}
-          </div>
-        )}
-
-        {/* Best Practices */}
-        {Array.isArray(bestPractices) && bestPractices.length > 0 && (
-          <div>
-            <SectionTitle title="Best Practices" />
-            <BulletList items={bestPractices} />
           </div>
         )}
       </div>
@@ -435,63 +361,44 @@ function FileAnalysis({ fileAnalysis, repositoryId }) {
   const [aiErrors, setAiErrors] = useState({});
   const [currentPage, setCurrentPage] = useState(1);
 
-  // Pull allFiles (fallback to mostChangedFiles if allFiles isn't available)
   const files = useMemo(() => {
-    const raw =
-      fileAnalysis?.allFiles || fileAnalysis?.mostChangedFiles || [];
-
-    console.log("📦 All File Data:", raw);
+    const raw = fileAnalysis?.allFiles || fileAnalysis?.mostChangedFiles || [];
 
     const withChurn = raw.map((file) => ({
       ...file,
-      churn:
-        file.churn ??
-        (file.additions || 0) + (file.deletions || 0),
+      churn: file.churn ?? (file.additions || 0) + (file.deletions || 0),
     }));
 
-    return [...withChurn].sort(
-      (a, b) => (b[sortKey] || 0) - (a[sortKey] || 0)
-    );
+    return [...withChurn].sort((a, b) => (b[sortKey] || 0) - (a[sortKey] || 0));
   }, [fileAnalysis, sortKey]);
 
-  // Reset pagination to page 1 whenever sorting or dataset changes
   const handleSortChange = (key) => {
     setSortKey(key);
     setCurrentPage(1);
   };
 
-  if (!fileAnalysis) {
-    return null;
-  }
+  if (!fileAnalysis) return null;
 
   const maxChurn = files.reduce((max, f) => Math.max(max, f.churn), 0);
   const totalAdditions = files.reduce((sum, f) => sum + (f.additions || 0), 0);
   const totalDeletions = files.reduce((sum, f) => sum + (f.deletions || 0), 0);
   const totalChurn = totalAdditions + totalDeletions;
 
-  // Pagination bounds
   const totalPages = Math.ceil(files.length / ITEMS_PER_PAGE) || 1;
   const paginatedFiles = files.slice(
     (currentPage - 1) * ITEMS_PER_PAGE,
     currentPage * ITEMS_PER_PAGE
   );
 
-  /* -------------------------------------------------------
-     Analyze individual file
-  ------------------------------------------------------- */
   const handleAnalyzeFile = async (file) => {
     const filePath = getFilePath(file);
 
-    if (!filePath) {
-      console.error("❌ No valid file path resolved:", file);
-      return;
-    }
+    if (!filePath) return;
 
     if (!repositoryId) {
       setAiErrors((prev) => ({
         ...prev,
-        [filePath]:
-          "Repository ID is missing. Please select or re-analyze the repository.",
+        [filePath]: "Repository ID is missing. Please re-analyze the repository.",
       }));
       return;
     }
@@ -519,11 +426,9 @@ function FileAnalysis({ fileAnalysis, repositoryId }) {
 
       setExpandedFile(filePath);
     } catch (error) {
-      console.error("File AI Analysis Error:", error);
       setAiErrors((prev) => ({
         ...prev,
-        [filePath]:
-          error.response?.data?.message || "Unable to analyze this file.",
+        [filePath]: error.response?.data?.message || "Unable to analyze this file.",
       }));
     } finally {
       setAnalyzingFile(null);
@@ -531,88 +436,77 @@ function FileAnalysis({ fileAnalysis, repositoryId }) {
   };
 
   return (
-    <section className="bg-white rounded-2xl shadow-sm border border-gray-200 p-6">
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
-        <div>
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-purple-50 text-purple-600 flex items-center justify-center">
-              <FileCode2 size={20} />
-            </div>
-
-            <div>
-              <h2 className="text-2xl font-bold text-slate-800">
-                File Analysis
-              </h2>
-              <p className="text-sm text-slate-500 mt-1">
-                Explore repository files and get AI-powered analysis.
-              </p>
-            </div>
+    <section className="bg-slate-900/80 border border-slate-800 rounded-2xl shadow-2xl p-6 text-slate-200 backdrop-blur-xl">
+      {/* Top Header */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6 pb-6 border-b border-slate-800">
+        <div className="flex items-center gap-3.5">
+          <div className="w-11 h-11 rounded-xl bg-indigo-500/10 border border-indigo-500/20 text-indigo-400 flex items-center justify-center shadow-inner">
+            <FileCode2 size={22} />
+          </div>
+          <div>
+            <h2 className="text-xl font-bold tracking-tight text-white">File Intelligence</h2>
+            <p className="text-xs text-slate-400 mt-0.5">
+              Inspect codebase churn metrics and run AI architectural diagnostics.
+            </p>
           </div>
         </div>
 
-        <div className="flex items-center gap-2 bg-purple-50 text-purple-700 px-4 py-2 rounded-full">
-          <FileCode2 size={18} />
-          <span className="font-semibold">
-            {fileAnalysis.totalFiles || files.length} files
-          </span>
+        <div className="flex items-center gap-2 bg-slate-800/60 border border-slate-700/50 px-3.5 py-1.5 rounded-full text-xs font-semibold text-indigo-300 self-start sm:self-auto">
+          <FileCode2 size={15} />
+          <span>{fileAnalysis.totalFiles || files.length} Total Files</span>
         </div>
       </div>
 
       {files.length === 0 ? (
-        <div className="flex flex-col items-center justify-center text-center py-14 text-gray-400">
-          <FolderOpen size={32} className="mb-3 text-gray-300" />
-          <p className="font-medium text-gray-500">
-            No file analysis available
-          </p>
-          <p className="text-sm mt-1">
-            Analyze a repository to see file statistics.
-          </p>
+        <div className="flex flex-col items-center justify-center text-center py-16 border border-dashed border-slate-800 rounded-xl">
+          <FolderOpen size={36} className="mb-3 text-slate-600" />
+          <p className="text-sm font-semibold text-slate-300">No file metrics available</p>
+          <p className="text-xs text-slate-500 mt-1">Analyze a repository to view structural data.</p>
         </div>
       ) : (
         <>
-          {/* Summary stats */}
+          {/* Summary Stats Cards */}
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-6">
-            <div className="rounded-xl bg-gray-50 px-4 py-3">
-              <p className="text-xs text-gray-400 mb-1">Total additions</p>
-              <p className="text-lg font-bold text-green-600 flex items-center gap-1">
+            <div className="rounded-xl bg-slate-950/40 border border-slate-800/80 p-4">
+              <span className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">Total Additions</span>
+              <p className="text-lg font-bold text-emerald-400 flex items-center gap-1 mt-1 font-mono">
                 <Plus size={16} />
-                {totalAdditions}
+                {totalAdditions.toLocaleString()}
               </p>
             </div>
 
-            <div className="rounded-xl bg-gray-50 px-4 py-3">
-              <p className="text-xs text-gray-400 mb-1">Total deletions</p>
-              <p className="text-lg font-bold text-red-600 flex items-center gap-1">
+            <div className="rounded-xl bg-slate-950/40 border border-slate-800/80 p-4">
+              <span className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">Total Deletions</span>
+              <p className="text-lg font-bold text-rose-400 flex items-center gap-1 mt-1 font-mono">
                 <Minus size={16} />
-                {totalDeletions}
+                {totalDeletions.toLocaleString()}
               </p>
             </div>
 
-            <div className="rounded-xl bg-gray-50 px-4 py-3">
-              <p className="text-xs text-gray-400 mb-1">Total churn</p>
-              <p className="text-lg font-bold text-slate-700 flex items-center gap-1">
-                <Flame size={16} className="text-orange-500" />
-                {totalChurn}
+            <div className="rounded-xl bg-slate-950/40 border border-slate-800/80 p-4">
+              <span className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">Total Code Churn</span>
+              <p className="text-lg font-bold text-amber-400 flex items-center gap-1.5 mt-1 font-mono">
+                <Flame size={16} className="text-amber-500" />
+                {totalChurn.toLocaleString()}
               </p>
             </div>
           </div>
 
-          {/* Sort controls */}
+          {/* Sort Controls */}
           <div className="flex items-center gap-2 mb-4 flex-wrap">
-            <span className="text-xs text-gray-400 flex items-center gap-1 mr-1">
-              <ArrowUpDown size={13} />
-              Sort by
+            <span className="text-xs text-slate-400 flex items-center gap-1.5 mr-2 font-medium">
+              <ArrowUpDown size={13} className="text-indigo-400" />
+              Sort by:
             </span>
 
             {SORT_OPTIONS.map((opt) => (
               <button
                 key={opt.key}
                 onClick={() => handleSortChange(opt.key)}
-                className={`text-xs font-medium px-3 py-1.5 rounded-full transition-colors ${
+                className={`text-xs font-medium px-3 py-1.5 rounded-lg border transition-all ${
                   sortKey === opt.key
-                    ? "bg-purple-600 text-white"
-                    : "bg-gray-50 text-gray-500 hover:bg-gray-100"
+                    ? "bg-indigo-600 border-indigo-500 text-white shadow-lg shadow-indigo-600/20"
+                    : "bg-slate-800/40 border-slate-700/60 text-slate-400 hover:bg-slate-800 hover:text-slate-200"
                 }`}
               >
                 {opt.label}
@@ -620,29 +514,23 @@ function FileAnalysis({ fileAnalysis, repositoryId }) {
             ))}
           </div>
 
-          {/* Table header */}
-          <div className="hidden md:grid grid-cols-12 gap-4 px-4 py-3 bg-gray-50 rounded-lg text-sm font-semibold text-gray-500">
-            <div className="col-span-4">File</div>
-            <div className="col-span-2 text-center">Changes</div>
-            <div className="col-span-1 text-center">Additions</div>
-            <div className="col-span-1 text-center">Deletions</div>
+          {/* Desktop Table Header */}
+          <div className="hidden md:grid grid-cols-12 gap-4 px-4 py-3 bg-slate-950/60 border border-slate-800 rounded-xl text-xs font-semibold text-slate-400 mb-2">
+            <div className="col-span-4">File Path</div>
+            <div className="col-span-2 text-center">Commits</div>
+            <div className="col-span-1 text-center">Add</div>
+            <div className="col-span-1 text-center">Del</div>
             <div className="col-span-1 text-center">Churn</div>
             <div className="col-span-1 text-center">Risk</div>
-            <div className="col-span-2 text-center">AI</div>
+            <div className="col-span-2 text-center">Action</div>
           </div>
 
           {/* Files List */}
-          <div className="space-y-3 mt-3">
+          <div className="space-y-2">
             {paginatedFiles.map((file, pageIdx) => {
-              const globalIndex =
-                (currentPage - 1) * ITEMS_PER_PAGE + pageIdx;
+              const globalIndex = (currentPage - 1) * ITEMS_PER_PAGE + pageIdx;
               const risk = riskLevel(file.churn, maxChurn);
-
-              const churnPct =
-                maxChurn > 0
-                  ? Math.round((file.churn / maxChurn) * 100)
-                  : 0;
-
+              const churnPct = maxChurn > 0 ? Math.round((file.churn / maxChurn) * 100) : 0;
               const filePath = getFilePath(file);
               const isAnalyzing = analyzingFile === filePath;
               const hasResult = !!aiResults[filePath];
@@ -652,41 +540,32 @@ function FileAnalysis({ fileAnalysis, repositoryId }) {
               return (
                 <div
                   key={`${filePath || globalIndex}-${globalIndex}`}
-                  className="border border-gray-100 rounded-xl overflow-hidden hover:border-purple-100 transition"
+                  className="bg-slate-950/30 border border-slate-800/80 rounded-xl overflow-hidden hover:border-slate-700 transition"
                 >
-                  {/* Main file row */}
-                  <div className="grid grid-cols-1 md:grid-cols-12 gap-4 items-center px-4 py-4 hover:bg-gray-50 transition">
-                    {/* File */}
+                  <div className="grid grid-cols-1 md:grid-cols-12 gap-4 items-center px-4 py-3.5">
+                    {/* File Path */}
                     <div className="md:col-span-4 flex items-center gap-3 min-w-0">
                       <div
-                        className={`w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 text-xs font-bold ${
+                        className={`w-7 h-7 rounded-lg flex items-center justify-center shrink-0 text-xs font-bold ${
                           globalIndex < 3
-                            ? RANK_STYLES[globalIndex]
-                            : "bg-purple-50 text-purple-600"
+                            ? RANK_BADGES[globalIndex]
+                            : "bg-slate-800/80 text-slate-400 border border-slate-700/50"
                         }`}
                       >
-                        {globalIndex < 3 ? (
-                          globalIndex + 1
-                        ) : (
-                          <FileCode2 size={16} />
-                        )}
+                        {globalIndex + 1}
                       </div>
 
                       <div className="min-w-0 flex-1">
                         <p
-                          className="font-semibold text-slate-800 truncate"
+                          className="font-mono text-xs font-medium text-slate-200 truncate"
                           title={filePath || "Unknown path"}
                         >
-                          {filePath || (
-                            <span className="text-gray-400 italic">
-                              Unknown Path
-                            </span>
-                          )}
+                          {filePath || <span className="text-slate-500 italic">Unknown Path</span>}
                         </p>
 
-                        <div className="mt-1.5 h-1.5 w-full max-w-[160px] bg-gray-100 rounded-full overflow-hidden">
+                        <div className="mt-1.5 h-1 w-full max-w-[140px] bg-slate-800 rounded-full overflow-hidden">
                           <div
-                            className="h-full bg-purple-400 rounded-full"
+                            className="h-full bg-indigo-500 rounded-full"
                             style={{ width: `${churnPct}%` }}
                           />
                         </div>
@@ -694,91 +573,86 @@ function FileAnalysis({ fileAnalysis, repositoryId }) {
                     </div>
 
                     {/* Changes */}
-                    <div className="md:col-span-2 text-center">
-                      <span className="inline-flex items-center gap-1 px-3 py-1 rounded-full bg-blue-50 text-blue-700 text-sm font-semibold">
-                        <GitBranch size={14} />
+                    <div className="md:col-span-2 text-center flex items-center md:justify-center justify-between text-xs">
+                      <span className="text-slate-400 md:hidden">Changes:</span>
+                      <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-slate-800/60 border border-slate-700/50 text-indigo-300 font-mono">
+                        <GitBranch size={13} />
                         {file.changes || 0}
                       </span>
                     </div>
 
                     {/* Additions */}
-                    <div className="md:col-span-1 text-center">
-                      <span className="inline-flex items-center gap-1 text-green-600 font-semibold">
-                        <Plus size={15} />
-                        {file.additions || 0}
+                    <div className="md:col-span-1 text-center flex items-center md:justify-center justify-between text-xs">
+                      <span className="text-slate-400 md:hidden">Additions:</span>
+                      <span className="text-emerald-400 font-mono font-medium">
+                        +{file.additions || 0}
                       </span>
                     </div>
 
                     {/* Deletions */}
-                    <div className="md:col-span-1 text-center">
-                      <span className="inline-flex items-center gap-1 text-red-600 font-semibold">
-                        <Minus size={15} />
-                        {file.deletions || 0}
+                    <div className="md:col-span-1 text-center flex items-center md:justify-center justify-between text-xs">
+                      <span className="text-slate-400 md:hidden">Deletions:</span>
+                      <span className="text-rose-400 font-mono font-medium">
+                        -{file.deletions || 0}
                       </span>
                     </div>
 
                     {/* Churn */}
-                    <div className="md:col-span-1 text-center">
-                      <span className="font-bold text-slate-700">
-                        {file.churn}
-                      </span>
+                    <div className="md:col-span-1 text-center flex items-center md:justify-center justify-between text-xs">
+                      <span className="text-slate-400 md:hidden">Churn:</span>
+                      <span className="font-mono text-slate-300 font-semibold">{file.churn}</span>
                     </div>
 
                     {/* Risk */}
-                    <div className="md:col-span-1 text-center">
-                      <span
-                        className={`text-xs font-medium px-2.5 py-1 rounded-full ${risk.style}`}
-                      >
+                    <div className="md:col-span-1 text-center flex items-center md:justify-center justify-between">
+                      <span className="text-slate-400 text-xs md:hidden">Risk:</span>
+                      <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full border ${risk.style}`}>
                         {risk.label}
                       </span>
                     </div>
 
-                    {/* Analyze Action */}
-                    <div className="md:col-span-2 flex justify-center">
+                    {/* Action Button */}
+                    <div className="md:col-span-2 flex justify-center pt-2 md:pt-0">
                       <button
                         type="button"
                         disabled={isAnalyzing}
                         onClick={() => handleAnalyzeFile(file)}
-                        className={`inline-flex items-center justify-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold transition-all ${
+                        className={`w-full md:w-auto inline-flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${
                           hasResult
-                            ? "bg-indigo-50 text-indigo-600 hover:bg-indigo-100"
-                            : "bg-indigo-600 text-white hover:bg-indigo-700 shadow-sm"
+                            ? "bg-indigo-500/10 border border-indigo-500/30 text-indigo-300 hover:bg-indigo-500/20"
+                            : "bg-indigo-600 hover:bg-indigo-500 text-white shadow-md shadow-indigo-600/20"
                         } ${isAnalyzing ? "opacity-70 cursor-wait" : ""}`}
                       >
                         {isAnalyzing ? (
                           <>
-                            <Loader2 size={15} className="animate-spin" />
-                            Analyzing
+                            <Loader2 size={13} className="animate-spin text-indigo-300" />
+                            <span>Analyzing...</span>
                           </>
                         ) : hasResult ? (
                           <>
-                            {isExpanded ? (
-                              <ChevronUp size={15} />
-                            ) : (
-                              <ChevronDown size={15} />
-                            )}
-                            AI Analysis
+                            {isExpanded ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+                            <span>AI Insights</span>
                           </>
                         ) : (
                           <>
-                            <Sparkles size={15} />
-                            Analyze
+                            <Sparkles size={13} />
+                            <span>Analyze</span>
                           </>
                         )}
                       </button>
                     </div>
                   </div>
 
-                  {/* Error display */}
+                  {/* Error State */}
                   {error && (
-                    <div className="mx-4 mb-4 rounded-lg bg-red-50 border border-red-100 px-4 py-3 text-sm text-red-600">
+                    <div className="mx-4 mb-3 rounded-lg bg-rose-500/10 border border-rose-500/20 p-3 text-xs text-rose-400">
                       {error}
                     </div>
                   )}
 
-                  {/* AI result display */}
+                  {/* AI Explanation Content */}
                   {isExpanded && aiResults[filePath] && (
-                    <div className="px-4 pb-4">
+                    <div className="px-4 pb-4 border-t border-slate-800/60 pt-2">
                       <AIExplanation explanation={aiResults[filePath]} />
                     </div>
                   )}
@@ -787,60 +661,42 @@ function FileAnalysis({ fileAnalysis, repositoryId }) {
             })}
           </div>
 
-          {/* Pagination Controls */}
+          {/* Pagination */}
           {totalPages > 1 && (
-            <div className="flex items-center justify-between border-t border-gray-100 pt-4 mt-6">
-              <p className="text-xs text-gray-500">
-                Showing{" "}
-                <span className="font-semibold text-slate-700">
-                  {(currentPage - 1) * ITEMS_PER_PAGE + 1}
-                </span>{" "}
-                to{" "}
-                <span className="font-semibold text-slate-700">
-                  {Math.min(currentPage * ITEMS_PER_PAGE, files.length)}
-                </span>{" "}
-                of{" "}
-                <span className="font-semibold text-slate-700">
-                  {files.length}
-                </span>{" "}
-                files
+            <div className="flex flex-col sm:flex-row items-center justify-between border-t border-slate-800 pt-4 mt-6 gap-3">
+              <p className="text-xs text-slate-400">
+                Showing <span className="font-semibold text-slate-200">{(currentPage - 1) * ITEMS_PER_PAGE + 1}</span> to{" "}
+                <span className="font-semibold text-slate-200">{Math.min(currentPage * ITEMS_PER_PAGE, files.length)}</span> of{" "}
+                <span className="font-semibold text-slate-200">{files.length}</span> items
               </p>
 
               <div className="flex items-center gap-1">
                 <button
-                  onClick={() =>
-                    setCurrentPage((p) => Math.max(p - 1, 1))
-                  }
+                  onClick={() => setCurrentPage((p) => Math.max(p - 1, 1))}
                   disabled={currentPage === 1}
-                  className="p-2 rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed transition"
-                  title="Previous Page"
+                  className="p-1.5 rounded-lg border border-slate-800 bg-slate-950 text-slate-400 hover:text-slate-200 disabled:opacity-40 disabled:cursor-not-allowed transition"
                 >
                   <ChevronLeft size={16} />
                 </button>
 
-                {Array.from({ length: totalPages }, (_, i) => i + 1).map(
-                  (page) => (
-                    <button
-                      key={page}
-                      onClick={() => setCurrentPage(page)}
-                      className={`w-8 h-8 rounded-lg text-xs font-semibold transition ${
-                        currentPage === page
-                          ? "bg-purple-600 text-white"
-                          : "text-gray-600 hover:bg-gray-100 border border-transparent"
-                      }`}
-                    >
-                      {page}
-                    </button>
-                  )
-                )}
+                {Array.from({ length: totalPages }, (_, i) => i + 1).map((page) => (
+                  <button
+                    key={page}
+                    onClick={() => setCurrentPage(page)}
+                    className={`w-7 h-7 rounded-lg text-xs font-medium font-mono transition ${
+                      currentPage === page
+                        ? "bg-indigo-600 text-white border border-indigo-500"
+                        : "text-slate-400 hover:bg-slate-800 hover:text-slate-200"
+                    }`}
+                  >
+                    {page}
+                  </button>
+                ))}
 
                 <button
-                  onClick={() =>
-                    setCurrentPage((p) => Math.min(p + 1, totalPages))
-                  }
+                  onClick={() => setCurrentPage((p) => Math.min(p + 1, totalPages))}
                   disabled={currentPage === totalPages}
-                  className="p-2 rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed transition"
-                  title="Next Page"
+                  className="p-1.5 rounded-lg border border-slate-800 bg-slate-950 text-slate-400 hover:text-slate-200 disabled:opacity-40 disabled:cursor-not-allowed transition"
                 >
                   <ChevronRight size={16} />
                 </button>
