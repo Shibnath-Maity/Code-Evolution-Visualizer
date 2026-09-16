@@ -11,7 +11,6 @@ import {
   Check,
   Code2,
   Terminal,
-  Sparkles,
   ArrowUpRight,
   ChevronRight,
 } from "lucide-react";
@@ -34,23 +33,27 @@ const emptyLanguageAnalysis = { totalFiles: 0, languages: [] };
 
 function DiffLine({ line, index }) {
   let color = "text-slate-400";
-  let bg = "hover:bg-slate-800/40";
+  let bg = "hover:bg-slate-900";
+  let marker = null;
 
-  if (line.startsWith("+")) {
+  if (line.startsWith("+") && !line.startsWith("+++")) {
     color = "text-emerald-400";
-    bg = "bg-emerald-500/10 hover:bg-emerald-500/15";
-  } else if (line.startsWith("-")) {
+    bg = "bg-emerald-500/[0.07] hover:bg-emerald-500/[0.12]";
+    marker = "+";
+  } else if (line.startsWith("-") && !line.startsWith("---")) {
     color = "text-rose-400";
-    bg = "bg-rose-500/10 hover:bg-rose-500/15";
+    bg = "bg-rose-500/[0.07] hover:bg-rose-500/[0.12]";
+    marker = "\u2212";
   } else if (line.startsWith("@@")) {
-    color = "text-indigo-400 font-semibold";
-    bg = "bg-indigo-500/10";
+    color = "text-indigo-400";
+    bg = "bg-indigo-500/[0.06]";
   }
 
   return (
-    <div className={`px-3 py-0.5 flex items-center font-mono text-xs transition-colors ${bg} ${color}`}>
-      <span className="w-10 shrink-0 text-slate-600 select-none text-[11px] font-mono">{index + 1}</span>
-      <span className="whitespace-pre flex-1">{line || "\u00A0"}</span>
+    <div className={`grid grid-cols-[2.5rem_1rem_1fr] items-start font-mono text-[11px] leading-5 transition-colors ${bg} ${color}`}>
+      <span className="px-2 text-right text-slate-600 select-none tabular-nums">{index + 1}</span>
+      <span className="select-none opacity-70">{marker}</span>
+      <span className="whitespace-pre pr-4">{line || "\u00A0"}</span>
     </div>
   );
 }
@@ -62,41 +65,46 @@ function initials(name = "") {
   return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
 }
 
-const AVATAR_GRADIENTS = [
-  "from-indigo-500 to-purple-600 text-white",
-  "from-emerald-500 to-teal-600 text-white",
-  "from-blue-500 to-cyan-600 text-white",
-  "from-rose-500 to-pink-600 text-white",
-  "from-amber-500 to-orange-600 text-white",
-  "from-violet-500 to-fuchsia-600 text-white",
+const AVATAR_COLORS = [
+  "bg-indigo-500/15 text-indigo-300 ring-1 ring-indigo-500/25",
+  "bg-emerald-500/15 text-emerald-300 ring-1 ring-emerald-500/25",
+  "bg-sky-500/15 text-sky-300 ring-1 ring-sky-500/25",
+  "bg-amber-500/15 text-amber-300 ring-1 ring-amber-500/25",
+  "bg-rose-500/15 text-rose-300 ring-1 ring-rose-500/25",
+  "bg-violet-500/15 text-violet-300 ring-1 ring-violet-500/25",
 ];
 
-function avatarGradient(name = "") {
+function avatarColor(name = "") {
   let hash = 0;
   for (let i = 0; i < name.length; i++) hash = name.charCodeAt(i) + ((hash << 5) - hash);
-  return AVATAR_GRADIENTS[Math.abs(hash) % AVATAR_GRADIENTS.length];
+  return AVATAR_COLORS[Math.abs(hash) % AVATAR_COLORS.length];
 }
 
-function SectionHeader({ title, subtitle, count, icon: Icon }) {
+function SectionHeader({ title, subtitle, count, icon: Icon, action }) {
   return (
-    <div className="flex items-center justify-between mb-6 pb-4 border-b border-slate-800/80">
-      <div className="flex items-center gap-3">
-        {Icon && (
-          <div className="p-2 rounded-xl bg-indigo-500/10 border border-indigo-500/20 text-indigo-400">
-            <Icon size={18} />
-          </div>
-        )}
-        <div>
-          <h2 className="text-base font-bold text-white tracking-wide">{title}</h2>
-          {subtitle && <p className="text-xs text-slate-400 font-mono mt-0.5">{subtitle}</p>}
+    <div className="flex flex-wrap items-start justify-between gap-3 mb-4">
+      <div className="flex items-center gap-2.5 min-w-0">
+        {Icon && <Icon size={16} className="text-slate-500 shrink-0" />}
+        <div className="min-w-0">
+          <h2 className="text-sm font-semibold text-slate-100">{title}</h2>
+          {subtitle && <p className="text-xs text-slate-500 mt-0.5 truncate">{subtitle}</p>}
         </div>
+        {count !== undefined && (
+          <span className="text-[11px] font-medium text-slate-400 bg-slate-900 border border-slate-800 rounded-md px-1.5 py-0.5">
+            {count}
+          </span>
+        )}
       </div>
-      {count !== undefined && (
-        <span className="text-xs font-mono font-semibold text-slate-300 bg-slate-800/80 border border-slate-700/60 rounded-full px-3 py-1">
-          {count}
-        </span>
-      )}
+      {action}
     </div>
+  );
+}
+
+function Section({ children, className = "" }) {
+  return (
+    <section className={`pt-8 border-t border-slate-800/70 first:border-t-0 first:pt-0 ${className}`}>
+      {children}
+    </section>
   );
 }
 
@@ -243,15 +251,12 @@ function Board() {
 
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-slate-950 text-slate-100 font-sans">
-        <div className="text-center p-8 bg-slate-900/60 border border-slate-800/80 rounded-2xl backdrop-blur-2xl shadow-2xl space-y-4">
-          <div className="relative mx-auto h-12 w-12 flex items-center justify-center">
-            <div className="absolute inset-0 rounded-full border-2 border-indigo-500/20 animate-ping" />
-            <div className="h-10 w-10 animate-spin rounded-full border-2 border-indigo-500/30 border-t-indigo-500" />
-          </div>
+      <div className="min-h-screen flex items-center justify-center bg-slate-950 text-slate-100 font-sans px-4">
+        <div className="text-center space-y-4">
+          <div className="mx-auto h-8 w-8 animate-spin rounded-full border-2 border-slate-800 border-t-indigo-400" />
           <div>
-            <h2 className="text-base font-bold text-white tracking-wide">Analyzing Repository...</h2>
-            <p className="text-slate-400 text-xs font-mono mt-1">Parsing AST, commits, and file structure</p>
+            <h2 className="text-sm font-semibold text-slate-200">Analyzing repository</h2>
+            <p className="text-slate-500 text-xs mt-1">Parsing commits, file structure, and architecture</p>
           </div>
         </div>
       </div>
@@ -260,14 +265,14 @@ function Board() {
 
   if (!analysis) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-slate-950 text-slate-100 font-sans">
-        <div className="text-center p-8 max-w-md bg-slate-900/60 border border-slate-800/80 rounded-2xl backdrop-blur-2xl shadow-2xl space-y-3">
-          <div className="inline-flex p-3 rounded-2xl bg-slate-800/60 text-slate-400 border border-slate-700/50 mb-1">
-            <Code2 size={24} />
+      <div className="min-h-screen flex items-center justify-center bg-slate-950 text-slate-100 font-sans px-4">
+        <div className="text-center max-w-sm space-y-3">
+          <div className="inline-flex p-2.5 rounded-lg bg-slate-900 border border-slate-800 text-slate-500 mb-1">
+            <Code2 size={20} />
           </div>
-          <h2 className="text-lg font-bold text-white">No Repository Selected</h2>
-          <p className="text-slate-400 text-xs leading-relaxed">
-            Please navigate to the Home page and analyze a GitHub repository to unlock comprehensive insights.
+          <h2 className="text-base font-semibold text-slate-100">No repository selected</h2>
+          <p className="text-slate-500 text-sm leading-relaxed">
+            Go to the Home page and analyze a GitHub repository to see commit history, architecture, and code health here.
           </p>
         </div>
       </div>
@@ -275,23 +280,25 @@ function Board() {
   }
 
   return (
-    <div className="bg-slate-950 text-slate-100 min-h-screen font-sans selection:bg-indigo-500 selection:text-white">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-8">
-        
+    <div className="bg-slate-950 text-slate-100 min-h-screen font-sans">
+      <div className="max-w-[1400px] mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8">
+
         {/* Repository Header */}
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 bg-gradient-to-r from-slate-900/90 via-slate-900/60 to-indigo-950/40 p-6 rounded-2xl border border-slate-800/80 shadow-2xl backdrop-blur-xl">
-          <div className="space-y-1">
-            <div className="flex items-center gap-2">
-              <Sparkles size={18} className="text-indigo-400" />
-              <h1 className="text-2xl font-black text-white tracking-tight">
-                Repository Dashboard
-              </h1>
-            </div>
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 pb-6 border-b border-slate-800/70">
+          <div className="min-w-0 space-y-1">
+            <h1 className="text-lg sm:text-xl font-semibold text-white tracking-tight truncate">
+              Repository Dashboard
+            </h1>
             {repoUrl && (
-              <p className="text-xs font-mono text-slate-400 flex items-center gap-1 break-all">
-                <span>{repoUrl}</span>
-                <ArrowUpRight size={12} className="text-indigo-400 shrink-0" />
-              </p>
+              <a
+                href={repoUrl}
+                target="_blank"
+                rel="noreferrer"
+                className="group inline-flex items-center gap-1 text-xs font-mono text-slate-500 hover:text-indigo-400 transition-colors break-all"
+              >
+                <span className="break-all">{repoUrl}</span>
+                <ArrowUpRight size={11} className="shrink-0 opacity-60 group-hover:opacity-100 transition-opacity" />
+              </a>
             )}
           </div>
 
@@ -310,294 +317,316 @@ function Board() {
           </div>
         </div>
 
-        {/* Repository Overview */}
-        {repoInfo && <RepositoryOverview repo={repoInfo} />}
+        <div className="space-y-8 py-8">
 
-        {/* Stats Cards Grid */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-          <StatCard
-            title="Total Commits"
-            value={stats?.totalCommits || 0}
-            type="commits"
-            icon={GitCommit}
-            color="from-blue-600 to-indigo-600"
-            trend="from last analysis"
-          />
+          {/* Repository Overview */}
+          {repoInfo && (
+            <Section className="!border-t-0 !pt-0">
+              <RepositoryOverview repo={repoInfo} />
+            </Section>
+          )}
 
-          <StatCard
-            title="Contributors"
-            value={contributorEntries.length}
-            type="contributors"
-            icon={Users}
-            color="from-emerald-600 to-teal-600"
-            trend="active authors"
-          />
+          {/* Stats Row */}
+          <Section className={repoInfo ? undefined : "!border-t-0 !pt-0"}>
+            <div className="grid grid-cols-2 lg:grid-cols-4 border border-slate-800/80 rounded-lg divide-y divide-x-0 sm:divide-y-0 sm:divide-x divide-slate-800/80 overflow-hidden">
+              <StatCard
+                title="Total Commits"
+                value={stats?.totalCommits || 0}
+                type="commits"
+                icon={GitCommit}
+                color="from-blue-600 to-indigo-600"
+                trend="from last analysis"
+              />
 
-          <StatCard
-            title="Total Files"
-            value={fileAnalysis?.totalFiles || 0}
-            type="files"
-            icon={FileCode2}
-            color="from-purple-600 to-fuchsia-600"
-            trend="in codebase"
-          />
+              <StatCard
+                title="Contributors"
+                value={contributorEntries.length}
+                type="contributors"
+                icon={Users}
+                color="from-emerald-600 to-teal-600"
+                trend="active authors"
+              />
 
-          <StatCard
-            title="Hotspots"
-            value={hotspots?.length || 0}
-            type="hotspots"
-            icon={Flame}
-            color="from-amber-600 to-rose-600"
-            trend="high churn files"
-          />
-        </div>
+              <StatCard
+                title="Total Files"
+                value={fileAnalysis?.totalFiles || 0}
+                type="files"
+                icon={FileCode2}
+                color="from-purple-600 to-fuchsia-600"
+                trend="in codebase"
+              />
 
-        {/* Project Health Score */}
-        <ProjectHealthScore
-          stats={stats}
-          fileAnalysis={fileAnalysis}
-          codeEvolution={codeEvolution}
-          architecture={architecture}
-          languageAnalysis={languageAnalysis}
-          commits={allCommits}
-        />
+              <StatCard
+                title="Hotspots"
+                value={hotspots?.length || 0}
+                type="hotspots"
+                icon={Flame}
+                color="from-amber-600 to-rose-600"
+                trend="high churn files"
+              />
+            </div>
+          </Section>
 
-        {/* Repository Structure */}
-        <RepositoryStructure architecture={architecture} />
+          {/* Project Health Score */}
+          <Section>
+            <ProjectHealthScore
+              stats={stats}
+              fileAnalysis={fileAnalysis}
+              codeEvolution={codeEvolution}
+              architecture={architecture}
+              languageAnalysis={languageAnalysis}
+              commits={allCommits}
+            />
+          </Section>
 
-        {/* Interactive Architecture Flow Diagram */}
-        <ArchitectureDiagram architecture={architecture} />
+          {/* Repository Structure */}
+          <Section>
+            <RepositoryStructure architecture={architecture} />
+          </Section>
 
-        {/* Language Distribution */}
-        <LanguageDistribution languageAnalysis={languageAnalysis} />
+          {/* Interactive Architecture Flow Diagram */}
+          <Section>
+            <ArchitectureDiagram architecture={architecture} />
+          </Section>
 
-        {/* Unified File Analysis with On-Demand AI */}
-        <FileAnalysis fileAnalysis={fileAnalysis} repositoryId={repositoryId} />
+          {/* Language Distribution */}
+          <Section>
+            <LanguageDistribution languageAnalysis={languageAnalysis} />
+          </Section>
 
-        {/* Recent Commits Grid */}
-        <div className="bg-slate-900/90 border border-slate-800/80 rounded-2xl p-6 shadow-xl backdrop-blur-xl space-y-4">
-          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+          {/* Unified File Analysis with On-Demand AI */}
+          <Section>
+            <FileAnalysis fileAnalysis={fileAnalysis} repositoryId={repositoryId} />
+          </Section>
+
+          {/* Recent Commits */}
+          <Section>
             <SectionHeader
-              title="Recent Commits"
+              title="Recent commits"
               subtitle="Latest timeline activity in this repository"
               icon={GitCommit}
-            />
-
-            {/* Search Bar Input */}
-            <div className="relative w-full sm:w-72 -mt-2 sm:mt-0">
-              <Search className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-400" />
-              <input
-                id="commit-search"
-                type="text"
-                placeholder="Search commit or author..."
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                className="w-full rounded-xl border border-slate-800 bg-slate-950/80 py-1.5 pl-9 pr-8 text-xs text-slate-200 placeholder-slate-500 font-mono transition-all duration-200 focus:border-indigo-500 focus:bg-slate-950 focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
-              />
-              {searchTerm && (
-                <button
-                  type="button"
-                  onClick={() => setSearchTerm("")}
-                  className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-white transition-colors"
-                >
-                  <X size={12} />
-                </button>
-              )}
-            </div>
-          </div>
-
-          {displayedCommits.length === 0 ? (
-            <div className="text-slate-500 text-xs font-mono py-8 text-center bg-slate-950/40 rounded-xl border border-slate-800/60">
-              No matching commits found.
-            </div>
-          ) : (
-            <div className="space-y-2 max-h-[420px] overflow-y-auto custom-scrollbar pr-1">
-              {displayedCommits.map((commit) => (
-                <div
-                  key={commit.hash || `${commit.author_name}-${commit.date}`}
-                  role="button"
-                  tabIndex={0}
-                  className="p-3.5 bg-slate-950/50 hover:bg-slate-800/40 border border-slate-800/60 hover:border-indigo-500/30 rounded-xl transition-all cursor-pointer flex items-center justify-between gap-4 group"
-                  onClick={() => handleSelectCommit(commit.hash)}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter" || e.key === " ") {
-                      e.preventDefault();
-                      handleSelectCommit(commit.hash);
-                    }
-                  }}
-                >
-                  <div className="min-w-0 space-y-1">
-                    <p className="font-semibold text-xs text-slate-200 group-hover:text-indigo-300 transition-colors truncate">
-                      {commit.message}
-                    </p>
-                    <div className="flex items-center gap-2 text-[11px] text-slate-400 font-mono">
-                      <span className="text-slate-300 font-medium">{commit.author_name}</span>
-                      <span>•</span>
-                      <span className="text-slate-500">{commit.hash ? commit.hash.slice(0, 7) : "hash"}</span>
-                    </div>
-                  </div>
-
-                  <div className="flex items-center gap-3 shrink-0">
-                    <p className="text-slate-500 font-mono text-[11px]">
-                      {new Date(commit.date).toLocaleDateString()}
-                    </p>
-                    <ChevronRight size={14} className="text-slate-600 group-hover:text-indigo-400 group-hover:translate-x-0.5 transition-all" />
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-
-        {/* Commit Details Modal / Inspector */}
-        {(loadingCommit || selectedCommit || commitError) && (
-          <div className="bg-slate-900/90 border border-slate-800/80 rounded-2xl p-6 shadow-2xl backdrop-blur-xl space-y-5">
-            <SectionHeader title="Commit Inspector" icon={Terminal} />
-
-            {loadingCommit && (
-              <div className="flex items-center gap-2 text-xs font-mono text-indigo-400 py-6 justify-center">
-                <div className="h-4 w-4 animate-spin rounded-full border-2 border-indigo-400 border-t-transparent" />
-                Fetching commit details and patch diff...
-              </div>
-            )}
-
-            {!loadingCommit && commitError && (
-              <div className="text-rose-400 text-xs font-mono bg-rose-500/10 border border-rose-500/20 p-4 rounded-xl">
-                {commitError}
-              </div>
-            )}
-
-            {!loadingCommit && selectedCommit && (
-              <div className="space-y-6">
-                
-                {/* Meta Grid */}
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 font-mono text-xs">
-                  <div className="bg-slate-950/60 border border-slate-800/80 p-3 rounded-xl space-y-1">
-                    <p className="text-[10px] text-slate-500 uppercase tracking-wider">Commit Hash</p>
-                    <p className="text-indigo-300 font-semibold break-all">{selectedCommit.hash}</p>
-                  </div>
-
-                  <div className="bg-slate-950/60 border border-slate-800/80 p-3 rounded-xl space-y-1">
-                    <p className="text-[10px] text-slate-500 uppercase tracking-wider">Author</p>
-                    <p className="text-slate-200 font-semibold">{selectedCommit.author}</p>
-                  </div>
-
-                  <div className="bg-slate-950/60 border border-slate-800/80 p-3 rounded-xl space-y-1">
-                    <p className="text-[10px] text-slate-500 uppercase tracking-wider">Commit Date</p>
-                    <p className="text-slate-300">{selectedCommit.date}</p>
-                  </div>
-
-                  <div className="bg-slate-950/60 border border-slate-800/80 p-3 rounded-xl space-y-1">
-                    <p className="text-[10px] text-slate-500 uppercase tracking-wider">Message</p>
-                    <p className="text-slate-200 truncate">{selectedCommit.message}</p>
-                  </div>
-                </div>
-
-                {/* Changed Files */}
-                {selectedCommit.files?.length > 0 && (
-                  <div className="space-y-2">
-                    <p className="text-[10px] font-mono text-slate-400 uppercase tracking-wider">Files Changed ({selectedCommit.files.length})</p>
-                    <div className="flex flex-wrap gap-2">
-                      {selectedCommit.files.map((file) => (
-                        <span key={file} className="bg-slate-950 border border-slate-800 text-slate-300 font-mono text-[11px] px-2.5 py-1 rounded-lg">
-                          {file}
-                        </span>
-                      ))}
-                    </div>
-                  </div>
-                )}
-
-                {/* Code Diff Box */}
-                <div className="space-y-3 pt-2">
-                  <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-                    <p className="text-xs font-mono font-bold text-white flex items-center gap-2">
-                      <Code2 size={15} className="text-indigo-400" /> Commit Code Patch
-                    </p>
-
-                    <div className="flex items-center gap-2">
-                      <button
-                        onClick={copyDiff}
-                        disabled={loadingDiff || !commitDiff}
-                        className="flex items-center gap-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white text-xs font-mono px-3 py-1.5 rounded-lg border border-slate-700/60 transition-all disabled:opacity-40 cursor-pointer"
-                      >
-                        {copiedDiff ? <Check size={12} className="text-emerald-400" /> : <Copy size={12} />}
-                        <span>{copiedDiff ? "Copied" : "Copy Diff"}</span>
-                      </button>
-
-                      <button
-                        onClick={downloadDiff}
-                        disabled={loadingDiff || !commitDiff}
-                        className="flex items-center gap-1.5 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-mono px-3 py-1.5 rounded-lg transition-all disabled:opacity-40 cursor-pointer shadow-lg shadow-indigo-600/20"
-                      >
-                        <Download size={12} />
-                        <span>Download Patch</span>
-                      </button>
-                    </div>
-                  </div>
-
-                  {loadingDiff ? (
-                    <div className="text-slate-500 font-mono italic text-xs py-8 text-center bg-slate-950/60 rounded-xl border border-slate-800">
-                      Loading patch difference...
-                    </div>
-                  ) : (
-                    <pre className="bg-slate-950 rounded-xl border border-slate-800/80 p-2 overflow-x-auto text-xs font-mono max-h-96 custom-scrollbar">
-                      {diffLines.map((line, index) => (
-                        <DiffLine key={index} line={line} index={index} />
-                      ))}
-                    </pre>
+              action={
+                <div className="relative w-full sm:w-64">
+                  <Search className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-500" />
+                  <input
+                    id="commit-search"
+                    type="text"
+                    aria-label="Search commits by message, author, or hash"
+                    placeholder="Search commits..."
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
+                    className="w-full rounded-md border border-slate-800 bg-slate-900/60 py-1.5 pl-8 pr-7 text-xs text-slate-200 placeholder-slate-500 transition-colors focus:border-indigo-500/60 focus:outline-none focus:ring-1 focus:ring-indigo-500/40"
+                  />
+                  {searchTerm && (
+                    <button
+                      type="button"
+                      aria-label="Clear search"
+                      onClick={() => setSearchTerm("")}
+                      className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-200 transition-colors"
+                    >
+                      <X size={12} />
+                    </button>
                   )}
                 </div>
+              }
+            />
 
+            {displayedCommits.length === 0 ? (
+              <div className="text-slate-500 text-sm py-10 text-center border border-dashed border-slate-800 rounded-lg">
+                No matching commits found.
               </div>
-            )}
-          </div>
-        )}
-
-        {/* Contributors List Section */}
-        <div className="bg-slate-900/90 border border-slate-800/80 rounded-2xl p-6 shadow-xl backdrop-blur-xl">
-          <SectionHeader
-            title="Contributors"
-            subtitle="Ranked by total commit contributions"
-            count={contributorEntries.length}
-            icon={Users}
-          />
-
-          {contributorEntries.length === 0 ? (
-            <div className="text-slate-500 text-xs font-mono py-8 text-center bg-slate-950/40 rounded-xl border border-slate-800/60">
-              No contributors detected in repository timeline.
-            </div>
-          ) : (
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-              {contributorEntries.map(([name, contributor]) => {
-                const displayName = contributor.name || name;
-                return (
+            ) : (
+              <div className="border border-slate-800/80 rounded-lg divide-y divide-slate-800/80 max-h-[440px] overflow-y-auto custom-scrollbar">
+                {displayedCommits.map((commit) => (
                   <div
-                    key={name}
-                    className="flex items-center justify-between p-3 bg-slate-950/50 border border-slate-800/80 rounded-xl hover:border-slate-700 transition-colors"
+                    key={commit.hash || `${commit.author_name}-${commit.date}`}
+                    role="button"
+                    tabIndex={0}
+                    aria-label={`View commit ${commit.message}`}
+                    className="px-3.5 py-3 hover:bg-slate-900/60 focus:bg-slate-900/60 focus:outline-none transition-colors cursor-pointer flex items-center justify-between gap-4 group"
+                    onClick={() => handleSelectCommit(commit.hash)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" || e.key === " ") {
+                        e.preventDefault();
+                        handleSelectCommit(commit.hash);
+                      }
+                    }}
                   >
-                    <div className="flex items-center gap-3 min-w-0">
-                      <div
-                        className={`h-9 w-9 shrink-0 rounded-xl bg-gradient-to-br ${avatarGradient(
-                          displayName
-                        )} flex items-center justify-center text-xs font-bold shadow-md`}
-                      >
-                        {initials(displayName)}
+                    <div className="min-w-0 space-y-1">
+                      <p className="font-medium text-sm text-slate-200 group-hover:text-white transition-colors truncate">
+                        {commit.message}
+                      </p>
+                      <div className="flex items-center gap-2 text-xs text-slate-500">
+                        <span className="text-slate-400">{commit.author_name}</span>
+                        <span className="text-slate-700">&bull;</span>
+                        <span className="font-mono text-slate-500">{commit.hash ? commit.hash.slice(0, 7) : "hash"}</span>
                       </div>
-                      <span className="font-semibold text-xs text-slate-200 truncate">
-                        {displayName}
-                      </span>
                     </div>
 
-                    <span className="text-indigo-400 font-mono text-xs font-semibold bg-indigo-500/10 border border-indigo-500/20 px-2.5 py-1 rounded-lg shrink-0">
-                      {contributor.commits || 0} commits
-                    </span>
+                    <div className="flex items-center gap-3 shrink-0">
+                      <p className="text-slate-500 text-xs tabular-nums hidden sm:block">
+                        {new Date(commit.date).toLocaleDateString()}
+                      </p>
+                      <ChevronRight size={14} className="text-slate-600 group-hover:text-indigo-400 group-hover:translate-x-0.5 transition-all" />
+                    </div>
                   </div>
-                );
-              })}
-            </div>
-          )}
-        </div>
+                ))}
+              </div>
+            )}
+          </Section>
 
+          {/* Commit Details Modal / Inspector */}
+          {(loadingCommit || selectedCommit || commitError) && (
+            <Section>
+              <SectionHeader title="Commit inspector" icon={Terminal} />
+
+              {loadingCommit && (
+                <div className="flex items-center gap-2 text-xs text-slate-400 py-8 justify-center">
+                  <div className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-slate-700 border-t-indigo-400" />
+                  Fetching commit details and patch diff...
+                </div>
+              )}
+
+              {!loadingCommit && commitError && (
+                <div className="text-rose-400 text-xs bg-rose-500/[0.06] border border-rose-500/20 p-3.5 rounded-lg">
+                  {commitError}
+                </div>
+              )}
+
+              {!loadingCommit && selectedCommit && (
+                <div className="space-y-5">
+
+                  {/* Meta Grid */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-px bg-slate-800/80 border border-slate-800/80 rounded-lg overflow-hidden text-xs">
+                    <div className="bg-slate-950 p-3 space-y-1 min-w-0">
+                      <p className="text-slate-500">Commit hash</p>
+                      <p className="text-indigo-300 font-mono font-medium break-all">{selectedCommit.hash}</p>
+                    </div>
+
+                    <div className="bg-slate-950 p-3 space-y-1 min-w-0">
+                      <p className="text-slate-500">Author</p>
+                      <p className="text-slate-200 font-medium truncate">{selectedCommit.author}</p>
+                    </div>
+
+                    <div className="bg-slate-950 p-3 space-y-1 min-w-0">
+                      <p className="text-slate-500">Commit date</p>
+                      <p className="text-slate-300">{selectedCommit.date}</p>
+                    </div>
+
+                    <div className="bg-slate-950 p-3 space-y-1 min-w-0">
+                      <p className="text-slate-500">Message</p>
+                      <p className="text-slate-200 truncate">{selectedCommit.message}</p>
+                    </div>
+                  </div>
+
+                  {/* Changed Files */}
+                  {selectedCommit.files?.length > 0 && (
+                    <div className="space-y-2">
+                      <p className="text-xs text-slate-500">Files changed ({selectedCommit.files.length})</p>
+                      <div className="flex flex-wrap gap-1.5">
+                        {selectedCommit.files.map((file) => (
+                          <span key={file} className="bg-slate-900 border border-slate-800 text-slate-300 font-mono text-[11px] px-2 py-1 rounded-md break-all">
+                            {file}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Code Diff Box */}
+                  <div className="space-y-2.5 pt-1">
+                    <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2.5">
+                      <p className="text-xs font-medium text-slate-200 flex items-center gap-1.5">
+                        <Code2 size={13} className="text-slate-500" /> Commit patch
+                      </p>
+
+                      <div className="flex items-center gap-2">
+                        <button
+                          onClick={copyDiff}
+                          disabled={loadingDiff || !commitDiff}
+                          aria-label="Copy diff to clipboard"
+                          className="flex items-center gap-1.5 bg-slate-900 hover:bg-slate-800 text-slate-300 hover:text-white text-xs font-medium px-2.5 py-1.5 rounded-md border border-slate-800 transition-colors disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer focus:outline-none focus:ring-1 focus:ring-indigo-500/50"
+                        >
+                          {copiedDiff ? <Check size={12} className="text-emerald-400" /> : <Copy size={12} />}
+                          <span>{copiedDiff ? "Copied" : "Copy diff"}</span>
+                        </button>
+
+                        <button
+                          onClick={downloadDiff}
+                          disabled={loadingDiff || !commitDiff}
+                          aria-label="Download patch file"
+                          className="flex items-center gap-1.5 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-medium px-2.5 py-1.5 rounded-md transition-colors disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer focus:outline-none focus:ring-1 focus:ring-indigo-400/50"
+                        >
+                          <Download size={12} />
+                          <span>Download patch</span>
+                        </button>
+                      </div>
+                    </div>
+
+                    {loadingDiff ? (
+                      <div className="text-slate-500 text-xs py-8 text-center bg-slate-900/40 rounded-lg border border-slate-800">
+                        Loading patch difference...
+                      </div>
+                    ) : (
+                      <pre className="bg-slate-950 rounded-lg border border-slate-800/80 overflow-x-auto text-xs max-h-96 custom-scrollbar">
+                        {diffLines.map((line, index) => (
+                          <DiffLine key={index} line={line} index={index} />
+                        ))}
+                      </pre>
+                    )}
+                  </div>
+
+                </div>
+              )}
+            </Section>
+          )}
+
+          {/* Contributors List Section */}
+          <Section>
+            <SectionHeader
+              title="Contributors"
+              subtitle="Ranked by total commit contributions"
+              count={contributorEntries.length}
+              icon={Users}
+            />
+
+            {contributorEntries.length === 0 ? (
+              <div className="text-slate-500 text-sm py-10 text-center border border-dashed border-slate-800 rounded-lg">
+                No contributors detected in repository timeline.
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2.5">
+                {contributorEntries.map(([name, contributor]) => {
+                  const displayName = contributor.name || name;
+                  return (
+                    <div
+                      key={name}
+                      className="flex items-center justify-between gap-3 p-2.5 border border-slate-800/80 rounded-lg hover:border-slate-700 transition-colors min-w-0"
+                    >
+                      <div className="flex items-center gap-2.5 min-w-0">
+                        <div
+                          className={`h-8 w-8 shrink-0 rounded-md flex items-center justify-center text-[11px] font-semibold ${avatarColor(
+                            displayName
+                          )}`}
+                        >
+                          {initials(displayName)}
+                        </div>
+                        <span className="font-medium text-sm text-slate-200 truncate">
+                          {displayName}
+                        </span>
+                      </div>
+
+                      <span className="text-slate-400 font-mono text-[11px] shrink-0 tabular-nums">
+                        {contributor.commits || 0} commits
+                      </span>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </Section>
+
+        </div>
       </div>
     </div>
   );

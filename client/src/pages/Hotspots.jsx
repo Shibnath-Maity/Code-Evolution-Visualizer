@@ -9,7 +9,7 @@ import HotspotPagination, {
 import HotspotEmptyState from "../components/Hotspots/HotspotEmptyState";
 
 import { useAnalysis } from "../context/AnalysisContext";
-import { Sparkles, Flame, GitFork } from "lucide-react";
+import { Flame, GitFork, Sparkles } from "lucide-react";
 import { FaGithub } from "react-icons/fa";
 
 const ITEMS_PER_PAGE = 10;
@@ -50,6 +50,8 @@ export default function Hotspots() {
   const [sortKey, setSortKey] = useState("score");
   const [selectedFile, setSelectedFile] = useState(null);
   const [currentPage, setCurrentPage] = useState(1);
+  // Mobile-only: controls whether the details inspector is expanded below the list
+  const [mobileDetailsOpen, setMobileDetailsOpen] = useState(false);
 
   // Safely extract and normalize hotspots list
   const hotspots = useMemo(() => {
@@ -128,20 +130,8 @@ export default function Hotspots() {
       }
     });
 
-    console.log("🤖 NORMALIZED AI INSIGHTS:", hotspotInsights);
-    console.log("🗺️ AI INSIGHT MAP:", map);
-
     return map;
   }, [hotspotInsights]);
-
-  // Detailed debug log on analysis context changes
-  useEffect(() => {
-    console.log("========== HOTSPOT AI DEBUG ==========");
-    console.log("Analysis:", analysis);
-    console.log("Hotspot insights from context:", analysis?.hotspotInsights);
-    console.log("Processed insights:", hotspotInsights);
-    console.log("======================================");
-  }, [analysis, hotspotInsights]);
 
   // Calculate score fields
   const scoredHotspots = useMemo(
@@ -222,19 +212,14 @@ export default function Hotspots() {
       const insight =
         insightMap.get(normalizedFile) || insightMap.get(filename);
 
-      console.log("🔥 HOTSPOT SELECTED:", item.file);
-      console.log("🔎 NORMALIZED FILE:", normalizedFile);
-      console.log("📄 FILENAME:", filename);
-      console.log("🤖 MATCHED AI INSIGHT:", insight);
-      console.log("📦 ALL AI INSIGHTS:", hotspotInsights);
-
       setSelectedFile({
         ...item,
         file: item.file,
         aiInsight: insight || DEFAULT_AI_INSIGHT,
       });
+      setMobileDetailsOpen(true);
     },
-    [insightMap, hotspotInsights]
+    [insightMap]
   );
 
   // Synchronize selection cleanly whenever filter set changes
@@ -255,63 +240,70 @@ export default function Hotspots() {
   }, [filteredHotspots, handleSelectHotspot, selectedFile]);
 
   return (
-    <div className="h-screen bg-slate-950 text-slate-100 flex flex-col overflow-hidden selection:bg-orange-500/20 selection:text-orange-300">
-      <div className="max-w-[1700px] mx-auto px-6 py-5 w-full flex flex-col flex-1 min-h-0 gap-4">
+    <div className="min-h-dvh bg-slate-950 text-slate-100 flex flex-col lg:h-dvh lg:overflow-hidden">
+      <div className="mx-auto flex w-full max-w-[1700px] flex-1 flex-col gap-4 px-4 py-4 sm:px-6 sm:py-5 lg:min-h-0">
         {/* Header Bar */}
-        <div className="shrink-0 flex items-center justify-between border-b border-slate-800/80 pb-4">
-          <div className="flex items-center gap-3.5">
-            <div className="relative flex h-11 w-11 items-center justify-center rounded-2xl bg-gradient-to-br from-amber-500/20 to-orange-600/20 border border-orange-500/30 text-orange-400 shadow-lg shadow-orange-500/10">
-              <Flame size={22} className="animate-pulse" />
-              <div className="absolute -top-0.5 -right-0.5 h-2.5 w-2.5 rounded-full bg-orange-500 ring-4 ring-slate-950" />
+        <header className="shrink-0 border-b border-slate-800 pb-3 sm:pb-4">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex min-w-0 items-center gap-3">
+              <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-orange-500/25 bg-orange-500/10 text-orange-400">
+                <Flame size={18} strokeWidth={2} />
+              </div>
+              <div className="min-w-0">
+                <div className="flex flex-wrap items-center gap-2">
+                  <h1 className="text-base font-semibold tracking-tight text-white sm:text-lg">
+                    Code Hotspots
+                  </h1>
+                  <span className="inline-flex items-center gap-1 rounded-md border border-orange-500/20 bg-orange-500/5 px-1.5 py-0.5 text-[10px] font-medium text-orange-400/90">
+                    <Sparkles size={10} />
+                    AI insights
+                  </span>
+                </div>
+                <p className="mt-0.5 truncate text-xs text-slate-400">
+                  High-churn files and architectural risk
+                </p>
+              </div>
             </div>
-            <div>
-              <div className="flex items-center gap-2">
-                <h1 className="text-xl font-bold tracking-tight text-white">
-                  Code Hotspots
-                </h1>
-                <span className="inline-flex items-center gap-1 rounded-full border border-orange-500/20 bg-orange-500/10 px-2 py-0.5 text-[10px] font-semibold text-orange-400">
-                  <Sparkles size={10} />
-                  AI Insights Active
+
+            {repositoryId && (
+              <div className="flex items-center gap-1.5 rounded-md border border-slate-800 bg-slate-900/60 px-2.5 py-1.5 text-xs text-slate-400 sm:shrink-0">
+                <GitFork size={12} className="shrink-0 text-slate-500" />
+                <span className="truncate font-mono text-slate-300">
+                  {repositoryId}
                 </span>
               </div>
-              <p className="text-xs text-slate-400 mt-0.5">
-                Identify high-churn files and potential architectural bottlenecks
-              </p>
-            </div>
+            )}
           </div>
-
-          {repositoryId && (
-            <div className="hidden sm:flex items-center gap-2 rounded-xl border border-slate-800 bg-slate-900/60 px-3 py-1.5 text-xs text-slate-400">
-              <GitFork size={13} className="text-slate-500" />
-              <span className="font-mono text-slate-300">{repositoryId}</span>
-            </div>
-          )}
-        </div>
+        </header>
 
         {!analysis ? (
-          <div className="flex-1 flex items-center justify-center">
-            <div className="w-full max-w-md rounded-3xl border border-slate-800/80 bg-slate-900/40 p-10 text-center backdrop-blur-xl shadow-2xl">
-              <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-slate-800/80 text-slate-400 border border-slate-700/50">
-                <FaGithub size={28} />
+          <div className="flex flex-1 items-center justify-center py-10">
+            <div className="w-full max-w-sm rounded-xl border border-slate-800 bg-slate-900/40 p-8 text-center">
+              <div className="mx-auto mb-3 flex h-10 w-10 items-center justify-center rounded-lg border border-slate-700/60 bg-slate-800/60 text-slate-400">
+                <FaGithub size={18} />
               </div>
-              <h3 className="text-base font-semibold text-slate-200">
+              <h3 className="text-sm font-semibold text-slate-200">
                 No repository selected
               </h3>
-              <p className="text-xs text-slate-400 mt-1.5 leading-relaxed">
-                Connect and analyze a GitHub repository to inspect code churn,
-                frequent revision paths, and AI risk reports.
+              <p className="mt-1.5 text-xs leading-relaxed text-slate-400">
+                Connect a repository to inspect code churn, frequently
+                modified files, and hotspot risk.
               </p>
             </div>
           </div>
         ) : (
-          <div className="flex-1 min-h-0 flex flex-col gap-4">
+          <div className="flex flex-1 flex-col gap-4 lg:min-h-0">
             {/* Stats Overview */}
-            {scoredHotspots.length > 0 && <HotspotStats totals={totals} />}
+            {scoredHotspots.length > 0 && (
+              <div className="shrink-0">
+                <HotspotStats totals={totals} />
+              </div>
+            )}
 
             {/* Split Master-Detail Panel */}
-            <div className="flex-1 min-h-0 grid grid-cols-1 lg:grid-cols-12 gap-4">
-              {/* Left Column: Explorer Panel (~58%) */}
-              <div className="lg:col-span-7 flex flex-col min-h-0 rounded-2xl border border-slate-800/80 bg-slate-900/50 backdrop-blur-xl shadow-xl overflow-hidden">
+            <div className="grid flex-1 grid-cols-1 gap-4 lg:min-h-0 lg:grid-cols-12">
+              {/* Left Column: Explorer Panel */}
+              <div className="flex min-h-0 flex-col overflow-hidden rounded-xl border border-slate-800 bg-slate-900/40 lg:col-span-7">
                 <HotspotToolbar
                   searchTerm={searchTerm}
                   setSearchTerm={setSearchTerm}
@@ -319,17 +311,17 @@ export default function Hotspots() {
                   setSortKey={setSortKey}
                 />
 
-                <div className="px-5 py-2.5 border-b border-slate-800/80 shrink-0 flex items-center justify-between bg-slate-900/80">
-                  <span className="text-xs font-semibold uppercase tracking-wider text-slate-400">
-                    Most Changed Files
+                <div className="flex shrink-0 items-center justify-between border-b border-slate-800 bg-slate-900/60 px-4 py-2">
+                  <span className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+                    Most changed files
                   </span>
-                  <span className="text-[11px] font-mono text-slate-500">
+                  <span className="font-mono text-[11px] text-slate-500">
                     {filteredHotspots.length} file
-                    {filteredHotspots.length === 1 ? "" : "s"} matched
+                    {filteredHotspots.length === 1 ? "" : "s"}
                   </span>
                 </div>
 
-                <div className="flex-1 overflow-y-auto divide-y divide-slate-800/50 custom-scrollbar">
+                <div className="divide-y divide-slate-800/70 lg:flex-1 lg:overflow-y-auto lg:min-h-0">
                   {filteredHotspots.length === 0 ? (
                     <HotspotEmptyState searchTerm={searchTerm} />
                   ) : (
@@ -353,7 +345,7 @@ export default function Hotspots() {
                 </div>
 
                 {filteredHotspots.length > 0 && (
-                  <div className="border-t border-slate-800/80 bg-slate-900/90">
+                  <div className="shrink-0 border-t border-slate-800 bg-slate-900/60">
                     <HotspotPagination
                       currentPage={currentPage}
                       totalPages={totalPages}
@@ -366,26 +358,51 @@ export default function Hotspots() {
                 )}
               </div>
 
-              {/* Right Column: AI Risk & Details Inspector (~42%) */}
-              <div className="lg:col-span-5 flex flex-col min-h-0 rounded-2xl border border-slate-800/80 bg-slate-900/50 backdrop-blur-xl shadow-xl overflow-hidden">
+              {/* Right Column: AI Risk & Details Inspector */}
+              {/* Desktop/tablet: always visible. Mobile: expandable section below the list. */}
+              <div
+                className={`min-h-0 flex-col overflow-hidden rounded-xl border border-slate-800 bg-slate-900/40 lg:col-span-5 lg:flex ${
+                  mobileDetailsOpen ? "flex" : "hidden lg:flex"
+                }`}
+              >
                 {selectedFile ? (
-                  <HotspotDetails
-                    selectedHotspot={selectedFile}
-                    repositoryId={repositoryId}
-                    onClose={() => setSelectedFile(null)}
-                    maxScore={maxScore}
-                  />
+                  <>
+                    <div className="flex shrink-0 items-center justify-between border-b border-slate-800 px-4 py-2 lg:hidden">
+                      <span className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+                        Hotspot details
+                      </span>
+                      <button
+                        type="button"
+                        aria-label="Close details"
+                        onClick={() => setMobileDetailsOpen(false)}
+                        className="rounded-md px-2 py-1 text-xs text-slate-400 transition-colors hover:bg-slate-800 hover:text-slate-200"
+                      >
+                        Close
+                      </button>
+                    </div>
+                    <div className="lg:min-h-0 lg:flex-1 lg:overflow-y-auto">
+                      <HotspotDetails
+                        selectedHotspot={selectedFile}
+                        repositoryId={repositoryId}
+                        onClose={() => {
+                          setSelectedFile(null);
+                          setMobileDetailsOpen(false);
+                        }}
+                        maxScore={maxScore}
+                      />
+                    </div>
+                  </>
                 ) : (
-                  <div className="flex-1 flex flex-col items-center justify-center text-center p-8">
-                    <div className="relative mb-4 flex h-12 w-12 items-center justify-center rounded-2xl bg-amber-500/10 text-amber-400 border border-amber-500/20">
-                      <Sparkles size={22} />
+                  <div className="flex flex-1 flex-col items-center justify-center px-8 py-12 text-center">
+                    <div className="mb-3 flex h-9 w-9 items-center justify-center rounded-lg border border-slate-700/60 bg-slate-800/60 text-slate-400">
+                      <Sparkles size={16} />
                     </div>
                     <p className="text-sm font-medium text-slate-300">
                       No hotspot selected
                     </p>
-                    <p className="text-xs text-slate-500 mt-1 max-w-[240px] leading-relaxed">
-                      Select a file from the list to analyze its modification
-                      history and AI risk breakdown.
+                    <p className="mt-1 max-w-[220px] text-xs leading-relaxed text-slate-500">
+                      Select a file from the list to view its change history
+                      and AI risk analysis.
                     </p>
                   </div>
                 )}

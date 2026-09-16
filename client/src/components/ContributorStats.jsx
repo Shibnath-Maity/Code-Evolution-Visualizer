@@ -1,14 +1,5 @@
 import React, { useMemo } from "react";
-import {
-  Users,
-  UserCheck,
-  GitCommit,
-  TrendingUp,
-  TrendingDown,
-  Minus,
-  Sparkles,
-  Layers,
-} from "lucide-react";
+import { Users, UserCheck, GitCommit, Layers, ArrowUp, ArrowDown, Minus } from "lucide-react";
 
 function formatNumber(value = 0) {
   return new Intl.NumberFormat("en-US").format(value);
@@ -26,56 +17,9 @@ function computeTrend(current, previous) {
 
   return {
     pct: Math.abs(pct),
-    direction:
-      pct > 0.05
-        ? "up"
-        : pct < -0.05
-        ? "down"
-        : "flat",
+    direction: pct > 0.05 ? "up" : pct < -0.05 ? "down" : "flat",
   };
 }
-
-const TREND_STYLES = {
-  up: {
-    icon: TrendingUp,
-    badgeClass: "text-emerald-400 bg-emerald-500/10 border-emerald-500/20",
-  },
-  down: {
-    icon: TrendingDown,
-    badgeClass: "text-rose-400 bg-rose-500/10 border-rose-500/20",
-  },
-  flat: {
-    icon: Minus,
-    badgeClass: "text-slate-400 bg-slate-800 border-slate-700/60",
-  },
-};
-
-const CARD_CONFIG = {
-  total: {
-    icon: Users,
-    glow: "from-blue-600/20 via-indigo-500/5 to-transparent",
-    iconBg: "bg-blue-500/10 text-blue-400 ring-blue-500/20",
-    barColor: "bg-blue-500 shadow-blue-500/50",
-  },
-  active: {
-    icon: UserCheck,
-    glow: "from-emerald-600/20 via-teal-500/5 to-transparent",
-    iconBg: "bg-emerald-500/10 text-emerald-400 ring-emerald-500/20",
-    barColor: "bg-emerald-500 shadow-emerald-500/50",
-  },
-  commits: {
-    icon: GitCommit,
-    glow: "from-violet-600/20 via-purple-500/5 to-transparent",
-    iconBg: "bg-violet-500/10 text-violet-400 ring-violet-500/20",
-    barColor: "bg-violet-500 shadow-violet-500/50",
-  },
-  avg: {
-    icon: Layers,
-    glow: "from-amber-600/20 via-orange-500/5 to-transparent",
-    iconBg: "bg-amber-500/10 text-amber-400 ring-amber-500/20",
-    barColor: "bg-amber-500 shadow-amber-500/50",
-  },
-};
 
 function summarize(list = []) {
   const totalContributors = list.length;
@@ -90,34 +34,189 @@ function summarize(list = []) {
 
   const activeContributors = list.filter((contributor) => {
     if (!contributor.lastContribution) return false;
-
-    const contributionDate = new Date(
-      contributor.lastContribution
-    ).getTime();
-
-    return (
-      !Number.isNaN(contributionDate) &&
-      now - contributionDate <= THIRTY_DAYS
-    );
+    const contributionDate = new Date(contributor.lastContribution).getTime();
+    return !Number.isNaN(contributionDate) && now - contributionDate <= THIRTY_DAYS;
   }).length;
 
   const averageCommits =
-    totalContributors > 0
-      ? (totalCommits / totalContributors).toFixed(1)
-      : "0.0";
+    totalContributors > 0 ? (totalCommits / totalContributors).toFixed(1) : "0.0";
 
-  return {
-    totalContributors,
-    totalCommits,
-    activeContributors,
-    averageCommits,
-  };
+  return { totalContributors, totalCommits, activeContributors, averageCommits };
 }
 
-const ContributorStats = ({
-  contributors = [],
-  previousContributors = null,
-}) => {
+// ---------------------------------------------------------------------------
+// Trend badge: compact, quiet, never louder than the metric it describes.
+// Direction is conveyed through icon + text, not color alone.
+// ---------------------------------------------------------------------------
+
+const TREND_STYLES = {
+  up: { Icon: ArrowUp, className: "text-emerald-600 dark:text-emerald-400" },
+  down: { Icon: ArrowDown, className: "text-rose-600 dark:text-rose-400" },
+  flat: { Icon: Minus, className: "text-slate-500 dark:text-slate-400" },
+};
+
+function TrendBadge({ trend }) {
+  if (!trend) {
+    return (
+      <span className="text-xs font-medium text-slate-400 dark:text-slate-500">
+        No prior period
+      </span>
+    );
+  }
+
+  const { Icon, className } = TREND_STYLES[trend.direction];
+  const label =
+    trend.direction === "flat"
+      ? "No change vs previous period"
+      : `${trend.direction === "up" ? "Increased" : "Decreased"} ${trend.pct.toFixed(
+          1
+        )}% vs previous period`;
+
+  return (
+    <span className={`inline-flex items-center gap-1 text-xs font-medium ${className}`}>
+      <Icon size={12} strokeWidth={2.5} aria-hidden="true" />
+      <span aria-hidden="true">
+        {trend.direction === "flat" ? "0%" : `${trend.pct.toFixed(1)}%`}
+      </span>
+      <span className="sr-only">{label}</span>
+    </span>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Compact commit activity indicator — top committers as small bars.
+// ---------------------------------------------------------------------------
+
+function CommitActivity({ contributors }) {
+  const topCommitters = useMemo(
+    () => [...contributors].sort((a, b) => (b.commits || 0) - (a.commits || 0)).slice(0, 6),
+    [contributors]
+  );
+
+  const maxCommits = Math.max(1, ...topCommitters.map((c) => c.commits || 0));
+
+  if (topCommitters.length === 0) {
+    return (
+      <p className="text-xs text-slate-400 dark:text-slate-500 py-2">
+        No commit activity yet
+      </p>
+    );
+  }
+
+  return (
+    <div>
+      <div
+        className="flex items-end gap-1 h-8"
+        role="img"
+        aria-label={`Top committer ${topCommitters[0]?.name || "unknown"} with ${
+          topCommitters[0]?.commits || 0
+        } commits`}
+      >
+        {topCommitters.map((contributor, index) => {
+          const heightPct = Math.max(12, ((contributor.commits || 0) / maxCommits) * 100);
+          return (
+            <div
+              key={contributor.email || contributor.name || index}
+              className="flex-1 h-full flex items-end"
+              title={`${contributor.name || "Unknown"}: ${formatNumber(
+                contributor.commits || 0
+              )} commits`}
+            >
+              <div
+                className={`w-full rounded-sm ${
+                  index === 0
+                    ? "bg-blue-600 dark:bg-blue-500"
+                    : "bg-slate-200 dark:bg-slate-700"
+                }`}
+                style={{ height: `${heightPct}%` }}
+              />
+            </div>
+          );
+        })}
+      </div>
+
+      <div className="mt-2 flex items-center justify-between text-xs">
+        <span className="text-slate-500 dark:text-slate-400">Top contributor</span>
+        <span className="font-medium text-slate-700 dark:text-slate-200 truncate max-w-[9rem] text-right">
+          {topCommitters[0]?.name || "—"}
+        </span>
+      </div>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Engagement rate — thin, quiet progress bar. No decorative pulsing.
+// ---------------------------------------------------------------------------
+
+function EngagementRate({ active, total }) {
+  const share = total > 0 ? (active / total) * 100 : 0;
+
+  return (
+    <div>
+      <div className="flex items-center justify-between text-xs mb-1.5">
+        <span className="text-slate-500 dark:text-slate-400">Engagement rate</span>
+        <span className="font-medium text-slate-700 dark:text-slate-200">
+          {share.toFixed(0)}%
+        </span>
+      </div>
+
+      <div
+        className="h-1.5 rounded-full bg-slate-200 dark:bg-slate-800 overflow-hidden"
+        role="progressbar"
+        aria-valuenow={Math.round(share)}
+        aria-valuemin={0}
+        aria-valuemax={100}
+        aria-label="Contributor engagement rate"
+      >
+        <div
+          className="h-full rounded-full bg-emerald-500"
+          style={{ width: `${Math.min(100, share)}%` }}
+        />
+      </div>
+
+      <p className="mt-2 text-xs text-slate-500 dark:text-slate-400">
+        {formatNumber(active)} of {formatNumber(total)} contributors active
+      </p>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Stat card shell
+// ---------------------------------------------------------------------------
+
+const ICONS = { total: Users, active: UserCheck, commits: GitCommit, avg: Layers };
+
+function StatCard({ statKey, title, value, trend, footer }) {
+  const Icon = ICONS[statKey];
+
+  return (
+    <div className="rounded-lg border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-5 transition-colors hover:border-slate-300 dark:hover:border-slate-700 focus-within:ring-2 focus-within:ring-blue-500/50">
+      <div className="flex items-center justify-between">
+        <span className="inline-flex items-center justify-center w-8 h-8 rounded-md bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400">
+          <Icon size={16} strokeWidth={2} aria-hidden="true" />
+        </span>
+        <TrendBadge trend={trend} />
+      </div>
+
+      <div className="mt-4">
+        <p className="text-xs font-medium text-slate-500 dark:text-slate-400">{title}</p>
+        <p className="mt-1 text-2xl font-semibold tracking-tight text-slate-900 dark:text-slate-50">
+          {value}
+        </p>
+      </div>
+
+      <div className="mt-4 pt-4 border-t border-slate-100 dark:border-slate-800">{footer}</div>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Main component — same props, same calculations.
+// ---------------------------------------------------------------------------
+
+const ContributorStats = ({ contributors = [], previousContributors = null }) => {
   const current = useMemo(() => summarize(contributors), [contributors]);
 
   const previous = useMemo(
@@ -125,202 +224,60 @@ const ContributorStats = ({
     [previousContributors]
   );
 
-  const topCommitters = useMemo(() => {
-    return [...contributors]
-      .sort((a, b) => (b.commits || 0) - (a.commits || 0))
-      .slice(0, 6);
-  }, [contributors]);
-
-  const maxCommits = Math.max(
-    1,
-    ...topCommitters.map((c) => c.commits || 0)
-  );
-
-  const activeShare =
-    current.totalContributors > 0
-      ? (current.activeContributors / current.totalContributors) * 100
-      : 0;
-
   const stats = [
     {
       key: "total",
-      title: "Total Contributors",
+      title: "Total contributors",
       value: formatNumber(current.totalContributors),
-      trend: computeTrend(
-        current.totalContributors,
-        previous?.totalContributors
+      trend: computeTrend(current.totalContributors, previous?.totalContributors),
+      footer: (
+        <EngagementRate active={current.activeContributors} total={current.totalContributors} />
       ),
     },
     {
       key: "active",
-      title: "Active Contributors",
+      title: "Active contributors",
       value: formatNumber(current.activeContributors),
-      trend: computeTrend(
-        current.activeContributors,
-        previous?.activeContributors
+      trend: computeTrend(current.activeContributors, previous?.activeContributors),
+      footer: (
+        <p className="text-xs text-slate-500 dark:text-slate-400">
+          Contributed within the last 30 days
+        </p>
       ),
     },
     {
       key: "commits",
-      title: "Total Commits",
+      title: "Total commits",
       value: formatNumber(current.totalCommits),
-      trend: computeTrend(
-        current.totalCommits,
-        previous?.totalCommits
-      ),
+      trend: computeTrend(current.totalCommits, previous?.totalCommits),
+      footer: <CommitActivity contributors={contributors} />,
     },
     {
       key: "avg",
-      title: "Average Commits",
+      title: "Average commits",
       value: current.averageCommits,
       trend: computeTrend(
         Number(current.averageCommits),
         previous ? Number(previous.averageCommits) : undefined
       ),
+      footer: (
+        <p className="text-xs text-slate-500 dark:text-slate-400">Per contributor, all time</p>
+      ),
     },
   ];
 
   return (
-    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6 mb-8">
-      {stats.map((stat) => {
-        const config = CARD_CONFIG[stat.key];
-        const Icon = config.icon;
-
-        const trendInfo = stat.trend
-          ? TREND_STYLES[stat.trend.direction]
-          : null;
-        const TrendIcon = trendInfo?.icon;
-
-        return (
-          <div
-            key={stat.key}
-            className="group relative overflow-hidden bg-slate-900/60 backdrop-blur-xl rounded-3xl p-6 border border-slate-800/80 shadow-xl hover:shadow-2xl hover:border-slate-700/80 transition-all duration-300 hover:-translate-y-1"
-          >
-            {/* Ambient Radiant Glow on Hover */}
-            <div
-              className={`absolute -top-16 -right-16 w-40 h-40 bg-gradient-to-br ${config.glow} rounded-full blur-3xl opacity-0 group-hover:opacity-100 transition-opacity duration-500 pointer-events-none`}
-            />
-
-            <div className="relative z-10 flex flex-col justify-between h-full">
-              {/* Card Header: Icon & Trend Badge */}
-              <div>
-                <div className="flex items-center justify-between">
-                  <div
-                    className={`p-3 rounded-2xl ring-1 ${config.iconBg} transition-transform duration-300 group-hover:scale-110 shadow-lg`}
-                  >
-                    <Icon size={22} strokeWidth={2.2} />
-                  </div>
-
-                  {stat.trend ? (
-                    <div
-                      className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-semibold border backdrop-blur-md ${trendInfo.badgeClass}`}
-                    >
-                      <TrendIcon size={13} strokeWidth={2.5} />
-                      <span>
-                        {stat.trend.direction === "flat"
-                          ? "0%"
-                          : `${stat.trend.pct.toFixed(1)}%`}
-                      </span>
-                    </div>
-                  ) : (
-                    <span className="px-3 py-1 text-[11px] font-medium text-slate-400 bg-slate-800/80 border border-slate-700/50 rounded-full">
-                      Baseline
-                    </span>
-                  )}
-                </div>
-
-                {/* Metric Value */}
-                <div className="mt-5">
-                  <p className="text-xs font-bold uppercase tracking-wider text-slate-400">
-                    {stat.title}
-                  </p>
-                  <h3 className="mt-1.5 text-3xl font-black tracking-tight text-white">
-                    {stat.value}
-                  </h3>
-                </div>
-              </div>
-
-              {/* Bottom Visual Widget Section */}
-              <div className="mt-6 pt-4 border-t border-slate-800/80">
-                {stat.key === "active" ? (
-                  <div>
-                    <div className="flex justify-between items-center text-xs font-medium text-slate-400 mb-2">
-                      <span className="flex items-center gap-1.5">
-                        <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
-                        Engagement Rate
-                      </span>
-                      <span className="font-bold text-slate-200">
-                        {activeShare.toFixed(0)}%
-                      </span>
-                    </div>
-
-                    <div className="h-2 rounded-full bg-slate-800 overflow-hidden p-0.5 ring-1 ring-slate-700/50">
-                      <div
-                        className="h-full rounded-full bg-gradient-to-r from-emerald-500 to-teal-400 transition-all duration-700 shadow-sm"
-                        style={{
-                          width: `${Math.min(100, activeShare)}%`,
-                        }}
-                      />
-                    </div>
-
-                    <p className="mt-2 text-[11px] text-slate-400 font-medium truncate">
-                      {current.activeContributors} active out of{" "}
-                      {current.totalContributors} members
-                    </p>
-                  </div>
-                ) : (
-                  <div>
-                    <div className="flex items-end gap-1.5 h-10 px-0.5">
-                      {topCommitters.length > 0 ? (
-                        topCommitters.map((contributor, index) => {
-                          const heightPct = Math.max(
-                            18,
-                            ((contributor.commits || 0) / maxCommits) * 100
-                          );
-
-                          return (
-                            <div
-                              key={
-                                contributor.email ||
-                                contributor.name ||
-                                index
-                              }
-                              className="flex-1 group/bar relative flex flex-col justify-end h-full"
-                            >
-                              <div
-                                className={`w-full rounded-t-md transition-all duration-300 ${
-                                  index === 0
-                                    ? `${config.barColor} shadow-md`
-                                    : "bg-slate-800 group-hover/bar:bg-slate-700"
-                                }`}
-                                style={{ height: `${heightPct}%` }}
-                              />
-                            </div>
-                          );
-                        })
-                      ) : (
-                        <div className="w-full flex items-center justify-center text-xs text-slate-500">
-                          No activity data
-                        </div>
-                      )}
-                    </div>
-
-                    <div className="mt-2.5 flex items-center justify-between text-[11px]">
-                      <span className="text-slate-400 font-medium flex items-center gap-1">
-                        <Sparkles size={12} className="text-indigo-400" />
-                        Top Performer
-                      </span>
-                      <span className="font-bold text-slate-200 truncate max-w-[110px]">
-                        {topCommitters[0]?.name || "-"}
-                      </span>
-                    </div>
-                  </div>
-                )}
-              </div>
-            </div>
-          </div>
-        );
-      })}
+    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+      {stats.map((stat) => (
+        <StatCard
+          key={stat.key}
+          statKey={stat.key}
+          title={stat.title}
+          value={stat.value}
+          trend={stat.trend}
+          footer={stat.footer}
+        />
+      ))}
     </div>
   );
 };

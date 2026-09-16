@@ -3,7 +3,7 @@ import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { AnalysisProvider } from "./context/AnalysisContext";
 import { ThemeProvider } from "./context/ThemeContext";
 import Home from "./pages/Home";
-import Board from "./pages/Board";
+import Board from "./pages/board";
 import DebugCenter from "./pages/DebugCenter";
 import Commits from "./pages/Commits";
 import Contributors from "./pages/Contributors";

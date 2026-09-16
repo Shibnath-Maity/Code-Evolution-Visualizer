@@ -2,38 +2,44 @@ import React, { useMemo } from "react";
 import {
   ShieldCheck,
   Wrench,
-  Brain,
+  GitBranch,
   TestTube2,
   BookOpen,
   Boxes,
   Activity,
-  AlertCircle,
+  Info,
 } from "lucide-react";
 
 function clamp(value, min = 0, max = 100) {
   return Math.max(min, Math.min(max, Math.round(value)));
 }
 
-// Single source of truth for score -> tier mapping with dark theme support
+// Single source of truth for score -> tier mapping
 const TIERS = [
-  { min: 90, label: "Excellent", text: "text-emerald-400", bar: "bg-emerald-500", ring: "text-emerald-400", bg: "bg-emerald-500/10 border-emerald-500/20" },
-  { min: 80, label: "Healthy", text: "text-emerald-400", bar: "bg-emerald-500", ring: "text-emerald-400", bg: "bg-emerald-500/10 border-emerald-500/20" },
-  { min: 70, label: "Good", text: "text-amber-400", bar: "bg-amber-500", ring: "text-amber-400", bg: "bg-amber-500/10 border-amber-500/20" },
-  { min: 60, label: "Needs Attention", text: "text-amber-400", bar: "bg-amber-500", ring: "text-amber-400", bg: "bg-amber-500/10 border-amber-500/20" },
-  { min: 40, label: "At Risk", text: "text-orange-400", bar: "bg-orange-500", ring: "text-orange-400", bg: "bg-orange-500/10 border-orange-500/20" },
-  { min: 0, label: "Critical", text: "text-rose-400", bar: "bg-rose-500", ring: "text-rose-400", bg: "bg-rose-500/10 border-rose-500/20" },
+  { min: 90, label: "Excellent", text: "text-emerald-600 dark:text-emerald-400", bar: "bg-emerald-500", ring: "text-emerald-500", badge: "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20" },
+  { min: 80, label: "Healthy", text: "text-emerald-600 dark:text-emerald-400", bar: "bg-emerald-500", ring: "text-emerald-500", badge: "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20" },
+  { min: 70, label: "Good", text: "text-amber-600 dark:text-amber-400", bar: "bg-amber-500", ring: "text-amber-500", badge: "bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/20" },
+  { min: 60, label: "Needs Attention", text: "text-amber-600 dark:text-amber-400", bar: "bg-amber-500", ring: "text-amber-500", badge: "bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/20" },
+  { min: 40, label: "At Risk", text: "text-orange-600 dark:text-orange-400", bar: "bg-orange-500", ring: "text-orange-500", badge: "bg-orange-500/10 text-orange-600 dark:text-orange-400 border-orange-500/20" },
+  { min: 0, label: "Critical", text: "text-rose-600 dark:text-rose-400", bar: "bg-rose-500", ring: "text-rose-500", badge: "bg-rose-500/10 text-rose-600 dark:text-rose-400 border-rose-500/20" },
 ];
 
 function getTier(score) {
   return TIERS.find((tier) => score >= tier.min) || TIERS[TIERS.length - 1];
 }
 
-function ScoreBar({ score }) {
+function ScoreBar({ score, trackClassName = "" }) {
   const tier = getTier(score);
   return (
-    <div className="w-full h-1.5 bg-slate-950/80 rounded-full overflow-hidden border border-slate-800/50">
+    <div
+      className={`w-full h-1.5 min-w-0 bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden ${trackClassName}`}
+      role="progressbar"
+      aria-valuenow={score}
+      aria-valuemin={0}
+      aria-valuemax={100}
+    >
       <div
-        className={`h-full rounded-full transition-all duration-1000 ${tier.bar}`}
+        className={`h-full rounded-full transition-[width] duration-500 ease-out ${tier.bar}`}
         style={{ width: `${score}%` }}
       />
     </div>
@@ -41,39 +47,45 @@ function ScoreBar({ score }) {
 }
 
 function ScoreItem({ icon: Icon, title, score, description, notAnalyzed = false }) {
-  const tier = getTier(score);
-  return (
-    <div className="bg-slate-950/50 hover:bg-slate-900/60 border border-slate-800/80 rounded-xl p-4 transition-all duration-200 flex flex-col justify-between space-y-3">
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          <div className="p-2 bg-slate-900 rounded-lg border border-slate-800 text-indigo-400 shrink-0">
-            <Icon size={18} />
-          </div>
+  const tier = notAnalyzed ? null : getTier(score);
 
-          <div>
-            <h3 className="text-xs font-bold text-slate-200">{title}</h3>
-            <p className="text-[11px] text-slate-400 font-mono mt-0.5">{description}</p>
+  return (
+    <div
+      className="min-w-0 border border-slate-200 dark:border-slate-800 rounded-lg p-4 bg-white dark:bg-slate-900 hover:border-slate-300 dark:hover:border-slate-700 transition-colors duration-150"
+    >
+      <div className="flex items-start justify-between gap-3 min-w-0">
+        <div className="flex items-start gap-2.5 min-w-0">
+          <Icon size={16} className="text-slate-400 dark:text-slate-500 shrink-0 mt-0.5" aria-hidden="true" />
+          <div className="min-w-0">
+            <h3 className="text-sm font-semibold text-slate-800 dark:text-slate-200 truncate">
+              {title}
+            </h3>
+            <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5 break-words">
+              {description}
+            </p>
           </div>
         </div>
 
         {notAnalyzed ? (
-          <span className="text-[10px] font-mono font-medium text-slate-500 uppercase tracking-wider bg-slate-900/80 border border-slate-800 px-2 py-0.5 rounded-md shrink-0">
+          <span className="text-[11px] font-medium text-slate-500 dark:text-slate-400 bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 px-2 py-0.5 rounded shrink-0">
             Pending
           </span>
         ) : (
-          <span className={`text-base font-black font-mono ${tier.text} shrink-0`}>
+          <span className={`text-sm font-semibold font-mono tabular-nums shrink-0 ${tier.text}`}>
             {score}
           </span>
         )}
       </div>
 
-      {notAnalyzed ? (
-        <div className="w-full h-1.5 bg-slate-950 rounded-full overflow-hidden border border-slate-800/40">
-          <div className="h-full w-full bg-slate-800/40" />
-        </div>
-      ) : (
-        <ScoreBar score={score} />
-      )}
+      <div className="mt-3">
+        {notAnalyzed ? (
+          <div className="w-full h-1.5 bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden">
+            <div className="h-full w-full bg-slate-200 dark:bg-slate-700/50 [background-image:repeating-linear-gradient(45deg,transparent,transparent_4px,rgba(148,163,184,0.3)_4px,rgba(148,163,184,0.3)_8px)]" />
+          </div>
+        ) : (
+          <ScoreBar score={score} />
+        )}
+      </div>
     </div>
   );
 }
@@ -195,90 +207,89 @@ export default function ProjectHealthScore({
   }, [fileAnalysis, codeEvolution, architecture]);
 
   const overallTier = getTier(scores.overall);
-  const radius = 42;
+  const radius = 40;
   const circumference = 2 * Math.PI * radius;
 
   return (
-    <div className="bg-slate-900/90 border border-slate-800/80 rounded-2xl shadow-xl backdrop-blur-xl overflow-hidden space-y-6">
+    <div className="w-full max-w-full min-w-0 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl overflow-hidden">
       {/* HEADER */}
-      <div className="p-6 border-b border-slate-800/80 flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          <div className="p-2 bg-indigo-500/10 border border-indigo-500/20 text-indigo-400 rounded-xl">
-            <Activity size={18} />
-          </div>
-          <div>
-            <h2 className="text-base font-bold text-white tracking-wide">
-              Project Health Score
+      <div className="flex flex-wrap items-center justify-between gap-2 px-4 sm:px-5 lg:px-6 py-3.5 border-b border-slate-200 dark:border-slate-800">
+        <div className="flex items-center gap-2.5 min-w-0">
+          <Activity size={16} className="text-indigo-500 shrink-0" aria-hidden="true" />
+          <div className="min-w-0">
+            <h2 className="text-sm font-semibold text-slate-900 dark:text-slate-100 leading-tight">
+              Project Health
             </h2>
-            <p className="text-xs text-slate-400 font-mono mt-0.5">
-              Overall quality and code health metrics
+            <p className="text-xs text-slate-500 dark:text-slate-400 leading-tight">
+              Repository quality overview
             </p>
           </div>
         </div>
 
-        <span className={`text-xs font-mono font-semibold px-3 py-1 rounded-full border ${overallTier.bg} ${overallTier.text}`}>
+        <span
+          className={`text-xs font-medium px-2.5 py-1 rounded-md border shrink-0 ${overallTier.badge}`}
+        >
           {overallTier.label}
         </span>
       </div>
 
-      {/* SCORE CIRCLE & DISPLAY */}
-      <div className="px-6 flex flex-col items-center justify-center">
-        <div
-          className="relative w-44 h-44 flex items-center justify-center"
-          role="img"
-          aria-label={`Overall project health score: ${scores.overall} out of 100, rated ${overallTier.label}`}
-        >
-          {/* Subtle Outer Glow */}
-          <div className="absolute inset-4 rounded-full bg-indigo-500/5 blur-xl pointer-events-none" />
-
-          <svg className="w-full h-full -rotate-90" viewBox="0 0 100 100">
-            <circle
-              cx="50"
-              cy="50"
-              r={radius}
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="6"
-              className="text-slate-950"
-            />
-            <circle
-              cx="50"
-              cy="50"
-              r={radius}
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="6"
-              strokeLinecap="round"
-              strokeDasharray={circumference}
-              strokeDashoffset={
-                circumference - (circumference * scores.overall) / 100
-              }
-              className={`${overallTier.ring} transition-all duration-1000 ease-out`}
-            />
-          </svg>
-
-          <div className="absolute inset-0 flex flex-col items-center justify-center text-center">
-            <span className={`text-4xl font-black font-mono tracking-tight ${overallTier.text}`}>
-              {scores.overall}
-            </span>
-            <span className="text-[11px] font-mono text-slate-400 uppercase tracking-widest mt-0.5">
-              / 100
-            </span>
+      {/* OVERALL SCORE */}
+      <div className="px-4 sm:px-5 lg:px-6 py-5 border-b border-slate-200 dark:border-slate-800">
+        <div className="flex flex-col sm:flex-row items-center sm:items-center gap-5 sm:gap-8">
+          <div className="text-center sm:text-left w-full sm:w-auto">
+            <div className="flex items-baseline justify-center sm:justify-start gap-1">
+              <span className={`text-4xl font-semibold font-mono tabular-nums tracking-tight ${overallTier.text}`}>
+                {scores.overall}
+              </span>
+              <span className="text-sm text-slate-400 dark:text-slate-500 font-mono">
+                /100
+              </span>
+            </div>
+            <p className={`text-xs font-medium mt-1 ${overallTier.text}`}>
+              {overallTier.label}
+            </p>
+            <p className="text-xs text-slate-500 dark:text-slate-400 mt-2 max-w-xs">
+              Weighted across maintainability, complexity, testing,
+              documentation, and architecture.
+            </p>
           </div>
-        </div>
 
-        <div className="text-center mt-2 space-y-1">
-          <h3 className={`text-sm font-bold tracking-wider uppercase font-mono ${overallTier.text}`}>
-            {overallTier.label} Status
-          </h3>
-          <p className="text-xs text-slate-400 font-mono">
-            Derived from repository AST and evolution analytics
-          </p>
+          <div
+            className="relative w-24 h-24 shrink-0 mx-auto sm:mx-0 sm:ml-auto"
+            role="img"
+            aria-label={`Overall project health score: ${scores.overall} out of 100, rated ${overallTier.label}`}
+          >
+            <svg className="w-full h-full -rotate-90" viewBox="0 0 96 96">
+              <circle
+                cx="48"
+                cy="48"
+                r={radius}
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="6"
+                className="text-slate-100 dark:text-slate-800"
+              />
+              <circle
+                cx="48"
+                cy="48"
+                r={radius}
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="6"
+                strokeLinecap="round"
+                strokeDasharray={circumference}
+                strokeDashoffset={
+                  circumference - (circumference * scores.overall) / 100
+                }
+                className={`${overallTier.ring} transition-[stroke-dashoffset] duration-700 ease-out`}
+              />
+            </svg>
+          </div>
         </div>
       </div>
 
-      {/* INDIVIDUAL SCORES GRID */}
-      <div className="p-6 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+      {/* METRICS GRID */}
+      <div className="p-4 sm:p-5 lg:p-6 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
         <ScoreItem
           icon={Wrench}
           title="Maintainability"
@@ -287,7 +298,7 @@ export default function ProjectHealthScore({
         />
 
         <ScoreItem
-          icon={Brain}
+          icon={GitBranch}
           title="Complexity"
           score={scores.complexity}
           description="Code churn and file dependencies"
@@ -298,7 +309,7 @@ export default function ProjectHealthScore({
           title="Security"
           score={scores.security}
           notAnalyzed={!scores.securityAnalyzed}
-          description="Awaiting security module"
+          description="Security analysis unavailable"
         />
 
         <ScoreItem
@@ -324,10 +335,10 @@ export default function ProjectHealthScore({
       </div>
 
       {/* FOOTER */}
-      <div className="px-6 py-3.5 bg-slate-950/60 border-t border-slate-800/80 flex items-center gap-2 text-[11px] text-slate-400 font-mono">
-        <AlertCircle size={14} className="text-indigo-400 shrink-0" />
-        <p className="truncate">
-          Security analysis is currently excluded from overall calculation.
+      <div className="px-4 sm:px-5 lg:px-6 py-2.5 border-t border-slate-200 dark:border-slate-800 flex items-center gap-1.5 text-xs text-slate-500 dark:text-slate-400">
+        <Info size={12} className="shrink-0" aria-hidden="true" />
+        <p className="min-w-0 break-words">
+          Security analysis is currently excluded from the overall score.
         </p>
       </div>
     </div>

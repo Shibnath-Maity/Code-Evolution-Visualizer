@@ -24,11 +24,14 @@ const COLOR_RGB = {
   primary: [15, 23, 42],
   secondary: [51, 65, 85],
   accent: [37, 99, 235],
+  accentLight: [239, 246, 255],
   text: [30, 41, 59],
   muted: [100, 116, 139],
   bgLight: [248, 250, 252],
   border: [226, 232, 240],
   white: [255, 255, 255],
+  success: [22, 163, 74],
+  danger: [225, 29, 72],
 };
 
 const PRIORITY_STYLES = {
@@ -44,6 +47,9 @@ const SEVERITY_STYLES = {
   LOW: [37, 99, 235],
 };
 
+const REPORT_TITLE = "Repository Analysis Report";
+const REPORT_BRAND = "RepoIQ AI";
+
 // --- Helper Functions ---
 function safeStr(val, fallback = "-") {
   if (val === null || val === undefined || val === "undefined" || val === "null" || Number.isNaN(val)) {
@@ -57,23 +63,37 @@ function safeNum(val, fallback = 0) {
   return isNaN(n) ? fallback : n;
 }
 
+function fmtNum(val) {
+  return safeNum(val).toLocaleString("en-US");
+}
+
+function generateReportId() {
+  const now = new Date();
+  const stamp = now.toISOString().slice(0, 10).replace(/-/g, "");
+  const rand = Math.random().toString(36).slice(2, 6).toUpperCase();
+  return `RPT-${stamp}-${rand}`;
+}
+
 /**
- * Renders a Chart.js chart off-screen to image data URL
+ * Renders a Chart.js chart off-screen to image data URL.
+ * Resolves null (never rejects) so a single failed chart never aborts the report.
  */
-function renderChartToImage(config, width = 600, height = 320) {
-  return new Promise((resolve, reject) => {
+function renderChartToImage(config, width = 640, height = 340) {
+  return new Promise((resolve) => {
+    let canvas;
+    let chart;
     try {
-      const canvas = document.createElement("canvas");
+      canvas = document.createElement("canvas");
       canvas.width = width;
       canvas.height = height;
 
-      const chart = new Chart(canvas, {
+      chart = new Chart(canvas, {
         ...config,
         options: {
           responsive: false,
           animation: false,
           devicePixelRatio: 2,
-          layout: { padding: 12 },
+          layout: { padding: 14 },
           ...config.options,
           plugins: {
             legend: {
@@ -93,13 +113,21 @@ function renderChartToImage(config, width = 600, height = 320) {
 
       requestAnimationFrame(() => {
         requestAnimationFrame(() => {
-          const dataUrl = canvas.toDataURL("image/png", 1.0);
-          chart.destroy();
-          resolve(dataUrl);
+          try {
+            const dataUrl = canvas.toDataURL("image/png", 1.0);
+            chart.destroy();
+            resolve(dataUrl);
+          } catch (e) {
+            console.warn("Chart export failed:", e);
+            if (chart) chart.destroy();
+            resolve(null);
+          }
         });
       });
     } catch (err) {
-      reject(err);
+      console.warn("Chart render failed:", err);
+      if (chart) chart.destroy();
+      resolve(null);
     }
   });
 }
@@ -138,6 +166,13 @@ function DownloadRepositoryReport(props) {
       const PAGE_RIGHT = 190;
       const PAGE_LEFT = 20;
       const CONTENT_W = 170;
+      const reportId = generateReportId();
+      const generatedAtLabel = new Date().toLocaleString("en-US", {
+        month: "long", day: "numeric", year: "numeric", hour: "numeric", minute: "2-digit",
+      });
+
+      // Section registry for the table of contents (populated as sections render)
+      const toc = [];
 
       // Normalize raw inputs safely
       const rawContributors = Array.isArray(contributors)
@@ -174,7 +209,7 @@ function DownloadRepositoryReport(props) {
         : 0;
 
       const repoName = (() => {
-        if (!repoUrl) return "Repository Analysis";
+        if (!repoUrl) return REPORT_TITLE;
         const cleaned = repoUrl.replace(/\.git$/, "").replace(/\/+$/, "");
         const parts = cleaned.split("/").filter(Boolean);
         return parts.length >= 2 ? parts.slice(-2).join("/") : cleaned;
@@ -199,9 +234,13 @@ function DownloadRepositoryReport(props) {
         return false;
       };
 
-      const addHeading = (text, { subheading = false, eyebrow = null } = {}) => {
+      const addHeading = (text, { subheading = false, eyebrow = null, registerToc = true } = {}) => {
         const blockHeight = subheading ? 12 : 20;
         checkPageOverflow(blockHeight);
+
+        if (!subheading && registerToc) {
+          toc.push({ title: text, page: doc.getNumberOfPages() });
+        }
 
         if (subheading) {
           doc.setFontSize(11);
@@ -276,6 +315,7 @@ function DownloadRepositoryReport(props) {
       };
 
       const addStatCards = (cards) => {
+        if (!cards || cards.length === 0) return;
         const cardW = (CONTENT_W - (cards.length - 1) * 4) / cards.length;
         const cardH = 24;
 
@@ -283,6 +323,7 @@ function DownloadRepositoryReport(props) {
 
         cards.forEach((c, i) => {
           const cx = PAGE_LEFT + i * (cardW + 4);
+          const valueStr = safeStr(c.value);
 
           doc.setFillColor(...COLOR_RGB.bgLight);
           doc.roundedRect(cx, y, cardW, cardH, 2, 2, "F");
@@ -295,9 +336,9 @@ function DownloadRepositoryReport(props) {
           doc.roundedRect(cx + 3, y + 2.5, cardW - 6, 1, 0.5, 0.5, "F");
 
           doc.setFont("helvetica", "bold");
-          doc.setFontSize(c.value.length > 8 ? 11 : 14);
+          doc.setFontSize(valueStr.length > 8 ? 11 : 14);
           doc.setTextColor(...COLOR_RGB.primary);
-          doc.text(safeStr(c.value), cx + cardW / 2, y + 13, { align: "center" });
+          doc.text(valueStr, cx + cardW / 2, y + 13, { align: "center" });
 
           doc.setFont("helvetica", "bold");
           doc.setFontSize(6.5);
@@ -334,7 +375,7 @@ function DownloadRepositoryReport(props) {
           doc.setFont("helvetica", "italic");
           doc.setFontSize(fontSize);
           doc.setTextColor(...COLOR_RGB.muted);
-          doc.text("No data available", PAGE_LEFT + 3, y + rowHeight / 2 + 2);
+          doc.text("No data available for this section.", PAGE_LEFT + 3, y + rowHeight / 2 + 2);
           y += rowHeight + 4;
           return;
         }
@@ -403,46 +444,66 @@ function DownloadRepositoryReport(props) {
       doc.rect(0, 0, 210, 297, "F");
 
       doc.setFillColor(...COLOR_RGB.accent);
-      doc.rect(0, 0, 210, 8, "F");
+      doc.rect(0, 0, 210, 6, "F");
 
-      doc.setFontSize(26);
+      // Brand mark
+      doc.setFillColor(37, 99, 235);
+      doc.roundedRect(PAGE_LEFT, 38, 10, 10, 2, 2, "F");
+      doc.setFontSize(9);
       doc.setFont("helvetica", "bold");
       doc.setTextColor(255, 255, 255);
-      doc.text("RepoIQ AI", PAGE_LEFT, 55);
-
-      doc.setFontSize(14);
-      doc.setFont("helvetica", "normal");
-      doc.setTextColor(147, 197, 253);
-      doc.text("Repository Analysis Report", PAGE_LEFT, 65);
-
-      doc.setFontSize(10);
-      doc.setTextColor(148, 163, 184);
-      doc.text("AI-powered repository intelligence and engineering analysis", PAGE_LEFT, 73);
-
-      doc.setDrawColor(51, 65, 85);
-      doc.setLineWidth(0.5);
-      doc.line(PAGE_LEFT, 85, PAGE_RIGHT, 85);
-
-      doc.setFillColor(30, 41, 59);
-      doc.roundedRect(PAGE_LEFT, 100, CONTENT_W, 110, 4, 4, "F");
+      doc.text("R", PAGE_LEFT + 5, 44.5, { align: "center" });
 
       doc.setFontSize(11);
       doc.setFont("helvetica", "bold");
+      doc.setTextColor(148, 163, 184);
+      doc.text(REPORT_BRAND.toUpperCase(), PAGE_LEFT + 14, 45);
+
+      doc.setFontSize(27);
+      doc.setFont("helvetica", "bold");
       doc.setTextColor(255, 255, 255);
-      doc.text("REPOSITORY METADATA", PAGE_LEFT + 10, 115);
+      doc.text(REPORT_TITLE, PAGE_LEFT, 66);
+
+      doc.setFontSize(10.5);
+      doc.setFont("helvetica", "normal");
+      doc.setTextColor(148, 163, 184);
+      doc.text("AI-powered repository intelligence and engineering analysis", PAGE_LEFT, 74);
+
+      doc.setDrawColor(51, 65, 85);
+      doc.setLineWidth(0.5);
+      doc.line(PAGE_LEFT, 86, PAGE_RIGHT, 86);
+
+      doc.setFillColor(30, 41, 59);
+      doc.roundedRect(PAGE_LEFT, 98, CONTENT_W, 118, 4, 4, "F");
+      doc.setDrawColor(51, 65, 85);
+      doc.setLineWidth(0.3);
+      doc.roundedRect(PAGE_LEFT, 98, CONTENT_W, 118, 4, 4, "S");
+
+      doc.setFontSize(10.5);
+      doc.setFont("helvetica", "bold");
+      doc.setTextColor(255, 255, 255);
+      doc.text("REPOSITORY METADATA", PAGE_LEFT + 10, 113);
+      doc.setDrawColor(71, 85, 105);
+      doc.setLineWidth(0.2);
+      doc.line(PAGE_LEFT + 10, 117, PAGE_RIGHT - 10, 117);
 
       const metaItems = [
         ["Repository Name", repoName],
         ["Repository URL", repoUrl || "Data unavailable"],
-        ["Report Date", new Date().toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" })],
+        ["Report Date", generatedAtLabel],
+        ["Report ID", reportId],
         ["Analysis Status", safeStr(data.status, "Completed")],
         ["Repository Owner", safeStr(data.owner, repoName.split("/")[0] || "-")],
         ["Current Branch", safeStr(data.branch || branches[0]?.name, "main")],
         ["Analyzed Commit", safeStr(data.commitSha || stats?.latestCommitSha, "-").substring(0, 10)],
       ];
 
-      let metaY = 127;
-      metaItems.forEach(([label, val]) => {
+      let metaY = 129;
+      metaItems.forEach(([label, val], idx) => {
+        if (idx % 2 === 1) {
+          doc.setFillColor(38, 48, 66);
+          doc.rect(PAGE_LEFT + 8, metaY - 6, CONTENT_W - 16, 9.5, "F");
+        }
         doc.setFontSize(8.5);
         doc.setFont("helvetica", "bold");
         doc.setTextColor(148, 163, 184);
@@ -450,19 +511,29 @@ function DownloadRepositoryReport(props) {
 
         doc.setFont("helvetica", "normal");
         doc.setTextColor(241, 245, 249);
-        doc.text(fitText(val, 105), PAGE_LEFT + 55, metaY);
-        metaY += 10;
+        doc.text(fitText(val, 100), PAGE_LEFT + 58, metaY);
+        metaY += 9.5;
       });
 
-      doc.setFontSize(8);
+      doc.setFontSize(7.5);
+      doc.setFont("helvetica", "bold");
       doc.setTextColor(100, 116, 139);
-      doc.text("Generated by RepoIQ AI Platform", PAGE_LEFT, 275);
+      doc.text("CONFIDENTIAL — PREPARED FOR INTERNAL ENGINEERING REVIEW", PAGE_LEFT, 270);
+      doc.setFont("helvetica", "normal");
+      doc.text(`Generated by ${REPORT_BRAND} Platform  ·  ${reportId}`, PAGE_LEFT, 276);
 
       doc.addPage();
       y = 20;
 
       // ==================================================
-      // 2. EXECUTIVE SUMMARY
+      // 2. TABLE OF CONTENTS (placeholder page — filled after content is known)
+      // ==================================================
+      const tocPageIndex = doc.getNumberOfPages();
+      doc.addPage(); // reserve; real TOC content written at the end once page numbers are known
+      y = 20;
+
+      // ==================================================
+      // 3. EXECUTIVE SUMMARY
       // ==================================================
       addHeading("Executive Summary", { eyebrow: "Overview" });
 
@@ -477,21 +548,21 @@ function DownloadRepositoryReport(props) {
 
       addHeading("Repository at a Glance", { subheading: true });
       addStatCards([
-        { label: "Total Files", value: String(totalFiles), colorRgb: [37, 99, 235] },
-        { label: "Lines of Code", value: totalLines.toLocaleString(), colorRgb: [79, 70, 229] },
-        { label: "Total Commits", value: String(totalCommits), colorRgb: [13, 148, 136] },
-        { label: "Contributors", value: String(contributorCount), colorRgb: [217, 119, 6] },
+        { label: "Total Files", value: fmtNum(totalFiles), colorRgb: [37, 99, 235] },
+        { label: "Lines of Code", value: fmtNum(totalLines), colorRgb: [79, 70, 229] },
+        { label: "Total Commits", value: fmtNum(totalCommits), colorRgb: [13, 148, 136] },
+        { label: "Contributors", value: fmtNum(contributorCount), colorRgb: [217, 119, 6] },
       ]);
 
       addStatCards([
-        { label: "Additions", value: `+${totalAdditions.toLocaleString()}`, colorRgb: [22, 163, 74] },
-        { label: "Deletions", value: `-${totalDeletions.toLocaleString()}`, colorRgb: [225, 29, 72] },
-        { label: "Code Churn", value: totalChurn.toLocaleString(), colorRgb: [147, 51, 234] },
-        { label: "Languages", value: String(languages.length), colorRgb: [2, 132, 199] },
+        { label: "Additions", value: `+${fmtNum(totalAdditions)}`, colorRgb: [22, 163, 74] },
+        { label: "Deletions", value: `-${fmtNum(totalDeletions)}`, colorRgb: [225, 29, 72] },
+        { label: "Code Churn", value: fmtNum(totalChurn), colorRgb: [147, 51, 234] },
+        { label: "Languages", value: fmtNum(languages.length), colorRgb: [2, 132, 199] },
       ]);
 
       // ==================================================
-      // 3. PROJECT HEALTH
+      // 4. PROJECT HEALTH
       // ==================================================
       addHeading("Project Health", { eyebrow: "Assessment" });
 
@@ -505,11 +576,14 @@ function DownloadRepositoryReport(props) {
 
       doc.setFillColor(...(healthGrade === "A" ? [236, 253, 245] : healthGrade === "B" ? [239, 246, 255] : [254, 243, 199]));
       doc.roundedRect(PAGE_LEFT, y, CONTENT_W, 22, 3, 3, "F");
+      doc.setDrawColor(...COLOR_RGB.border);
+      doc.setLineWidth(0.3);
+      doc.roundedRect(PAGE_LEFT, y, CONTENT_W, 22, 3, 3, "S");
 
       doc.setFontSize(16);
       doc.setFont("helvetica", "bold");
       doc.setTextColor(...COLOR_RGB.primary);
-      doc.text(`Overall Health Score: ${overallHealthScore} / 100 (${healthGrade})`, PAGE_LEFT + 8, y + 14);
+      doc.text(`Overall Health Score: ${overallHealthScore} / 100 (Grade ${healthGrade})`, PAGE_LEFT + 8, y + 14);
 
       y += 28;
 
@@ -530,7 +604,7 @@ function DownloadRepositoryReport(props) {
         [35, 20, 30, 85]
       );
 
-      // Render charts off-screen in parallel
+      // Render charts off-screen in parallel (never throws — resolves null on failure)
       const [languageChartImg, contributorsChartImg, hotspotsChartImg, commitActivityChartImg] =
         await Promise.all([
           languages.length
@@ -620,11 +694,11 @@ function DownloadRepositoryReport(props) {
         ]);
 
       // ==================================================
-      // 4. CONTRIBUTOR ANALYSIS
+      // 5. CONTRIBUTOR ANALYSIS
       // ==================================================
       addHeading("Contributor Analysis", { eyebrow: "Team" });
-      addLine("Total Contributors", String(contributorCount));
-      addLine("Average Commits / Contributor", String(avgCommitsPerContributor));
+      addLine("Total Contributors", fmtNum(contributorCount));
+      addLine("Average Commits / Contributor", fmtNum(avgCommitsPerContributor));
 
       addTable(
         ["Rank", "Contributor", "Commits", "Additions", "Deletions", "Churn"],
@@ -634,10 +708,10 @@ function DownloadRepositoryReport(props) {
           return [
             i + 1,
             c.name || c.author || "Unknown",
-            safeNum(c.commits),
-            `+${add.toLocaleString()}`,
-            `-${del.toLocaleString()}`,
-            (add + del).toLocaleString(),
+            fmtNum(c.commits),
+            `+${fmtNum(add)}`,
+            `-${fmtNum(del)}`,
+            fmtNum(add + del),
           ];
         }),
         [15, 55, 25, 25, 25, 25]
@@ -646,10 +720,10 @@ function DownloadRepositoryReport(props) {
       addChartImage("Top Contributor Commit Impact", contributorsChartImg);
 
       // ==================================================
-      // 5. COMMIT & DEVELOPMENT ACTIVITY
+      // 6. COMMIT & DEVELOPMENT ACTIVITY
       // ==================================================
       addHeading("Commit & Development Activity", { eyebrow: "Velocity" });
-      addLine("Total Commits Analyzed", String(totalCommits));
+      addLine("Total Commits Analyzed", fmtNum(totalCommits));
 
       addHeading("Recent Commits", { subheading: true });
       addTable(
@@ -658,14 +732,14 @@ function DownloadRepositoryReport(props) {
           c.date ? new Date(c.date).toLocaleDateString() : "-",
           c.author_name || c.author || "Developer",
           c.message || "Commit update",
-          `+${safeNum(c.additions)}`,
-          `-${safeNum(c.deletions)}`,
+          `+${fmtNum(c.additions)}`,
+          `-${fmtNum(c.deletions)}`,
         ]),
         [25, 35, 70, 20, 20]
       );
 
       // ==================================================
-      // 6. CODEBASE / FILE ANALYSIS
+      // 7. CODEBASE / FILE ANALYSIS
       // ==================================================
       addHeading("Codebase & File Analysis", { eyebrow: "Metrics" });
 
@@ -675,9 +749,9 @@ function DownloadRepositoryReport(props) {
         largestFiles.slice(0, 8).map((f, i) => [
           i + 1,
           f.path || f.name || "Unknown",
-          safeNum(f.lines).toLocaleString(),
+          fmtNum(f.lines),
           f.size ? `${(safeNum(f.size) / 1024).toFixed(1)} KB` : "-",
-          safeNum(f.changes),
+          fmtNum(f.changes),
         ]),
         [12, 98, 20, 20, 20]
       );
@@ -691,10 +765,10 @@ function DownloadRepositoryReport(props) {
           return [
             i + 1,
             f.path || f.name || "Unknown",
-            safeNum(f.changes),
-            `+${add.toLocaleString()}`,
-            `-${del.toLocaleString()}`,
-            (f.churn ?? add + del).toLocaleString(),
+            fmtNum(f.changes),
+            `+${fmtNum(add)}`,
+            `-${fmtNum(del)}`,
+            fmtNum(f.churn ?? add + del),
           ];
         }),
         [12, 88, 20, 25, 25, 20]
@@ -724,18 +798,18 @@ function DownloadRepositoryReport(props) {
         addTable(
           ["Construct / Quality Metric", "Detected Count"],
           [
-            ["Functions / Methods", aggregatedMetrics.functions.toLocaleString()],
-            ["Classes", aggregatedMetrics.classes.toLocaleString()],
-            ["Async Functions", aggregatedMetrics.asyncFunctions.toLocaleString()],
-            ["TODO Annotations", aggregatedMetrics.todos.toLocaleString()],
-            ["Console Logs", aggregatedMetrics.consoleLogs.toLocaleString()],
+            ["Functions / Methods", fmtNum(aggregatedMetrics.functions)],
+            ["Classes", fmtNum(aggregatedMetrics.classes)],
+            ["Async Functions", fmtNum(aggregatedMetrics.asyncFunctions)],
+            ["TODO Annotations", fmtNum(aggregatedMetrics.todos)],
+            ["Console Logs", fmtNum(aggregatedMetrics.consoleLogs)],
           ],
           [120, 50]
         );
       }
 
       // ==================================================
-      // 7. LANGUAGE ANALYSIS
+      // 8. LANGUAGE ANALYSIS
       // ==================================================
       addHeading("Language Breakdown", { eyebrow: "Stack" });
       addTable(
@@ -750,7 +824,7 @@ function DownloadRepositoryReport(props) {
       addChartImage("Technology & Language Distribution", languageChartImg);
 
       // ==================================================
-      // 8. TECHNICAL FOCUS
+      // 9. TECHNICAL FOCUS
       // ==================================================
       addHeading("Technical Focus", { eyebrow: "Architecture Focus" });
 
@@ -765,7 +839,7 @@ function DownloadRepositoryReport(props) {
       }
 
       // ==================================================
-      // 9. HOTSPOT ANALYSIS
+      // 10. HOTSPOT ANALYSIS
       // ==================================================
       addHeading("Hotspot Analysis", { eyebrow: "Risk" });
       doc.setFontSize(8.5);
@@ -790,9 +864,9 @@ function DownloadRepositoryReport(props) {
             i + 1,
             h.file || h.path || "Unknown",
             { text: risk, color, bold: true },
-            safeNum(h.changes ?? h.commitCount),
-            safeNum(h.churn).toLocaleString(),
-            safeNum(h.contributors || 1),
+            fmtNum(h.changes ?? h.commitCount),
+            fmtNum(h.churn),
+            fmtNum(h.contributors || 1),
           ];
         }),
         [12, 78, 25, 18, 18, 19]
@@ -801,7 +875,7 @@ function DownloadRepositoryReport(props) {
       addChartImage("Hotspot Change Pressure", hotspotsChartImg);
 
       // ==================================================
-      // 10. CODE EVOLUTION
+      // 11. CODE EVOLUTION
       // ==================================================
       if (codeEvolution && codeEvolution.length > 0) {
         addHeading("Code Evolution", { eyebrow: "History" });
@@ -809,7 +883,7 @@ function DownloadRepositoryReport(props) {
       }
 
       // ==================================================
-      // 11. ARCHITECTURE
+      // 12. ARCHITECTURE
       // ==================================================
       if (architecture) {
         addHeading("Architecture & Structure", { eyebrow: "Layout" });
@@ -832,7 +906,7 @@ function DownloadRepositoryReport(props) {
       }
 
       // ==================================================
-      // 12. BRANCH ANALYSIS
+      // 13. BRANCH ANALYSIS
       // ==================================================
       if (branchList.length > 0) {
         addHeading("Branch Analysis", { eyebrow: "Git Branches" });
@@ -848,7 +922,7 @@ function DownloadRepositoryReport(props) {
       }
 
       // ==================================================
-      // 13. AI REPOSITORY SUMMARY
+      // 14. AI REPOSITORY SUMMARY
       // ==================================================
       addHeading("AI Repository Summary", { eyebrow: "Intelligence" });
 
@@ -872,7 +946,7 @@ function DownloadRepositoryReport(props) {
       }
 
       // ==================================================
-      // 14. KEY FINDINGS
+      // 15. KEY FINDINGS
       // ==================================================
       addHeading("Key Findings", { eyebrow: "Observations" });
 
@@ -886,7 +960,7 @@ function DownloadRepositoryReport(props) {
           hotspotList.length > 3 ? "Multiple files experiencing frequent modification pressure." : "Low automated testing coverage detected.",
         ],
         patterns: [
-          `Primary additions (+${totalAdditions.toLocaleString()}) exceed total deletions (-${totalDeletions.toLocaleString()}).`,
+          `Primary additions (+${fmtNum(totalAdditions)}) exceed total deletions (-${fmtNum(totalDeletions)}).`,
         ],
         risks: [
           hotspotList[0] ? `High churn pressure focused on ${hotspotList[0]?.file || hotspotList[0]?.path}.` : "Moderate maintainability risk.",
@@ -896,24 +970,24 @@ function DownloadRepositoryReport(props) {
       const findingsData = keyFindings || insights?.keyFindings || defaultFindings;
 
       if (findingsData.strengths?.length) {
-        addHeading("1. Strengths", { subheading: true });
+        addHeading("Strengths", { subheading: true });
         addBullets(findingsData.strengths);
       }
       if (findingsData.concerns?.length) {
-        addHeading("2. Areas of Concern", { subheading: true });
+        addHeading("Areas of Concern", { subheading: true });
         addBullets(findingsData.concerns);
       }
       if (findingsData.patterns?.length) {
-        addHeading("3. Development Patterns", { subheading: true });
+        addHeading("Development Patterns", { subheading: true });
         addBullets(findingsData.patterns);
       }
       if (findingsData.risks?.length) {
-        addHeading("4. Technical Risks", { subheading: true });
+        addHeading("Technical Risks", { subheading: true });
         addBullets(findingsData.risks);
       }
 
       // ==================================================
-      // 15. AI RECOMMENDATIONS
+      // 16. AI RECOMMENDATIONS
       // ==================================================
       addHeading("AI Recommendations", { eyebrow: "Action Items" });
 
@@ -964,7 +1038,7 @@ function DownloadRepositoryReport(props) {
       });
 
       // ==================================================
-      // 16. RISKS & AREAS FOR IMPROVEMENT
+      // 17. RISKS & AREAS FOR IMPROVEMENT
       // ==================================================
       addHeading("Risks & Areas for Improvement", { eyebrow: "Risk Audit" });
 
@@ -1001,7 +1075,7 @@ function DownloadRepositoryReport(props) {
       );
 
       // ==================================================
-      // 17. IMPORTANT FILES
+      // 18. IMPORTANT FILES
       // ==================================================
       const keyFilesList = importantFiles.length
         ? importantFiles
@@ -1025,7 +1099,7 @@ function DownloadRepositoryReport(props) {
       }
 
       // ==================================================
-      // 18. FINAL ENGINEERING CONCLUSION
+      // 19. FINAL ENGINEERING CONCLUSION
       // ==================================================
       addHeading("Final Engineering Conclusion", { eyebrow: "Conclusion" });
 
@@ -1079,7 +1153,52 @@ function DownloadRepositoryReport(props) {
       }
 
       // ==================================================
-      // FOOTER & PAGE NUMBERS (ALL PAGES)
+      // BACKFILL TABLE OF CONTENTS
+      // ==================================================
+      doc.setPage(tocPageIndex);
+      let tocY = 20;
+      doc.setFontSize(15);
+      doc.setFont("helvetica", "bold");
+      doc.setTextColor(...COLOR_RGB.primary);
+      doc.text("Table of Contents", PAGE_LEFT, tocY);
+      tocY += 3;
+      doc.setDrawColor(...COLOR_RGB.border);
+      doc.setLineWidth(0.4);
+      doc.line(PAGE_LEFT, tocY, PAGE_RIGHT, tocY);
+      doc.setDrawColor(...COLOR_RGB.accent);
+      doc.setLineWidth(1.2);
+      doc.line(PAGE_LEFT, tocY, PAGE_LEFT + 16, tocY);
+      tocY += 12;
+
+      toc.forEach((entry, i) => {
+        doc.setFontSize(9.5);
+        doc.setFont("helvetica", "normal");
+        doc.setTextColor(...COLOR_RGB.text);
+        const num = `${i + 1}.`;
+        doc.text(num, PAGE_LEFT, tocY);
+        doc.text(entry.title, PAGE_LEFT + 8, tocY);
+
+        const pageLabel = String(entry.page);
+        const titleWidth = doc.getTextWidth(entry.title);
+        const dotsStart = PAGE_LEFT + 10 + titleWidth;
+        const dotsEnd = PAGE_RIGHT - doc.getTextWidth(pageLabel) - 2;
+        if (dotsEnd > dotsStart) {
+          doc.setTextColor(...COLOR_RGB.border);
+          doc.setLineDashPattern([0.5, 1.2], 0);
+          doc.line(dotsStart + 2, tocY - 1, dotsEnd, tocY - 1);
+          doc.setLineDashPattern([], 0);
+        }
+
+        doc.setTextColor(...COLOR_RGB.muted);
+        doc.text(pageLabel, PAGE_RIGHT, tocY, { align: "right" });
+        tocY += 8.5;
+      });
+
+      // Return to the last page so subsequent operations (footers) behave predictably
+      doc.setPage(doc.getNumberOfPages());
+
+      // ==================================================
+      // FOOTER & PAGE NUMBERS (ALL PAGES EXCEPT COVER)
       // ==================================================
       const totalPages = doc.getNumberOfPages();
       for (let i = 1; i <= totalPages; i++) {
@@ -1092,7 +1211,8 @@ function DownloadRepositoryReport(props) {
         doc.setTextColor(...COLOR_RGB.muted);
 
         // Top Header
-        doc.text("RepoIQ AI — Executive Engineering Report", PAGE_LEFT, 12);
+        doc.text(`${REPORT_BRAND} — Executive Engineering Report`, PAGE_LEFT, 12);
+        doc.text(reportId, PAGE_RIGHT, 12, { align: "right" });
         doc.setDrawColor(...COLOR_RGB.border);
         doc.setLineWidth(0.2);
         doc.line(PAGE_LEFT, 14, PAGE_RIGHT, 14);

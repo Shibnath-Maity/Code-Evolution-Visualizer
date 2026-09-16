@@ -14,17 +14,15 @@ import {
   Plus,
   Minus,
   X,
-  Sparkles,
   ArrowRight,
-  MousePointerClick,
   FilterX,
-  Activity,
 } from "lucide-react";
+
+const COMMITS_PER_PAGE = 10;
 
 function Commits() {
   const { analysis, repositoryId } = useAnalysis();
 
-  // Memoize raw commits array from context
   const commits = useMemo(() => analysis?.allCommits || [], [analysis]);
   const commitStatistics = analysis?.commitStatistics || null;
 
@@ -38,9 +36,6 @@ function Commits() {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
 
-  const COMMITS_PER_PAGE = 10;
-
-  // Close & reset modal helper
   const closeModal = useCallback(() => {
     setIsModalOpen(false);
     setSelectedCommit(null);
@@ -48,13 +43,11 @@ function Commits() {
     setAiSummary(null);
   }, []);
 
-  // Reset pagination and active details when switching repositories
   useEffect(() => {
     setCurrentPage(1);
     closeModal();
   }, [repositoryId, closeModal]);
 
-  // Lock background scroll when modal popup is open
   useEffect(() => {
     if (isModalOpen) {
       document.body.style.overflow = "hidden";
@@ -66,7 +59,6 @@ function Commits() {
     };
   }, [isModalOpen]);
 
-  // Keyboard shortcut listener to close modal on 'Esc' key
   useEffect(() => {
     const handleKeyDown = (e) => {
       if (e.key === "Escape" && isModalOpen) {
@@ -77,10 +69,8 @@ function Commits() {
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [isModalOpen, closeModal]);
 
-  // Memoize filtered commits
   const filteredCommits = useMemo(() => {
     const search = searchTerm.trim().toLowerCase();
-
     return commits.filter((commit) => {
       return (
         (commit.message || "").toLowerCase().includes(search) ||
@@ -90,7 +80,6 @@ function Commits() {
     });
   }, [commits, searchTerm]);
 
-  // Ensure totalPages is at least 1 even when empty
   const totalPages = Math.max(
     1,
     Math.ceil(filteredCommits.length / COMMITS_PER_PAGE)
@@ -98,19 +87,14 @@ function Commits() {
 
   const startIndex = (currentPage - 1) * COMMITS_PER_PAGE;
 
-  // Memoize paginated commits slice
   const paginatedCommits = useMemo(() => {
-    return filteredCommits.slice(
-      startIndex,
-      startIndex + COMMITS_PER_PAGE
-    );
+    return filteredCommits.slice(startIndex, startIndex + COMMITS_PER_PAGE);
   }, [filteredCommits, startIndex]);
 
   const handleCommitClick = useCallback(
     async (hash) => {
       if (!hash) return;
 
-      // Open modal immediately to show loading skeleton
       setIsModalOpen(true);
 
       try {
@@ -147,17 +131,14 @@ function Commits() {
 
   if (!analysis) {
     return (
-      <div className="flex flex-col justify-center items-center h-screen bg-slate-950 text-slate-300 relative overflow-hidden">
-        <div className="absolute inset-0 bg-radial from-indigo-500/10 via-transparent to-transparent blur-2xl pointer-events-none" />
-        <div className="relative z-10 flex flex-col items-center max-w-sm text-center p-6 bg-slate-900/40 border border-slate-800/80 rounded-3xl backdrop-blur-xl shadow-2xl">
-          <div className="p-4 bg-indigo-500/10 border border-indigo-500/20 rounded-2xl text-indigo-400 mb-4 animate-bounce">
-            <GitCommit className="h-8 w-8" />
-          </div>
-          <h2 className="text-xl font-bold tracking-tight text-white">
+      <div className="flex flex-col justify-center items-center min-h-screen bg-slate-950 text-slate-300 px-6">
+        <div className="flex flex-col items-center max-w-xs text-center">
+          <GitCommit className="h-7 w-7 text-slate-600 mb-4" />
+          <h2 className="text-base font-semibold text-slate-200">
             No repository analyzed
           </h2>
-          <p className="text-xs text-slate-400 mt-2 leading-relaxed">
-            Select or analyze a repository from your dashboard to start exploring commit timelines and code diffs.
+          <p className="text-xs text-slate-500 mt-1.5 leading-relaxed">
+            Analyze a repository to explore its commit history.
           </p>
         </div>
       </div>
@@ -165,234 +146,183 @@ function Commits() {
   }
 
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100 p-4 sm:p-6 md:p-10 font-sans selection:bg-indigo-500/30">
-      <div className="max-w-7xl mx-auto space-y-8">
-        {/* Header Section */}
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-slate-800/60 pb-6">
-          <div className="flex items-center gap-4">
-            <div className="p-3 bg-gradient-to-br from-indigo-500/20 to-purple-500/10 border border-indigo-500/30 rounded-2xl text-indigo-400 shadow-lg shadow-indigo-500/5">
-              <GitCommit size={26} />
-            </div>
+    <div className="min-h-screen bg-slate-950 text-slate-100">
+      <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8 space-y-6">
+        {/* Header */}
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-4 border-b border-slate-800/70">
+          <div className="flex items-center gap-2.5">
+            <GitCommit size={18} className="text-slate-500" />
             <div>
-              <h1 className="text-2xl md:text-3xl font-bold tracking-tight text-white flex items-center gap-2">
-                Commit History
+              <h1 className="text-lg font-semibold text-slate-100 leading-tight">
+                Commits
               </h1>
-              <p className="text-xs md:text-sm text-slate-400 mt-1">
-                Explore, search, and inspect line-level code changes across your codebase
+              <p className="text-xs text-slate-500 mt-0.5">
+                Browse commit history and inspect code changes
               </p>
             </div>
           </div>
-
-          <div className="flex items-center gap-2.5 px-4 py-2 bg-slate-900/80 border border-slate-800 rounded-2xl text-xs font-mono text-slate-400 shadow-inner self-start md:self-auto">
-            <span className="relative flex h-2 w-2">
-              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-              <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
-            </span>
-            <span>Total Commits:</span>
-            <span className="text-white font-bold">{commits.length.toLocaleString()}</span>
+          <div className="text-xs font-mono text-slate-500 sm:text-right">
+            {commits.length.toLocaleString()} commits
           </div>
         </div>
 
-        {/* Search Bar */}
-        <div className="relative max-w-2xl group">
+        {/* Search */}
+        <div className="relative max-w-md">
           <Search
-            size={18}
-            className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-500 group-focus-within:text-indigo-400 transition-colors"
+            size={15}
+            className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500"
           />
           <input
             type="text"
-            placeholder="Search commits by message, author, or commit hash..."
+            placeholder="Search commits, authors, hashes..."
             value={searchTerm}
             onChange={(e) => {
               setSearchTerm(e.target.value);
               setCurrentPage(1);
             }}
-            className="w-full bg-slate-900/60 border border-slate-800/80 focus:border-indigo-500/60 rounded-2xl py-3.5 pl-11 pr-10 text-sm text-slate-200 placeholder-slate-500 outline-none transition-all duration-200 shadow-lg focus:shadow-indigo-500/5 focus:bg-slate-900/90 backdrop-blur-xl"
+            className="w-full bg-slate-900 border border-slate-800 focus:border-blue-600/70 rounded-md py-2 pl-9 pr-8 text-sm text-slate-200 placeholder-slate-500 outline-none transition-colors"
           />
           {searchTerm && (
             <button
               onClick={() => setSearchTerm("")}
-              className="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-300 p-1.5 rounded-xl hover:bg-slate-800 transition-colors"
               aria-label="Clear search"
+              className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-300"
             >
-              <X size={15} />
+              <X size={14} />
             </button>
           )}
         </div>
 
-        {/* Commit Type Chart & Statistics */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-stretch">
-          <CommitTypeChart commits={commits} />
-          <CommitStatistics stats={commitStatistics} />
+        {/* Statistics */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+          <div className="border border-slate-800/70 rounded-lg p-4">
+            <h3 className="text-xs font-medium text-slate-400 mb-3">
+              Commit types
+            </h3>
+            <CommitTypeChart commits={commits} />
+          </div>
+          <div className="border border-slate-800/70 rounded-lg p-4">
+            <h3 className="text-xs font-medium text-slate-400 mb-3">
+              Commit statistics
+            </h3>
+            <CommitStatistics stats={commitStatistics} />
+          </div>
         </div>
 
-        {/* Commit Feed List */}
-        <div className="space-y-4">
-          {/* Action Helper & Pagination Meta Info */}
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs font-mono text-slate-400 px-1">
-            <div className="flex items-center gap-2 text-indigo-300 bg-indigo-500/10 border border-indigo-500/20 px-3.5 py-1.5 rounded-xl w-fit backdrop-blur-md">
-              <MousePointerClick size={14} className="text-indigo-400 shrink-0" />
-              <span>Click any commit card to view diffs, files & AI breakdown</span>
-            </div>
-
-            <div className="flex items-center gap-2 self-end sm:self-auto bg-slate-900/40 px-3 py-1.5 rounded-xl border border-slate-800/50">
-              <Activity size={12} className="text-slate-500" />
-              <span>
-                Showing {filteredCommits.length > 0 ? startIndex + 1 : 0}–
-                {Math.min(startIndex + COMMITS_PER_PAGE, filteredCommits.length)} of{" "}
-                {filteredCommits.length}
-              </span>
-              {searchTerm && (
-                <span className="text-indigo-400 font-semibold">(Filtered)</span>
-              )}
-            </div>
+        {/* Commit list */}
+        <div className="space-y-3">
+          <div className="flex items-center justify-between text-xs text-slate-500 px-0.5">
+            <span>
+              Showing {filteredCommits.length > 0 ? startIndex + 1 : 0}–
+              {Math.min(startIndex + COMMITS_PER_PAGE, filteredCommits.length)}{" "}
+              of {filteredCommits.length}
+              {searchTerm && <span className="text-slate-400"> (filtered)</span>}
+            </span>
           </div>
 
           {filteredCommits.length === 0 ? (
-            <div className="bg-slate-900/40 border border-slate-800/80 rounded-3xl p-12 text-center backdrop-blur-xl space-y-3">
-              <div className="p-3 bg-slate-800/50 rounded-2xl w-fit mx-auto text-slate-500">
-                <FilterX size={28} />
-              </div>
-              <p className="text-base font-semibold text-slate-200">
+            <div className="border border-slate-800/70 rounded-lg py-14 text-center">
+              <FilterX size={22} className="mx-auto text-slate-600 mb-3" />
+              <p className="text-sm font-medium text-slate-300">
                 No matching commits found
               </p>
-              <p className="text-xs text-slate-500 max-w-sm mx-auto">
-                We couldn't find any commit matching "{searchTerm}". Try clearing or tweaking your search terms.
+              <p className="text-xs text-slate-500 mt-1">
+                No commit matches &quot;{searchTerm}&quot;.
               </p>
               <button
                 onClick={() => setSearchTerm("")}
-                className="inline-flex items-center gap-1.5 text-xs text-indigo-400 hover:text-indigo-300 font-medium pt-2 transition-colors"
+                className="text-xs text-blue-400 hover:text-blue-300 mt-3"
               >
-                Clear Search Filter
+                Clear search
               </button>
             </div>
           ) : (
-            <div className="space-y-3">
+            <div className="border border-slate-800/70 rounded-lg divide-y divide-slate-800/70 overflow-hidden">
               {paginatedCommits.map((commit) => (
-                <div
+                <button
                   key={commit.hash ?? `${commit.author_name}-${commit.date}`}
-                  onClick={() => {
-                    if (commit.hash) handleCommitClick(commit.hash);
-                  }}
-                  title="Click to inspect commit details"
-                  className="group relative bg-slate-900/40 hover:bg-slate-900/80 border border-slate-800/70 hover:border-indigo-500/40 rounded-2xl p-5 shadow-lg backdrop-blur-xl transition-all duration-200 hover:-translate-y-0.5 cursor-pointer overflow-hidden"
+                  type="button"
+                  onClick={() => commit.hash && handleCommitClick(commit.hash)}
+                  className="w-full text-left px-4 py-3.5 flex flex-col md:flex-row md:items-center justify-between gap-2.5 hover:bg-slate-900/60 transition-colors group focus:outline-none focus-visible:bg-slate-900/60"
                 >
-                  {/* Subtle hover gradient glow */}
-                  <div className="absolute inset-0 bg-gradient-to-r from-indigo-500/0 via-indigo-500/5 to-purple-500/10 opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none" />
-
-                  <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 relative z-10">
-                    {/* Left Details Section */}
-                    <div className="space-y-2.5 flex-1">
-                      <h2 className="text-base font-semibold text-slate-100 group-hover:text-indigo-200 transition-colors leading-snug">
-                        {commit.message}
-                      </h2>
-
-                      <div className="flex flex-wrap items-center gap-y-2 gap-x-4 text-xs text-slate-400">
-                        <span className="flex items-center gap-1.5 font-medium text-slate-300 bg-slate-800/40 px-2.5 py-1 rounded-lg border border-slate-800/60">
-                          <User size={13} className="text-indigo-400" />
-                          {commit.author_name}
-                        </span>
-
-                        <span className="flex items-center gap-1.5 font-mono">
-                          <Calendar size={13} className="text-slate-500" />
-                          {new Date(commit.date).toLocaleString()}
-                        </span>
-
-                        <span className="flex items-center gap-1.5 font-mono">
-                          <FileText size={13} className="text-slate-500" />
-                          {commit.files_changed || 0} files
-                        </span>
-                      </div>
-                    </div>
-
-                    {/* Right CTA Button & Diff Badges */}
-                    <div className="flex md:flex-col items-center md:items-end justify-between gap-3 border-t md:border-t-0 border-slate-800/60 pt-3 md:pt-0 shrink-0">
-                      {/* Explicit CTA Badge with Hash */}
-                      <span className="inline-flex items-center gap-2 px-3 py-1.5 rounded-xl bg-slate-800/70 group-hover:bg-indigo-600 border border-slate-700/50 group-hover:border-indigo-500/80 text-slate-300 group-hover:text-white text-xs font-medium transition-all duration-200 shadow-sm">
-                        <span>Inspect</span>
-                        <span className="font-mono text-[11px] text-slate-400 group-hover:text-indigo-200">
-                          ({(commit.hash || "").substring(0, 7)})
-                        </span>
-                        <ArrowRight
-                          size={13}
-                          className="text-slate-400 group-hover:text-white group-hover:translate-x-0.5 transition-transform duration-200"
-                        />
+                  <div className="min-w-0 flex-1">
+                    <p className="text-sm text-slate-100 truncate">
+                      {commit.message}
+                    </p>
+                    <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mt-1 text-xs text-slate-500">
+                      <span className="flex items-center gap-1">
+                        <User size={11} />
+                        {commit.author_name}
                       </span>
-
-                      {/* Additions / Deletions Counters */}
-                      <div className="flex items-center gap-1.5 text-xs font-mono">
-                        <span className="flex items-center gap-0.5 text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded-md border border-emerald-500/20">
-                          <Plus size={11} />
-                          {commit.additions || 0}
-                        </span>
-                        <span className="flex items-center gap-0.5 text-rose-400 bg-rose-500/10 px-2 py-0.5 rounded-md border border-rose-500/20">
-                          <Minus size={11} />
-                          {commit.deletions || 0}
-                        </span>
-                      </div>
+                      <span className="flex items-center gap-1">
+                        <Calendar size={11} />
+                        {new Date(commit.date).toLocaleDateString()}
+                      </span>
+                      <span className="flex items-center gap-1">
+                        <FileText size={11} />
+                        {commit.files_changed || 0} files
+                      </span>
                     </div>
                   </div>
-                </div>
+
+                  <div className="flex items-center gap-3 shrink-0 text-xs font-mono">
+                    <span className="text-slate-600">
+                      {(commit.hash || "").substring(0, 7)}
+                    </span>
+                    <span className="flex items-center gap-0.5 text-emerald-400">
+                      <Plus size={10} />
+                      {commit.additions || 0}
+                    </span>
+                    <span className="flex items-center gap-0.5 text-rose-400">
+                      <Minus size={10} />
+                      {commit.deletions || 0}
+                    </span>
+                    <ArrowRight
+                      size={13}
+                      className="text-slate-600 group-hover:text-slate-400 group-hover:translate-x-0.5 transition-all hidden sm:block"
+                    />
+                  </div>
+                </button>
               ))}
             </div>
           )}
 
-          <div className="pt-4">
-            <Pagination
-              currentPage={currentPage}
-              totalPages={totalPages}
-              onPageChange={setCurrentPage}
-            />
-          </div>
+          <Pagination
+            currentPage={currentPage}
+            totalPages={totalPages}
+            onPageChange={setCurrentPage}
+          />
         </div>
       </div>
 
-      {/* ========================================================= */}
-      {/* MODAL POPUP FOR COMMIT DETAILS                            */}
-      {/* ========================================================= */}
+      {/* Commit inspection modal */}
       {isModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-6 md:p-8">
-          {/* Glassmorphism Backdrop */}
+        <div className="fixed inset-0 z-50 flex items-center justify-center sm:p-6">
           <div
-            className="fixed inset-0 bg-slate-950/80 backdrop-blur-xl transition-opacity animate-in fade-in duration-200"
+            className="fixed inset-0 bg-slate-950/85"
             onClick={closeModal}
           />
 
-          {/* Modal Container */}
-          <div className="relative w-full max-w-5xl max-h-[90vh] bg-slate-900/95 border border-slate-800/90 rounded-3xl shadow-2xl overflow-hidden flex flex-col z-10 animate-in zoom-in-95 duration-200">
-            {/* Modal Header Bar */}
-            <div className="flex items-center justify-between px-6 py-4 border-b border-slate-800/80 bg-slate-900/80 backdrop-blur-md sticky top-0 z-20">
-              <div className="flex items-center gap-3">
-                <div className="p-2.5 rounded-xl bg-indigo-500/10 border border-indigo-500/20 text-indigo-400">
-                  <GitCommit size={20} />
-                </div>
-                <div>
-                  <h3 className="text-base font-bold text-white flex items-center gap-2">
-                    Commit Analysis & Diff
-                    <span className="text-[10px] uppercase tracking-wider font-mono px-2 py-0.5 rounded-md bg-indigo-500/15 text-indigo-300 border border-indigo-500/25 flex items-center gap-1">
-                      <Sparkles size={10} /> AI Enhanced
-                    </span>
-                  </h3>
-                  <p className="text-xs font-mono text-slate-400 mt-0.5">
-                    {selectedCommit?.hash
-                      ? `Hash: ${selectedCommit.hash}`
-                      : "Fetching commit details..."}
-                  </p>
-                </div>
+          <div className="relative w-full h-full sm:h-auto sm:max-h-[92vh] sm:max-w-5xl bg-slate-950 sm:border border-slate-800 sm:rounded-lg shadow-xl overflow-hidden flex flex-col z-10">
+            <div className="flex items-center justify-between px-4 sm:px-5 py-3 border-b border-slate-800/70 shrink-0">
+              <div className="min-w-0">
+                <p className="text-xs font-mono text-slate-500 truncate">
+                  Commit{" "}
+                  {selectedCommit?.hash
+                    ? selectedCommit.hash.substring(0, 10)
+                    : "..."}
+                </p>
               </div>
-
-              {/* Close Button */}
               <button
                 onClick={closeModal}
-                className="p-2 text-slate-400 hover:text-white bg-slate-800/60 hover:bg-slate-800 border border-slate-700/60 rounded-xl transition-all cursor-pointer focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                aria-label="Close commit details modal"
+                aria-label="Close commit details"
+                className="p-1.5 text-slate-500 hover:text-slate-200 hover:bg-slate-900 rounded-md transition-colors shrink-0"
               >
-                <X size={18} />
+                <X size={17} />
               </button>
             </div>
 
-            {/* Modal Scrollable Body */}
-            <div className="p-6 overflow-y-auto space-y-6 custom-scrollbar bg-slate-950/30">
+            <div className="overflow-y-auto flex-1">
               <CommitDetails
                 selectedCommit={selectedCommit}
                 loadingDetails={loadingDetails}
