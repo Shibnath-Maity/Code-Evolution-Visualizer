@@ -1,31 +1,12 @@
-const { GoogleGenAI, Type } = require("@google/genai");
+const { Type } = require("@google/genai");
+const aiGateway = require("./ai/aiGateway");
 
 // ==========================================
-// Gemini Configuration
-// ==========================================
-
-const GEMINI_API_KEY = process.env.GEMINI_FILE_ANALYSIS_API_KEY;
-
-if (!GEMINI_API_KEY) {
-  console.warn("⚠️ GEMINI_FILE_ANALYSIS_API_KEY is not configured.");
-}
-
-const ai = new GoogleGenAI({
-  apiKey: GEMINI_API_KEY,
-});
-
-// Current stable Gemini model
-const MODEL = "gemini-3.6-flash";
-
-// ==========================================
-// File limits & Timeout
+// File limits
 // ==========================================
 
 // Keep individual file requests reasonably sized.
 const MAX_FILE_CHARS = 12000;
-
-// Maximum time to wait for a Gemini response (15 seconds)
-const GEMINI_TIMEOUT_MS = 15000;
 
 // ==========================================
 // Prepare file content
@@ -232,10 +213,6 @@ async function analyzeFileWithAI(file) {
       throw new Error("File content is empty.");
     }
 
-    if (!GEMINI_API_KEY) {
-      throw new Error("GEMINI_FILE_ANALYSIS_API_KEY is not configured.");
-    }
-
     // ========================================
     // Prepare file information
     // ========================================
@@ -306,68 +283,42 @@ END SOURCE CODE
 ----------------------------------------
 `;
 
-    console.log(`🤖 Gemini analyzing file: ${filePath}`);
+    console.log(`🤖 AI Gateway analyzing file: ${filePath}`);
     const startTime = Date.now();
 
     // ========================================
-    // Gemini Request (With Timeout)
+    // AI Gateway Request
     // ========================================
 
-    const geminiRequest = ai.models.generateContent({
-      model: MODEL,
-      contents: prompt,
-      config: {
-        maxOutputTokens: 2000,
-        responseMimeType: "application/json",
-        responseSchema,
-      },
+    const result = await aiGateway.generateJSON(prompt, {
+      temperature: 0.2,
+      maxOutputTokens: 2000,
+      responseSchema,
     });
-
-    const timeoutPromise = new Promise((_, reject) => {
-      setTimeout(() => {
-        reject(
-          new Error(
-            `Analysis timed out after ${GEMINI_TIMEOUT_MS}ms. The file might be too complex or the AI is busy.`
-          )
-        );
-      }, GEMINI_TIMEOUT_MS);
-    });
-
-    // Race the generation against the timeout
-    const response = await Promise.race([geminiRequest, timeoutPromise]);
 
     const elapsed = Date.now() - startTime;
-    console.log(`⏱️ Gemini response time: ${elapsed}ms`);
 
-    // ========================================
-    // Extract & Parse response
-    // ========================================
+    console.log(`⏱️ AI response time: ${elapsed}ms`);
+    console.log(
+      `🤖 File Analysis AI → ${result.provider} → ${result.model}`
+    );
 
-    const raw = response?.text || "{}";
-    let parsed;
-
-    try {
-      parsed = JSON.parse(raw.trim());
-    } catch (parseError) {
-      console.error("❌ Gemini returned invalid JSON:", parseError.message);
-      console.error("Gemini raw response:", raw);
-      throw new Error("Gemini returned invalid JSON.");
-    }
+    const parsed = result.data;
 
     // ========================================
     // Normalize result
     // ========================================
 
-    const result = normalizeAIResult(parsed);
-    console.log(`✅ Gemini analysis completed: ${filePath}`);
+    const normalizedResult = normalizeAIResult(parsed);
+    console.log(`✅ File analysis completed: ${filePath}`);
 
-    return result;
+    return normalizedResult;
   } catch (err) {
     // ========================================
     // Error handling
     // ========================================
 
-    console.error("❌ Gemini File Analysis Error:", err?.message || err);
+    console.error("❌ File Analysis Error:", err?.message || err);
 
     return normalizeAIResult({
       purpose: "Unable to analyze file",
@@ -380,7 +331,7 @@ END SOURCE CODE
       dependencies: [],
       designPatterns: [],
       dataFlow: [],
-      risks: [err?.message || "Unknown Gemini error"],
+      risks: [err?.message || "Unknown Gateway error"],
       relatedFiles: [],
       complexity: "Medium",
       maintainability: "Fair",

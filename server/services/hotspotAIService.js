@@ -1,4 +1,4 @@
-const { generateJSON } = require("./geminiService");
+const { generateJSON } = require("./ai/aiGateway");
 
 // ==========================================
 // Normalize file path
@@ -31,26 +31,33 @@ function findInsight(insights, hotspot) {
     return null;
   }
 
-  const hotspotPath = normalizeFilePath(
-    hotspot.file ||
-      hotspot.path ||
-      hotspot.filePath ||
-      ""
-  );
-
+  const rawPath = hotspot.file || hotspot.path || hotspot.filePath || "";
+  const hotspotPath = normalizeFilePath(rawPath);
   const hotspotName = getFileName(hotspotPath);
+
+  if (!hotspotPath) return null;
 
   // 1. Exact path match
   let match = insights.find((insight) => {
     const insightPath = normalizeFilePath(
-      insight.file ||
-        insight.path ||
-        insight.filePath ||
-        ""
+      insight.file || insight.path || insight.filePath || ""
+    );
+
+    return insightPath === hotspotPath;
+  });
+
+  if (match) {
+    return match;
+  }
+
+  // 2. Suffix path match (handles minor relative path variations)
+  match = insights.find((insight) => {
+    const insightPath = normalizeFilePath(
+      insight.file || insight.path || insight.filePath || ""
     );
 
     return (
-      insightPath === hotspotPath
+      insightPath.endsWith(hotspotPath) || hotspotPath.endsWith(insightPath)
     );
   });
 
@@ -58,22 +65,24 @@ function findInsight(insights, hotspot) {
     return match;
   }
 
-  // 2. Filename match
+  // 3. Filename match (fallback)
   match = insights.find((insight) => {
     const insightName = getFileName(
-      insight.file ||
-        insight.path ||
-        insight.filePath ||
-        ""
+      insight.file || insight.path || insight.filePath || ""
     );
 
-    return (
-      insightName === hotspotName
-    );
+    return insightName && insightName === hotspotName;
   });
 
   return match || null;
 }
+
+// Default recommendations fallback array
+const DEFAULT_RECOMMENDATIONS = [
+  "Review the file for unnecessary complexity.",
+  "Consider splitting large responsibilities into smaller modules.",
+  "Add or strengthen automated tests around frequently changed functionality.",
+];
 
 // ==========================================
 // Generate Hotspot Insights
@@ -81,38 +90,28 @@ function findInsight(insights, hotspot) {
 
 async function generateHotspotInsights(hotspots = []) {
   if (!Array.isArray(hotspots) || hotspots.length === 0) {
-    console.log(
-      "⚠️ No hotspots available for AI analysis."
-    );
+    console.log("⚠️ No hotspots available for AI analysis.");
 
     return [];
   }
 
   // Keep only useful hotspot information.
   const hotspotData = hotspots.map((hotspot) => ({
-    file:
-      hotspot.file ||
-      hotspot.path ||
-      hotspot.filePath ||
-      "Unknown",
+    file: String(
+      hotspot.file || hotspot.path || hotspot.filePath || "Unknown"
+    ),
 
-    changes:
-      Number(hotspot.changes) || 0,
+    changes: Number(hotspot.changes) || 0,
 
-    additions:
-      Number(hotspot.additions) || 0,
+    additions: Number(hotspot.additions) || 0,
 
-    deletions:
-      Number(hotspot.deletions) || 0,
+    deletions: Number(hotspot.deletions) || 0,
 
-    commits:
-      Number(hotspot.commits) || 0,
+    commits: Number(hotspot.commits) || 0,
 
-    score:
-      Number(hotspot.score) || 0,
+    score: Number(hotspot.score) || 0,
 
-    contributors:
-      Number(hotspot.contributors) || 0,
+    contributors: Number(hotspot.contributors) || 0,
   }));
 
   const prompt = `
@@ -191,11 +190,7 @@ Rules:
 
 HOTSPOT DATA:
 
-${JSON.stringify(
-  hotspotData,
-  null,
-  2
-)}
+${JSON.stringify(hotspotData, null, 2)}
 `;
 
   try {
@@ -203,110 +198,105 @@ ${JSON.stringify(
       `🤖 Generating AI insights for ${hotspotData.length} hotspots...`
     );
 
-    const aiResult =
-      await generateJSON(prompt);
+const aiResult = await generateJSON(prompt, {
+  jsonType: "array",
+});
 
-    // ==========================================
-    // Validate Gemini response
-    // ==========================================
+    console.log(
+      `🤖 Hotspot AI → ${aiResult.provider} → ${aiResult.model}`
+    );
 
-    let insights = aiResult;
+    // Actual parsed JSON returned by Gateway
+    let insights = aiResult.data;
 
     // Sometimes models return:
     // { "hotspots": [...] }
-    if (
-      !Array.isArray(insights) &&
-      Array.isArray(aiResult?.hotspots)
-    ) {
-      insights = aiResult.hotspots;
+    if (!Array.isArray(insights) && Array.isArray(insights?.hotspots)) {
+      insights = insights.hotspots;
     }
 
     if (!Array.isArray(insights)) {
       console.error(
-        "❌ Gemini hotspot response is not an array:",
-        aiResult
+        "❌ Hotspot AI response is not an array:",
+        insights
       );
 
       return [];
     }
 
     console.log(
-      `✅ Gemini generated ${insights.length} hotspot insights`
+      `✅ AI generated ${insights.length} hotspot insights`
     );
 
     // ==========================================
     // Normalize + match every hotspot
     // ==========================================
 
-    const finalInsights = hotspotData.map(
-      (hotspot) => {
-        const matchedInsight =
-          findInsight(
-            insights,
-            hotspot
+    const finalInsights = hotspotData.map((hotspot) => {
+      const matchedInsight = findInsight(insights, hotspot);
+
+      if (matchedInsight) {
+        // Guarantee at least 3 recommendations
+        let recommendations = Array.isArray(matchedInsight.recommendations)
+          ? matchedInsight.recommendations.filter(Boolean).slice(0, 3)
+          : [];
+
+        while (recommendations.length < 3) {
+          recommendations.push(
+            DEFAULT_RECOMMENDATIONS[recommendations.length]
           );
-
-        if (matchedInsight) {
-          return {
-            file: hotspot.file,
-
-            riskLevel:
-              ["Low", "Medium", "High"].includes(
-                matchedInsight.riskLevel
-              )
-                ? matchedInsight.riskLevel
-                : "Medium",
-
-            summary:
-              matchedInsight.summary ||
-              "This file has significant repository activity and should be reviewed for maintainability.",
-
-            recommendations:
-              Array.isArray(
-                matchedInsight.recommendations
-              )
-                ? matchedInsight.recommendations
-                    .slice(0, 3)
-                : [],
-
-            impact:
-              matchedInsight.impact ||
-              "Changes to this file may affect dependent parts of the repository.",
-          };
         }
-
-        // ==========================================
-        // Fallback if Gemini didn't return this file
-        // ==========================================
-
-        console.warn(
-          `⚠️ No AI insight matched: ${hotspot.file}`
-        );
 
         return {
           file: hotspot.file,
 
-          riskLevel:
-            hotspot.score >= 70
-              ? "High"
-              : hotspot.score >= 40
-              ? "Medium"
-              : "Low",
+          riskLevel: ["Low", "Medium", "High"].includes(
+            matchedInsight.riskLevel
+          )
+            ? matchedInsight.riskLevel
+            : hotspot.score >= 70
+            ? "High"
+            : hotspot.score >= 40
+            ? "Medium"
+            : "Low",
 
           summary:
-            "This file is frequently changed and should be reviewed for maintainability and potential architectural risk.",
+            matchedInsight.summary ||
+            "This file has significant repository activity and should be reviewed for maintainability.",
 
-          recommendations: [
-            "Review the file for unnecessary complexity.",
-            "Consider splitting large responsibilities into smaller modules.",
-            "Add or strengthen automated tests around frequently changed functionality.",
-          ],
+          recommendations,
 
           impact:
-            "Changes to this file may affect other parts of the application that depend on it.",
+            matchedInsight.impact ||
+            "Changes to this file may affect dependent parts of the repository.",
         };
       }
-    );
+
+      // ==========================================
+      // Fallback if AI didn't return this file
+      // ==========================================
+
+      console.warn(`⚠️ No AI insight matched: ${hotspot.file}`);
+
+      return {
+        file: hotspot.file,
+
+        riskLevel:
+          hotspot.score >= 70
+            ? "High"
+            : hotspot.score >= 40
+            ? "Medium"
+            : "Low",
+
+        summary:
+          "This file is frequently changed and should be reviewed for maintainability and potential architectural risk.",
+
+        recommendations: [...DEFAULT_RECOMMENDATIONS],
+
+        impact:
+          "Changes to this file may affect other parts of the application that depend on it.",
+      };
+    });
 
     console.log(
       `✅ Final hotspot insights: ${finalInsights.length}`
@@ -314,13 +304,8 @@ ${JSON.stringify(
 
     return finalInsights;
   } catch (err) {
-    console.error(
-      "❌ Hotspot AI Failed:"
-    );
-
-    console.error(
-      err.message || err
-    );
+    console.error("❌ Hotspot AI Failed:");
+    console.error(err.message || err);
 
     return [];
   }

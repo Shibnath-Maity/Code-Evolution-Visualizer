@@ -1,44 +1,4 @@
-const GEMINI_API_KEY = process.env.GEMINI_API_KEY_AI;
- GEMINI_MODEL = "gemini-3.6-flash";
-const GEMINI_API_URL = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent`;
-
-async function askGemini(question) {
-  if (!GEMINI_API_KEY) {
-    throw new Error("Gemini error: GEMINI_API_KEY_AI is not set");
-  }
-
-  const response = await fetch(`${GEMINI_API_URL}?key=${GEMINI_API_KEY}`, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      contents: [
-        {
-          role: "user",
-          parts: [{ text: question }],
-        },
-      ],
-    }),
-  });
-
-  if (!response.ok) {
-    const errText = await response.text();
-    throw new Error(`Gemini error: ${response.status} - ${errText}`);
-  }
-
-  const data = await response.json();
-
-  // Gemini returns candidates[0].content.parts[0].text
-  const text = data?.candidates?.[0]?.content?.parts?.[0]?.text ?? "";
-
-  if (!text) {
-    console.warn("Gemini returned empty text. Raw response:", JSON.stringify(data, null, 2));
-  }
-
-  return text;
-}
-
+const aiGateway = require("./ai/aiGateway");
 
 // ==========================================
 // Repository AI Analysis
@@ -89,10 +49,18 @@ RISK:
 Do not invent information that is not present in the data.
 `;
 
-  return await askGemini(prompt);
+  const result = await aiGateway.generate(prompt, {
+    temperature: 0.2,
+    maxOutputTokens: 1500,
+  });
+
+  console.log(
+    `🤖 Repository Analysis AI → ${result.provider} → ${result.model}`
+  );
+
+  return result.content;
 }
 
 module.exports = {
-  askGemini,
   analyzeRepository,
 };

@@ -1,25 +1,13 @@
-const Groq = require("groq-sdk");
 const { searchDocuments } = require("./ragService");
+const aiGateway = require("./ai/aiGateway");
 
-const GROQ_API_KEY = process.env.GROQ_API_KEY;
 const DEBUG = process.env.DEBUG_ASSISTANT === "true";
-
-if (!GROQ_API_KEY) {
-  console.warn("⚠️ GROQ_API_KEY is not configured.");
-}
-
-const groq = GROQ_API_KEY
-  ? new Groq({ apiKey: GROQ_API_KEY })
-  : null;
 
 // ==========================================
 // Configuration
 // ==========================================
 
-const CHAT_MODEL =
-  process.env.ASSISTANT_CHAT_MODEL || "openai/gpt-oss-120b";
-
-// Keep retrieval small to reduce Groq token usage.
+// Keep retrieval small to reduce AI token usage.
 const RESULT_COUNT =
   Number(process.env.ASSISTANT_RESULT_COUNT) || 6;
 
@@ -27,16 +15,14 @@ const RESULT_COUNT =
 const MAX_CHARS_PER_SOURCE =
   Number(process.env.ASSISTANT_MAX_CHARS_PER_SOURCE) || 2000;
 
-// Limit total context sent to Groq.
+// Limit total context sent to AI gateway.
 const MAX_TOTAL_CONTEXT_CHARS =
   Number(process.env.ASSISTANT_MAX_TOTAL_CONTEXT_CHARS) || 10000;
 
 const MAX_QUESTION_LENGTH = 2000;
 
-const GROQ_TIMEOUT_MS =
-  Number(process.env.ASSISTANT_GROQ_TIMEOUT_MS) || 30000;
-
-const MAX_RETRIES = 1;
+const AI_TIMEOUT_MS =
+  Number(process.env.ASSISTANT_AI_TIMEOUT_MS) || 30000;
 
 const CACHE_TTL_MS =
   Number(process.env.ASSISTANT_CACHE_TTL_MS) || 5 * 60 * 1000;
@@ -59,7 +45,7 @@ function log(...args) {
 
 const responseCache = new Map();
 
-// CHANGE 2: Multi-tenant cache key incorporating userId
+// Multi-tenant cache key incorporating userId
 function cacheKey(question, repositoryId, userId) {
   return `${userId || "anonymous"}::${repositoryId}::${question
     .trim()
@@ -481,16 +467,10 @@ function withTimeout(promise, ms, message) {
 }
 
 // ==========================================
-// Generate Groq answer
+// Generate AI answer
 // ==========================================
 
-async function generateGroqAnswer(question, context) {
-  if (!groq) {
-    throw new Error(
-      "Groq API is not configured. Please set GROQ_API_KEY in .env."
-    );
-  }
-
+async function generateAIAnswer(question, context) {
   const prompt = `
 USER QUESTION
 ==========================================
@@ -511,92 +491,33 @@ Answer the user's question using ONLY the repository context.
 If the context is insufficient, say so instead of guessing.
 `;
 
-  let lastError;
+  const result = await withTimeout(
+    aiGateway.generate(prompt, {
+      systemInstruction: SYSTEM_INSTRUCTION,
+      temperature: 0.2,
+      maxOutputTokens: 1200,
+    }),
+    AI_TIMEOUT_MS,
+    `AI request timed out after ${AI_TIMEOUT_MS}ms`
+  );
 
-  for (
-    let attempt = 0;
-    attempt <= MAX_RETRIES;
-    attempt++
-  ) {
-    try {
-      const completion = await withTimeout(
-        groq.chat.completions.create({
-          model: CHAT_MODEL,
+  log(
+    `🤖 Repository Assistant → ${result.provider} → ${result.model}`
+  );
 
-          messages: [
-            {
-              role: "system",
-              content: SYSTEM_INSTRUCTION,
-            },
-            {
-              role: "user",
-              content: prompt,
-            },
-          ],
+  const answer = result.content?.trim();
 
-          temperature: 0.2,
-          max_tokens: 1200,
-        }),
-
-        GROQ_TIMEOUT_MS,
-
-        `Groq request timed out after ${GROQ_TIMEOUT_MS}ms`
-      );
-
-      const answer =
-        completion.choices?.[0]?.message?.content?.trim();
-
-      if (!answer) {
-        throw new Error(
-          "Groq returned an empty response."
-        );
-      }
-
-      return answer;
-
-    } catch (error) {
-      lastError = error;
-
-      const isRateLimit =
-        error.status === 429 ||
-        error.code === "rate_limit_exceeded";
-
-      const isRetryable =
-        attempt < MAX_RETRIES &&
-        !isRateLimit &&
-        (
-          error.status >= 500 ||
-          error.message?.includes("fetch") ||
-          error.message?.includes("timed out")
-        );
-
-      if (!isRetryable) {
-        break;
-      }
-
-      log(
-        `⏳ Retrying Groq call (attempt ${
-          attempt + 2
-        }/${MAX_RETRIES + 1})...`
-      );
-
-      await new Promise((resolve) =>
-        setTimeout(
-          resolve,
-          500 * (attempt + 1)
-        )
-      );
-    }
+  if (!answer) {
+    throw new Error("AI returned an empty response.");
   }
 
-  throw lastError;
+  return answer;
 }
 
 // ==========================================
 // Ask Repository Assistant
 // ==========================================
 
-// CHANGE 1: Added userId parameter with a default value of null
 async function askRepositoryAssistant(
   question,
   repositoryId,
@@ -618,7 +539,6 @@ async function askRepositoryAssistant(
   // CACHE
   // ========================================
 
-  // CHANGE 2: Included userId when looking up/setting cache key
   const key = cacheKey(
     trimmedQuestion,
     repositoryId,
@@ -658,7 +578,6 @@ async function askRepositoryAssistant(
     // STEP 1: Retrieve relevant chunks
     // ========================================
 
-    // CHANGE 3: Passed userId as 5th argument to searchDocuments
     const searchResults =
       await searchDocuments(
         trimmedQuestion,
@@ -753,21 +672,21 @@ async function askRepositoryAssistant(
     );
 
     // ========================================
-    // STEP 5: Ask Groq
+    // STEP 5: Ask AI Gateway
     // ========================================
 
     log(
-      "🧠 Sending repository context to Groq..."
+      "🧠 Sending repository context to AI Gateway..."
     );
 
     const answer =
-      await generateGroqAnswer(
+      await generateAIAnswer(
         trimmedQuestion,
         context
       );
 
     log(
-      "✅ Groq answer generated"
+      "✅ AI answer generated"
     );
 
     // ========================================

@@ -1,10 +1,4 @@
-const Groq = require("groq-sdk");
-
-const groq = new Groq({
-  apiKey: process.env.GROQ_API_KEY,
-});
-const MODEL = process.env.GROQ_MODEL || "openai/gpt-oss-120b";
-
+const aiGateway = require("./ai/aiGateway");
 
 // Groq (like most providers) has a context window. A raw diff on a large
 // commit can blow past it, causing the request to fail outright instead of
@@ -45,65 +39,65 @@ function normalizeLevel(value, fallback = "Low") {
   return match || fallback;
 }
 
-// The model is asked to return strict JSON, but "asked to" and "did" are
-// different things — response_format reduces malformed JSON, it doesn't
-// guarantee the fields are the right type or the enums are valid values.
-// This normalizes whatever comes back into the shape callers rely on, so a
-// downstream component never renders a raw/unexpected value in a badge.
+// The model is asked to return strict JSON, but response_format or schema limits
+// don't guarantee fields are valid or types are strictly matching enums.
+// This normalizes whatever comes back into the shape callers rely on.
 function normalizeSummary(raw) {
-return {
-  title:
-    typeof raw.title === "string"
-      ? raw.title.trim()
-      : FALLBACK_SUMMARY.title,
+  if (!raw || typeof raw !== "object") return { ...FALLBACK_SUMMARY };
 
-  summary:
-    typeof raw.summary === "string"
-      ? raw.summary.trim()
-      : FALLBACK_SUMMARY.summary,
+  return {
+    title:
+      typeof raw.title === "string"
+        ? raw.title.trim()
+        : FALLBACK_SUMMARY.title,
 
-  purpose:
-    typeof raw.purpose === "string"
-      ? raw.purpose.trim()
-      : FALLBACK_SUMMARY.purpose,
+    summary:
+      typeof raw.summary === "string"
+        ? raw.summary.trim()
+        : FALLBACK_SUMMARY.summary,
 
-  category:
-    typeof raw.category === "string"
-      ? raw.category.trim()
-      : FALLBACK_SUMMARY.category,
+    purpose:
+      typeof raw.purpose === "string"
+        ? raw.purpose.trim()
+        : FALLBACK_SUMMARY.purpose,
 
-  affectedArea:
-    typeof raw.affectedArea === "string"
-      ? raw.affectedArea.trim()
-      : FALLBACK_SUMMARY.affectedArea,
+    category:
+      typeof raw.category === "string"
+        ? raw.category.trim()
+        : FALLBACK_SUMMARY.category,
 
-  impact: normalizeLevel(raw.impact),
+    affectedArea:
+      typeof raw.affectedArea === "string"
+        ? raw.affectedArea.trim()
+        : FALLBACK_SUMMARY.affectedArea,
 
-  risk: normalizeLevel(raw.risk),
+    impact: normalizeLevel(raw.impact),
 
-  reviewTime:
-    typeof raw.reviewTime === "string"
-      ? raw.reviewTime.trim()
-      : FALLBACK_SUMMARY.reviewTime,
+    risk: normalizeLevel(raw.risk),
 
-  complexity: normalizeLevel(raw.complexity),
+    reviewTime:
+      typeof raw.reviewTime === "string"
+        ? raw.reviewTime.trim()
+        : FALLBACK_SUMMARY.reviewTime,
 
-  confidence:
-    Number.isInteger(raw.confidence)
-      ? Math.min(100, Math.max(0, raw.confidence))
-      : 0,
+    complexity: normalizeLevel(raw.complexity),
 
-  breakingChange: raw.breakingChange === true,
+    confidence:
+      Number.isInteger(raw.confidence)
+        ? Math.min(100, Math.max(0, raw.confidence))
+        : 0,
 
-  codeQuality:
-    typeof raw.codeQuality === "string"
-      ? raw.codeQuality.trim()
-      : FALLBACK_SUMMARY.codeQuality,
+    breakingChange: raw.breakingChange === true,
 
-  tags: Array.isArray(raw.tags)
-    ? raw.tags.filter(Boolean).slice(0, 8)
-    : [],
-};
+    codeQuality:
+      typeof raw.codeQuality === "string"
+        ? raw.codeQuality.trim()
+        : FALLBACK_SUMMARY.codeQuality,
+
+    tags: Array.isArray(raw.tags)
+      ? raw.tags.filter(Boolean).slice(0, 8)
+      : [],
+  };
 }
 
 async function generateCommitSummary(commit) {
@@ -195,30 +189,18 @@ Rules:
   Return 3-6 technical keywords.
 `;
 
-    const response = await groq.chat.completions.create({
-      model: MODEL,
+    const result = await aiGateway.generateJSON(prompt, {
       temperature: 0.2,
-      response_format: { type: "json_object" },
-      messages: [
-        {
-          role: "system",
-          content:
-            "You are an expert software engineer. Respond ONLY with valid JSON.",
-        },
-        {
-          role: "user",
-          content: prompt,
-        },
-      ],
+      systemPrompt: "You are an expert software engineer. Respond ONLY with valid JSON.",
     });
 
-    const content = response.choices?.[0]?.message?.content;
-    if (!content) throw new Error("Groq returned an empty response");
+    console.log(
+      `🤖 Commit Summary AI → Provider: ${result.provider} | Model: ${result.model}`
+    );
 
-    const parsed = JSON.parse(content);
-    return normalizeSummary(parsed);
+    return normalizeSummary(result.data);
   } catch (error) {
-    console.error("Groq Commit Summary Error:", error);
+    console.error("Commit Summary AI Error:", error);
     return { ...FALLBACK_SUMMARY };
   }
 }

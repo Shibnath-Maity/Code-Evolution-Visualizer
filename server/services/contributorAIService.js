@@ -1,5 +1,5 @@
-const gemini = require("./geminiService");
 
+const aiGateway = require("./ai/aiGateway");
 /**
  * Normalizes contributor names for consistent matching.
  * Handles pipe-separated emails/handles (e.g. "Jane Doe | jane@example.com").
@@ -80,14 +80,22 @@ RULES:
 - Keep the answer concise, actionable, and structured with clear headings and bullet points.
 `;
 
-  try {
-    const answer = await gemini.generate(prompt);
-    console.log(`✅ Contributor AI response successfully generated for: ${contributorName}`);
-    return answer;
-  } catch (error) {
-    console.error(`❌ Contributor AI failed for ${contributorName}:`, error.message);
-    throw error;
-  }
+ try {
+  const result = await aiGateway.generate(prompt);
+
+  console.log(
+    `✅ Contributor AI → ${result.provider} → ${result.model}`
+  );
+
+  return result.content;
+} catch (error) {
+  console.error(
+    `❌ Contributor AI failed for ${contributorName}:`,
+    error.message
+  );
+
+  throw error;
+}
 }
 
 module.exports = {
