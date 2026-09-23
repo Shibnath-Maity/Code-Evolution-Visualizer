@@ -4,13 +4,13 @@ import { PieChart as PieIcon, BarChart3, Users } from "lucide-react";
 
 // Restrained, high-contrast palette — used only for chart slices, bars, and dots
 const COLORS = [
+  "#38bdf8", // Sky
   "#6366f1", // Indigo
   "#0891b2", // Cyan
   "#059669", // Emerald
   "#d97706", // Amber
   "#db2777", // Pink
   "#7c3aed", // Violet
-  "#2563eb", // Blue
   "#e11d48", // Rose
 ];
 
@@ -34,19 +34,19 @@ function CustomTooltip({ active, payload }) {
   const item = payload[0].payload;
 
   return (
-    <div className="min-w-[150px] rounded-md border border-slate-200 bg-white px-3 py-2 text-xs shadow-md dark:border-slate-700 dark:bg-slate-800">
+    <div className="min-w-[150px] rounded-[8px] border border-white/[0.08] bg-[#151B24] px-3 py-2 text-xs shadow-lg shadow-black/40">
       <div className="mb-1 flex items-center gap-2">
         <span
           className="h-2 w-2 shrink-0 rounded-full"
           style={{ backgroundColor: item.color }}
         />
-        <span className="truncate font-medium text-slate-700 dark:text-slate-200">
+        <span className="truncate font-medium text-[#E7EAEF]">
           {item.name}
         </span>
       </div>
-      <div className="flex items-baseline justify-between gap-3 font-mono text-slate-500 dark:text-slate-400">
+      <div className="flex items-baseline justify-between gap-3 font-mono tabular-nums text-[#7C8698]">
         <span>{item.value} commits</span>
-        <span className="font-semibold text-slate-700 dark:text-slate-200">
+        <span className="font-semibold text-[#E7EAEF]">
           {item.percent}%
         </span>
       </div>
@@ -80,17 +80,17 @@ export default function ContributionDistribution({ contributors = [] }) {
   const activeItem = activeIndex !== null ? data[activeIndex] : null;
 
   return (
-    <div className="rounded-lg border border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-900 sm:p-5">
+    <div className="bg-[#10151C] p-4 sm:p-5">
       {/* Header */}
       <div className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex items-center gap-2.5 min-w-0">
-          <PieIcon size={18} className="shrink-0 text-slate-400 dark:text-slate-500" />
+          <PieIcon size={17} strokeWidth={1.75} className="shrink-0 text-[#7C8698]" />
           <div className="min-w-0">
-            <h2 className="truncate text-sm font-semibold text-slate-900 dark:text-slate-100">
+            <h2 className="truncate text-[13.5px] font-semibold text-white">
               Contribution breakdown
             </h2>
-            <p className="flex items-center gap-1 text-xs text-slate-500 dark:text-slate-400">
-              <Users size={12} className="shrink-0" />
+            <p className="flex items-center gap-1 text-[12px] text-[#7C8698] tabular-nums">
+              <Users size={11} className="shrink-0" />
               {contributors.length} {contributors.length === 1 ? "contributor" : "contributors"}
             </p>
           </div>
@@ -100,16 +100,16 @@ export default function ContributionDistribution({ contributors = [] }) {
           <div
             role="group"
             aria-label="View mode"
-            className="flex items-center rounded-md border border-slate-200 p-0.5 dark:border-slate-700"
+            className="flex items-center rounded-[8px] border border-white/[0.08] p-0.5"
           >
             <button
               type="button"
               aria-pressed={viewMode === "chart"}
               onClick={() => setViewMode("chart")}
-              className={`flex items-center gap-1.5 rounded px-2.5 py-1.5 text-xs font-medium transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-500 ${
+              className={`flex items-center gap-1.5 rounded-[6px] px-2.5 py-2 sm:py-1.5 text-xs font-medium transition-colors duration-150 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sky-400 ${
                 viewMode === "chart"
-                  ? "bg-slate-100 text-slate-900 dark:bg-slate-700 dark:text-white"
-                  : "text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200"
+                  ? "bg-white/[0.08] text-white"
+                  : "text-[#7C8698] hover:text-[#C7CCD6]"
               }`}
             >
               <PieIcon size={13} />
@@ -119,10 +119,10 @@ export default function ContributionDistribution({ contributors = [] }) {
               type="button"
               aria-pressed={viewMode === "bars"}
               onClick={() => setViewMode("bars")}
-              className={`flex items-center gap-1.5 rounded px-2.5 py-1.5 text-xs font-medium transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-500 ${
+              className={`flex items-center gap-1.5 rounded-[6px] px-2.5 py-2 sm:py-1.5 text-xs font-medium transition-colors duration-150 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sky-400 ${
                 viewMode === "bars"
-                  ? "bg-slate-100 text-slate-900 dark:bg-slate-700 dark:text-white"
-                  : "text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200"
+                  ? "bg-white/[0.08] text-white"
+                  : "text-[#7C8698] hover:text-[#C7CCD6]"
               }`}
             >
               <BarChart3 size={13} />
@@ -131,7 +131,7 @@ export default function ContributionDistribution({ contributors = [] }) {
           </div>
 
           {totalCommits > 0 && (
-            <div className="whitespace-nowrap rounded-md bg-slate-100 px-2.5 py-1.5 font-mono text-xs font-medium text-slate-600 dark:bg-slate-800 dark:text-slate-300">
+            <div className="whitespace-nowrap rounded-[8px] bg-white/[0.05] border border-white/[0.08] px-2.5 py-1.5 font-mono text-xs font-medium text-[#C7CCD6] tabular-nums">
               {totalCommits} commits
             </div>
           )}
@@ -140,18 +140,18 @@ export default function ContributionDistribution({ contributors = [] }) {
 
       {/* Body */}
       {data.length === 0 ? (
-        <div className="flex flex-col items-center justify-center rounded-md border border-dashed border-slate-200 py-10 text-center dark:border-slate-800">
-          <p className="text-sm font-medium text-slate-600 dark:text-slate-300">
+        <div className="flex flex-col items-center justify-center rounded-[10px] border border-dashed border-white/[0.08] py-10 text-center">
+          <p className="text-sm font-medium text-[#C7CCD6]">
             No contributions tracked yet
           </p>
-          <p className="mt-0.5 text-xs text-slate-400 dark:text-slate-500">
+          <p className="mt-0.5 text-xs text-[#7C8698]">
             Commit history will show up here once it's logged.
           </p>
         </div>
       ) : (
         <div className="space-y-6">
           {viewMode === "chart" && (
-            <div className="relative mx-auto h-48 w-48 sm:h-56 sm:w-56">
+            <div className="relative mx-auto h-44 w-44 sm:h-56 sm:w-56">
               <ResponsiveContainer width="100%" height="100%">
                 <PieChart>
                   <Pie
@@ -187,10 +187,10 @@ export default function ContributionDistribution({ contributors = [] }) {
               </ResponsiveContainer>
 
               <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center">
-                <span className="font-mono text-2xl font-bold tabular-nums text-slate-900 dark:text-white sm:text-3xl">
+                <span className="font-mono text-2xl font-bold tabular-nums text-white sm:text-3xl">
                   {activeItem ? activeItem.value : totalCommits}
                 </span>
-                <span className="max-w-[80%] truncate text-[11px] font-medium text-slate-400 dark:text-slate-500">
+                <span className="max-w-[80%] truncate text-[11px] font-medium text-[#7C8698]">
                   {activeItem ? activeItem.name : "Total commits"}
                 </span>
               </div>
@@ -210,10 +210,10 @@ export default function ContributionDistribution({ contributors = [] }) {
                   onFocus={() => setActiveIndex(index)}
                   onBlur={() => setActiveIndex(null)}
                   aria-label={`${item.name}: ${item.value} commits, ${item.percent}%`}
-                  className={`flex flex-col gap-1.5 rounded-md border px-3 py-2.5 text-left transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-500 ${
+                  className={`flex flex-col gap-1.5 rounded-[8px] border px-3 py-2.5 text-left transition-colors duration-150 min-h-[40px] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sky-400 ${
                     isActive
-                      ? "border-slate-300 bg-slate-50 dark:border-slate-600 dark:bg-slate-800/60"
-                      : "border-transparent hover:bg-slate-50 dark:hover:bg-slate-800/40"
+                      ? "border-white/[0.14] bg-white/[0.05]"
+                      : "border-transparent hover:bg-white/[0.03]"
                   }`}
                 >
                   <div className="flex items-center justify-between gap-2 text-xs">
@@ -222,19 +222,19 @@ export default function ContributionDistribution({ contributors = [] }) {
                         className="h-2 w-2 shrink-0 rounded-full"
                         style={{ backgroundColor: item.color }}
                       />
-                      <span className="truncate font-medium text-slate-700 dark:text-slate-200">
+                      <span className="truncate font-medium text-[#C7CCD6]">
                         {item.name}
                       </span>
                     </div>
-                    <div className="flex shrink-0 items-center gap-2 font-mono text-slate-500 dark:text-slate-400">
+                    <div className="flex shrink-0 items-center gap-2 font-mono tabular-nums text-[#7C8698]">
                       <span>{item.value}</span>
-                      <span className="font-semibold text-slate-700 dark:text-slate-200">
+                      <span className="font-semibold text-[#C7CCD6]">
                         {item.percent}%
                       </span>
                     </div>
                   </div>
 
-                  <div className="h-1 w-full overflow-hidden rounded-full bg-slate-100 dark:bg-slate-800">
+                  <div className="h-1 w-full overflow-hidden rounded-full bg-white/[0.08]">
                     <div
                       className="h-full rounded-full transition-opacity"
                       style={{

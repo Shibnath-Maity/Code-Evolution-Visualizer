@@ -319,27 +319,27 @@ function Contributors() {
   };
 
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100 antialiased selection:bg-sky-500/20 selection:text-sky-100 [font-feature-settings:'cv11','ss01']">
-      <div className="max-w-[1440px] mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8 space-y-6">
+    <div className="min-h-screen bg-[#0A0D12] text-[#E7EAEF] antialiased selection:bg-sky-500/20 selection:text-sky-100 [font-feature-settings:'cv11','ss01'] [font-variant-numeric:tabular-nums]">
+      <div className="max-w-[1440px] mx-auto px-4 sm:px-6 lg:px-8 py-5 sm:py-8 space-y-5 sm:space-y-6">
         {/* Header */}
-        <header className="flex flex-col gap-4 pb-5 border-b border-slate-800 sm:flex-row sm:items-end sm:justify-between">
+        <header className="flex flex-col gap-4 pb-5 border-b border-white/[0.08] sm:flex-row sm:items-end sm:justify-between">
           <div className="flex items-start gap-3 min-w-0">
-            <div className="shrink-0 flex items-center justify-center w-10 h-10 rounded-lg bg-slate-900 border border-slate-800 text-slate-400">
-              <Users size={19} strokeWidth={1.75} />
+            <div className="shrink-0 flex items-center justify-center w-9 h-9 sm:w-10 sm:h-10 rounded-[10px] bg-gradient-to-b from-white/[0.06] to-transparent bg-[#10151C] border border-white/[0.08] text-sky-400/90">
+              <Users size={18} strokeWidth={1.75} />
             </div>
 
             <div className="min-w-0 pt-0.5">
               <div className="flex items-center gap-2 flex-wrap">
-                <h1 className="text-[22px] sm:text-2xl font-semibold tracking-tight text-white leading-tight">
+                <h1 className="text-[20px] sm:text-[22px] font-semibold tracking-[-0.01em] text-white leading-tight">
                   Contributors
                 </h1>
                 {contributorList.length > 0 && (
-                  <span className="inline-flex items-center px-2 py-0.5 text-[11px] font-medium leading-none rounded-full bg-slate-900 text-slate-400 border border-slate-800">
+                  <span className="inline-flex items-center px-2 py-0.5 text-[11px] font-medium leading-none rounded-full bg-white/[0.05] text-[#8B94A5] border border-white/[0.08] tabular-nums">
                     {contributorList.length} contributor{contributorList.length === 1 ? "" : "s"}
                   </span>
                 )}
               </div>
-              <p className="text-[13px] text-slate-500 mt-1">
+              <p className="text-[13px] text-[#7C8698] mt-1">
                 Developer activity and contribution analytics
               </p>
             </div>
@@ -358,13 +358,13 @@ function Contributors() {
         {!analysis ? (
           /* Empty State */
           <div className="flex flex-col items-center justify-center text-center py-20 sm:py-24 px-6">
-            <div className="bg-slate-900 text-slate-500 p-3 rounded-lg border border-slate-800 mb-4">
+            <div className="bg-[#10151C] text-[#7C8698] p-3 rounded-[12px] border border-white/[0.08] mb-4">
               <AlertCircle size={22} strokeWidth={1.75} />
             </div>
             <h3 className="text-base font-semibold text-white">
               No repository selected
             </h3>
-            <p className="text-sm text-slate-500 mt-1.5 max-w-xs leading-relaxed">
+            <p className="text-sm text-[#7C8698] mt-1.5 max-w-xs leading-relaxed">
               Analyze a repository to view contributor activity and code
               attribution.
             </p>
@@ -380,9 +380,9 @@ function Contributors() {
             </section>
 
             {/* Info banner */}
-            <div className="flex items-center gap-2.5 rounded-lg border border-slate-800/80 bg-slate-900/40 px-4 py-2.5 text-[13px] text-slate-400">
-              <Info size={14} strokeWidth={2} className="text-slate-600 shrink-0" />
-              <span>
+            <div className="flex items-center gap-2.5 rounded-[10px] border border-white/[0.06] bg-white/[0.02] px-3.5 py-2.5 text-[12.5px] text-[#7C8698]">
+              <Info size={13} strokeWidth={2} className="text-[#4C5666] shrink-0" />
+              <span className="leading-snug">
                 Select a contributor below to inspect individual activity and
                 contribution patterns.
               </span>
@@ -390,7 +390,7 @@ function Contributors() {
 
             {/* Leaderboard & Distribution */}
             <section className="grid grid-cols-1 xl:grid-cols-12 gap-4">
-              <div className="xl:col-span-7 bg-slate-900/60 rounded-xl border border-slate-800 min-w-0 overflow-hidden">
+              <div className="xl:col-span-7 bg-[#10151C] rounded-[14px] border border-white/[0.08] min-w-0 overflow-hidden">
                 <TopContributors
                   contributors={contributorList}
                   aggregates={aggregates}
@@ -399,7 +399,7 @@ function Contributors() {
                 />
               </div>
 
-              <div className="xl:col-span-5 bg-slate-900/60 rounded-xl border border-slate-800 min-w-0 overflow-hidden">
+              <div className="xl:col-span-5 bg-[#10151C] rounded-[14px] border border-white/[0.08] min-w-0 overflow-hidden">
                 <ContributionDistribution
                   contributors={contributorList}
                 />
@@ -409,15 +409,15 @@ function Contributors() {
             {/* Selected Contributor Profile */}
             {activeContributor ? (
               <section className="space-y-4 pt-1">
-                <div className="rounded-xl bg-slate-900/60 border border-white/20 ring-1 ring-white/10 overflow-hidden">
+                <div className="rounded-[14px] bg-[#10151C] border border-sky-400/20 overflow-hidden">
                   {/* Profile header: identity + rank/navigation */}
-                  <div className="flex flex-col gap-4 px-4 py-4 sm:flex-row sm:items-center sm:justify-between sm:px-5 border-b border-slate-800">
+                  <div className="flex flex-col gap-3 px-4 py-4 sm:flex-row sm:items-center sm:justify-between sm:px-5 border-b border-white/[0.08]">
                     <div className="flex items-center gap-3 min-w-0">
-                      <div className="shrink-0 flex items-center justify-center w-10 h-10 bg-white text-slate-900 rounded-lg border border-white/60">
-                        <UserCircle2 size={20} strokeWidth={1.5} />
+                      <div className="shrink-0 flex items-center justify-center w-10 h-10 rounded-[10px] bg-sky-400/10 text-sky-400 border border-sky-400/20">
+                        <UserCircle2 size={19} strokeWidth={1.75} />
                       </div>
                       <div className="min-w-0">
-                        <p className="text-[11px] font-medium text-slate-500">
+                        <p className="text-[11px] font-medium text-[#7C8698]">
                           Contributor
                         </p>
                         <h2 className="text-lg sm:text-xl font-semibold text-white truncate">
@@ -427,14 +427,14 @@ function Contributors() {
                     </div>
 
                     <div className="flex items-center gap-2 self-start sm:self-auto shrink-0">
-                      <span className="text-xs font-medium text-slate-200 bg-slate-800/50 px-3 py-2 rounded-lg border border-white/20 whitespace-nowrap">
+                      <span className="text-[12px] font-medium text-[#8B94A5] bg-white/[0.03] px-2.5 py-2 rounded-[8px] border border-white/[0.08] whitespace-nowrap tabular-nums">
                         Rank #{activeRank + 1} of {contributorList.length}
                       </span>
 
                       {contributorList.length > 1 && (
                         <button
                           onClick={handleSelectNext}
-                          className="flex items-center gap-1.5 text-xs font-medium bg-slate-800/50 hover:bg-white hover:text-slate-900 active:bg-white text-slate-200 px-3 py-2 rounded-lg border border-white/20 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white min-h-[40px]"
+                          className="flex items-center gap-1.5 text-[12.5px] font-medium bg-white/[0.03] hover:bg-white/[0.07] active:bg-white/[0.1] text-[#E7EAEF] px-3 py-2 rounded-[8px] border border-white/[0.08] hover:border-white/[0.14] transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-400/50 min-h-[40px]"
                           aria-label={`View next contributor after ${activeContributor}`}
                         >
                           <span>Next</span>
@@ -445,7 +445,7 @@ function Contributors() {
                   </div>
 
                   {/* Summary Metrics */}
-                  <div className="px-4 py-4 sm:px-5 border-b border-slate-800">
+                  <div className="px-4 py-4 sm:px-5 border-b border-white/[0.08]">
                     <ContributorSummaryBar
                       contributorName={activeContributor}
                       allCommits={statsCommits}
@@ -458,10 +458,10 @@ function Contributors() {
                     <div className={showRecentCommits ? "xl:col-span-8 min-w-0" : "xl:col-span-12 min-w-0"}>
                       <div>
                         <div className="mb-3">
-                          <h3 className="text-sm font-semibold text-white">
+                          <h3 className="text-[13.5px] font-semibold text-white">
                             Contributor analysis
                           </h3>
-                          <p className="text-[12px] text-slate-500 mt-0.5">
+                          <p className="text-[12px] text-[#7C8698] mt-0.5">
                             Automated analysis of development activity
                           </p>
                         </div>
@@ -483,8 +483,8 @@ function Contributors() {
                 </div>
               </section>
             ) : (
-              <div className="py-16 text-center bg-slate-900/40 rounded-xl border border-dashed border-slate-800">
-                <p className="text-sm text-slate-500">
+              <div className="py-16 text-center bg-[#10151C]/60 rounded-[14px] border border-dashed border-white/[0.08]">
+                <p className="text-sm text-[#7C8698]">
                   Select a contributor above to load their developer profile.
                 </p>
               </div>

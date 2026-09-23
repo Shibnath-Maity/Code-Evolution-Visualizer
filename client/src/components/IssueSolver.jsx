@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useLocation, useParams } from "react-router-dom";
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
@@ -18,9 +18,15 @@ import {
   Circle,
   ExternalLink,
   Copy,
-  Check
+  Check,
+  Search,
+  X,
+  ChevronRight,
 } from "lucide-react";
 import { FaGithub } from "react-icons/fa";
+
+const MONO =
+  '"JetBrains Mono", "Fira Code", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace';
 
 function parseOwnerRepo(url) {
   if (!url) return null;
@@ -51,6 +57,104 @@ function parseOwnerRepo(url) {
   }
 }
 
+function timeAgo(dateStr) {
+  if (!dateStr) return null;
+  const diff = Date.now() - new Date(dateStr).getTime();
+  const day = 86400000;
+  if (Number.isNaN(diff)) return null;
+  if (diff < day) return "today";
+  const days = Math.floor(diff / day);
+  if (days < 30) return `${days}d ago`;
+  const months = Math.floor(days / 30);
+  if (months < 12) return `${months}mo ago`;
+  return `${Math.floor(months / 12)}y ago`;
+}
+
+function getLanguageColor(language) {
+  const colors = {
+    JavaScript: "#f1e05a",
+    TypeScript: "#3178c6",
+    Java: "#b07219",
+    Python: "#3572A5",
+    C: "#555555",
+    "C++": "#f34b7d",
+    Go: "#00ADD8",
+    Rust: "#dea584",
+    HTML: "#e34c26",
+    CSS: "#563d7c",
+  };
+  return colors[language] || "#9ca3af";
+}
+
+function CopyButton({ text, className = "" }) {
+  const [copied, setCopied] = useState(false);
+  return (
+    <button
+      onClick={(e) => {
+        e.stopPropagation();
+        navigator.clipboard.writeText(text || "");
+        setCopied(true);
+        setTimeout(() => setCopied(false), 1500);
+      }}
+      className={`inline-flex items-center gap-1.5 rounded-md border border-slate-700/80 bg-slate-900/80 px-2 py-1 text-[11px] font-medium text-slate-400 transition-colors hover:border-slate-600 hover:text-slate-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 ${className}`}
+      title="Copy to clipboard"
+    >
+      {copied ? <Check className="h-3 w-3 text-emerald-400" /> : <Copy className="h-3 w-3" />}
+      {copied ? "Copied" : "Copy"}
+    </button>
+  );
+}
+
+// Renders a code block as a real gutter with line numbers, optionally tinted
+// red/green to read as a diff hunk instead of a plain <pre>.
+function CodeBlock({ code, tone }) {
+  const lines = (code || "").replace(/\n$/, "").split("\n");
+  const toneStyles = {
+    remove: { bg: "bg-rose-500/[0.07]", num: "text-rose-500/50", mark: "text-rose-400", prefix: "-" },
+    add: { bg: "bg-emerald-500/[0.07]", num: "text-emerald-500/50", mark: "text-emerald-400", prefix: "+" },
+    plain: { bg: "", num: "text-slate-600", mark: "text-slate-500", prefix: "" },
+  };
+  const t = toneStyles[tone] || toneStyles.plain;
+
+  return (
+    <div className={`overflow-x-auto ${t.bg}`} style={{ fontFamily: MONO }}>
+      {lines.map((line, i) => (
+        <div key={i} className="flex text-[12.5px] leading-[1.65]">
+          <span className={`w-9 shrink-0 select-none text-right pr-3 ${t.num}`}>{i + 1}</span>
+          <span className={`w-4 shrink-0 select-none ${t.mark}`}>{t.prefix}</span>
+          <span className="whitespace-pre pr-4 text-slate-200">{line || " "}</span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function ScoreRing({ value = 0 }) {
+  const size = 52;
+  const stroke = 4;
+  const r = (size - stroke) / 2;
+  const c = 2 * Math.PI * r;
+  const offset = c - (Math.min(Math.max(value, 0), 100) / 100) * c;
+  const color = value >= 75 ? "#34d399" : value >= 45 ? "#fbbf24" : "#fb7185";
+  return (
+    <svg width={size} height={size} className="-rotate-90 shrink-0">
+      <circle cx={size / 2} cy={size / 2} r={r} stroke="#1e293b" strokeWidth={stroke} fill="none" />
+      <circle
+        cx={size / 2}
+        cy={size / 2}
+        r={r}
+        stroke={color}
+        strokeWidth={stroke}
+        fill="none"
+        strokeDasharray={c}
+        strokeDashoffset={offset}
+        strokeLinecap="round"
+        style={{ transition: "stroke-dashoffset 600ms ease" }}
+      />
+    </svg>
+  );
+}
+
 export default function IssueSolver() {
   const location = useLocation();
   const params = useParams();
@@ -73,13 +177,14 @@ export default function IssueSolver() {
   const repository = contextRepository || sessionRepoData || location.state?.repository || null;
 
   const [issues, setIssues] = useState([]);
+  const [query, setQuery] = useState("");
   const [selectedIssue, setSelectedIssue] = useState(null);
   const [solution, setSolution] = useState(null);
   const [loading, setLoading] = useState(false);
   const [solving, setSolving] = useState(false);
   const [loadError, setLoadError] = useState("");
   const [solveError, setSolveError] = useState("");
-  const [copiedCode, setCopiedCode] = useState(false);
+  const [activeTab, setActiveTab] = useState("overview");
 
   async function loadIssues() {
     setLoadError("");
@@ -121,12 +226,14 @@ export default function IssueSolver() {
     if (repoUrl) {
       loadIssues();
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [repoUrl]);
 
   async function solveIssue(issue) {
     setSelectedIssue(issue);
     setSolution(null);
     setSolveError("");
+    setActiveTab("overview");
 
     const parsed = parseOwnerRepo(repoUrl);
     if (!parsed) {
@@ -182,447 +289,441 @@ export default function IssueSolver() {
     doc.save(`Issue-${selectedIssue.number}-Solution.pdf`);
   };
 
-  const handleCopyCode = (text) => {
-    navigator.clipboard.writeText(text);
-    setCopiedCode(true);
-    setTimeout(() => setCopiedCode(false), 2000);
-  };
+  const filteredIssues = useMemo(() => {
+    if (!query.trim()) return issues;
+    const q = query.toLowerCase();
+    return issues.filter(
+      (issue) =>
+        issue.title?.toLowerCase().includes(q) ||
+        String(issue.number).includes(q) ||
+        (issue.labels || []).some((l) => (typeof l === "object" ? l.name : l)?.toLowerCase().includes(q))
+    );
+  }, [issues, query]);
 
-  function getLanguageColor(language) {
-    const colors = {
-      JavaScript: "#f1e05a",
-      TypeScript: "#3178c6",
-      Java: "#b07219",
-      Python: "#3572A5",
-      C: "#555555",
-      "C++": "#f34b7d",
-      Go: "#00ADD8",
-      Rust: "#dea584",
-      HTML: "#e34c26",
-      CSS: "#563d7c",
-    };
-    return colors[language] || "#9ca3af";
-  }
+  const tabs = [
+    { id: "overview", label: "Overview", show: true },
+    { id: "patch", label: "Patch", show: !!solution?.patch?.file },
+    { id: "files", label: "Files", show: (solution?.affectedFiles || []).length > 0 },
+    { id: "commits", label: "Commits", show: (solution?.relatedCommits || []).length > 0 },
+  ].filter((t) => t.show);
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-[#0B0F17] via-[#0D1117] to-[#010409] text-slate-100 font-sans antialiased selection:bg-indigo-500 selection:text-white">
-      {/* Dynamic Header */}
-      <header className="border-b border-slate-800/80 bg-[#161B22]/60 backdrop-blur-md sticky top-0 z-50">
-        <div className="max-w-7xl mx-auto px-6 py-5 flex items-center justify-between">
-          <div className="flex items-center gap-4">
-            <div className="p-3 bg-gradient-to-tr from-emerald-600 to-teal-500 rounded-2xl shadow-lg shadow-emerald-900/20 ring-1 ring-emerald-400/30">
-              <Bug className="w-6 h-6 text-white" />
+    <div
+      className="min-h-screen bg-[#0A0D12] text-slate-100 antialiased selection:bg-indigo-500/40 selection:text-white"
+      style={{ fontFamily: 'Inter, ui-sans-serif, system-ui, sans-serif' }}
+    >
+      {/* Header */}
+      <header className="sticky top-0 z-50 border-b border-white/[0.06] bg-[#0A0D12]/85 backdrop-blur-xl">
+        <div className="mx-auto flex max-w-7xl flex-wrap items-center justify-between gap-3 px-4 py-3.5 sm:px-6 sm:py-4">
+          <div className="flex min-w-0 items-center gap-3 sm:gap-3.5">
+            <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-emerald-500/10 ring-1 ring-inset ring-emerald-500/25 sm:h-9 sm:w-9">
+              <Bug className="h-4 w-4 text-emerald-400 sm:h-4.5 sm:w-4.5" />
             </div>
-            <div>
+            <div className="min-w-0">
               <div className="flex items-center gap-2">
-                <h1 className="text-xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-white via-slate-200 to-slate-400">
-                  AI Issue Resolver
-                </h1>
-                <span className="text-[10px] font-semibold tracking-wide uppercase bg-indigo-500/10 text-indigo-400 border border-indigo-500/20 px-2 py-0.5 rounded-full">
-                  Powered by Gemini
-                </span>
+                <h1 className="text-[14px] font-semibold tracking-tight text-slate-100 sm:text-[15px]">Issue Resolver</h1>
               </div>
-              <p className="text-xs text-slate-400 mt-0.5">
-                {repository
-                  ? `Analyzing ${repository.owner}/${repository.name}`
-                  : "Context-aware automated codebase troubleshooting"}
+              <p className="truncate text-[11.5px] text-slate-500 sm:text-[12px]">
+                {repository ? (
+                  <span style={{ fontFamily: MONO }}>
+                    {repository.owner}/{repository.name}
+                  </span>
+                ) : (
+                  "Automated root-cause analysis for open issues"
+                )}
               </p>
             </div>
           </div>
+
+          {repoUrl && (
+            <a
+              href={repoUrl}
+              target="_blank"
+              rel="noreferrer"
+              className="flex shrink-0 items-center gap-1.5 rounded-md border border-white/[0.08] px-2.5 py-1.5 text-[12px] font-medium text-slate-400 transition-colors hover:border-white/20 hover:text-slate-200 sm:px-3"
+            >
+              <FaGithub className="h-3.5 w-3.5" />
+              <span className="hidden sm:inline">View repo</span>
+              <ExternalLink className="h-3 w-3" />
+            </a>
+          )}
         </div>
       </header>
 
-      {/* Main Container */}
-      <main className="max-w-7xl mx-auto px-6 py-8 space-y-6">
-        {/* Banner Alert for Empty Repo Context */}
+      <main className="mx-auto max-w-7xl space-y-4 px-4 py-5 sm:space-y-5 sm:px-6 sm:py-6">
         {!repoUrl && (
-          <div className="bg-amber-500/10 border border-amber-500/20 rounded-2xl p-4 flex items-center gap-3 text-amber-200 backdrop-blur-sm">
-            <AlertCircle className="text-amber-400 shrink-0 w-5 h-5" />
-            <p className="text-sm">
-              No active repository context found. Please analyze a repository from the dashboard to enable issue resolution.
+          <div className="flex items-start gap-3 rounded-lg border border-amber-500/20 bg-amber-500/[0.06] p-4 text-amber-200">
+            <AlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-amber-400" />
+            <p className="text-[13px] leading-relaxed">
+              No active repository context. Analyze a repository from the dashboard first to enable issue resolution.
             </p>
           </div>
         )}
 
-        {/* Load Error Alert */}
         {loadError && (
-          <div className="bg-rose-500/10 border border-rose-500/20 rounded-2xl p-4 flex items-center gap-3 text-rose-300 backdrop-blur-sm">
-            <AlertCircle className="text-rose-400 shrink-0 w-5 h-5" />
-            <p className="text-sm">{loadError}</p>
+          <div className="flex items-start gap-3 rounded-lg border border-rose-500/20 bg-rose-500/[0.06] p-4 text-rose-300">
+            <AlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-rose-400" />
+            <p className="text-[13px] leading-relaxed">{loadError}</p>
           </div>
         )}
 
-        {/* Repository Overview Card */}
+        {/* Repository strip */}
         {repository && (
-          <section className="bg-[#161B22]/80 border border-slate-800 rounded-2xl p-6 shadow-xl relative overflow-hidden backdrop-blur-xl">
-            <div className="absolute top-0 right-0 w-96 h-96 bg-indigo-500/5 rounded-full blur-3xl pointer-events-none" />
-            <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 relative z-10">
-              <div className="space-y-2">
-                <div className="flex items-center gap-3">
-                  <FaGithub className="w-6 h-6 text-slate-300" />
-                  <h2 className="text-2xl font-bold text-white tracking-tight">
-                    {repository.owner} <span className="text-slate-500">/</span> {repository.name}
-                  </h2>
-                </div>
-                <p className="text-sm text-slate-400 max-w-2xl">
-                  {repository.description || "No repository description available."}
-                </p>
-              </div>
-              <img
-                src={repository.avatarUrl || "https://github.githubassets.com/images/modules/logos_page/GitHub-Mark.png"}
-                alt="Avatar"
-                className="w-14 h-14 rounded-xl ring-2 ring-slate-800 object-cover shadow-md"
-              />
+          <section className="flex flex-wrap items-center gap-x-4 gap-y-2 rounded-lg border border-white/[0.06] bg-white/[0.02] px-4 py-3 text-[12px] text-slate-400 sm:gap-x-6 sm:px-5 sm:py-3.5 sm:text-[12.5px]">
+            <div className="flex items-center gap-1.5">
+              <Star className="h-3.5 w-3.5 text-amber-400" />
+              <span className="font-medium text-slate-200">{repository.stars ?? 0}</span>
             </div>
-
-            {/* Repository Meta Tags */}
-            <div className="flex flex-wrap items-center gap-6 mt-6 pt-4 border-t border-slate-800/80 text-xs font-medium text-slate-400">
-              <div className="flex items-center gap-1.5">
-                <Star className="w-4 h-4 text-amber-400" />
-                <span className="text-slate-200">{repository.stars ?? 0}</span> stars
-              </div>
-              <div className="flex items-center gap-1.5">
-                <GitFork className="w-4 h-4 text-indigo-400" />
-                <span className="text-slate-200">{repository.forks ?? 0}</span> forks
-              </div>
-              <div className="flex items-center gap-1.5">
-                <Bug className="w-4 h-4 text-emerald-400" />
-                <span className="text-slate-200">{issues.length}</span> Issues loaded
-              </div>
-              {repository.language && (
-                <div className="flex items-center gap-1.5">
-                  <Circle className="w-2.5 h-2.5 fill-current" style={{ color: getLanguageColor(repository.language) }} />
-                  <span className="text-slate-200">{repository.language}</span>
-                </div>
-              )}
+            <div className="flex items-center gap-1.5">
+              <GitFork className="h-3.5 w-3.5 text-indigo-400" />
+              <span className="font-medium text-slate-200">{repository.forks ?? 0}</span>
             </div>
+            <div className="flex items-center gap-1.5">
+              <Bug className="h-3.5 w-3.5 text-emerald-400" />
+              <span className="font-medium text-slate-200">{issues.length}</span> open
+            </div>
+            {repository.language && (
+              <div className="flex items-center gap-1.5">
+                <Circle className="h-2 w-2 fill-current" style={{ color: getLanguageColor(repository.language) }} />
+                <span className="font-medium text-slate-200">{repository.language}</span>
+              </div>
+            )}
+            {repository.description && (
+              <span className="truncate text-slate-500">{repository.description}</span>
+            )}
           </section>
         )}
 
-        {/* Dashboard Grid View */}
-        <div className="grid lg:grid-cols-12 gap-8 items-start">
-          {/* Left Column: Issues List */}
-          <section className="lg:col-span-5 bg-[#161B22]/60 border border-slate-800/80 rounded-2xl p-5 backdrop-blur-xl shadow-lg flex flex-col h-[780px]">
-            <div className="flex items-center justify-between mb-4">
-              <h2 className="font-semibold text-slate-200 flex items-center gap-2">
-                Repository Issues
-                <span className="bg-slate-800 text-slate-400 text-xs px-2 py-0.5 rounded-full font-mono">
-                  {issues.length}
+        {/* Workspace */}
+        <div className="grid gap-4 sm:gap-5 lg:grid-cols-12">
+          {/* Issue list */}
+          <section className="flex h-[70vh] min-h-[420px] flex-col rounded-xl border border-white/[0.07] bg-white/[0.015] lg:h-[760px] lg:col-span-5">
+            <div className="border-b border-white/[0.06] p-3 sm:p-4">
+              <div className="mb-3 flex items-center justify-between">
+                <h2 className="text-[13px] font-semibold text-slate-300">Open issues</h2>
+                <span className="rounded bg-white/[0.05] px-1.5 py-0.5 text-[11px] text-slate-500" style={{ fontFamily: MONO }}>
+                  {filteredIssues.length}
                 </span>
-              </h2>
+              </div>
+              <div className="relative">
+                <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-slate-600" />
+                <input
+                  value={query}
+                  onChange={(e) => setQuery(e.target.value)}
+                  placeholder="Filter by title, #, or label"
+                  className="w-full rounded-md border border-white/[0.08] bg-black/30 py-1.5 pl-8 pr-7 text-[12.5px] text-slate-200 placeholder:text-slate-600 focus:border-indigo-500/50 focus:outline-none focus-visible:ring-1 focus-visible:ring-indigo-500/50"
+                />
+                {query && (
+                  <button
+                    onClick={() => setQuery("")}
+                    className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-600 hover:text-slate-300"
+                  >
+                    <X className="h-3.5 w-3.5" />
+                  </button>
+                )}
+              </div>
             </div>
 
-            {/* Skeleton Loading State */}
             {loading && (
-              <div className="flex flex-col items-center justify-center flex-1 space-y-3">
-                <Loader2 className="animate-spin text-emerald-400 w-8 h-8" />
-                <p className="text-xs text-slate-400 font-medium">Fetching repository issues...</p>
+              <div className="flex flex-1 flex-col items-center justify-center gap-3">
+                <Loader2 className="h-6 w-6 animate-spin text-emerald-400" />
+                <p className="text-[12px] text-slate-500">Fetching repository issues…</p>
               </div>
             )}
 
-            {/* Empty State */}
-            {!loading && repoUrl && issues.length === 0 && (
-              <div className="flex flex-col items-center justify-center flex-1 text-center p-6 space-y-3">
-                <div className="p-4 bg-slate-800/40 rounded-full">
-                  <CheckCircle2 className="w-8 h-8 text-emerald-400" />
-                </div>
-                <h3 className="text-sm font-semibold text-slate-200">No Open Issues</h3>
-                <p className="text-xs text-slate-400 max-w-xs">
-                  This repository has no open issues that require resolution right now.
+            {!loading && repoUrl && issues.length === 0 && !loadError && (
+              <div className="flex flex-1 flex-col items-center justify-center gap-2 px-8 text-center">
+                <CheckCircle2 className="h-6 w-6 text-emerald-400" />
+                <h3 className="text-[13px] font-medium text-slate-200">No open issues</h3>
+                <p className="text-[12px] leading-relaxed text-slate-500">
+                  This repository has nothing open that needs resolving right now.
                 </p>
               </div>
             )}
 
-            {/* Scrollable Issue List */}
-            <div className="overflow-y-auto space-y-3 pr-1 flex-1 custom-scrollbar">
-              {issues.map((issue) => {
+            {!loading && issues.length > 0 && filteredIssues.length === 0 && (
+              <div className="flex flex-1 flex-col items-center justify-center gap-1 text-center">
+                <p className="text-[12.5px] text-slate-500">No issues match “{query}”</p>
+              </div>
+            )}
+
+            <div className="custom-scrollbar flex-1 space-y-1.5 overflow-y-auto p-3">
+              {filteredIssues.map((issue) => {
                 const isSelected = selectedIssue?.id === issue.id;
+                const isSolvingThis = solving && isSelected;
                 return (
-                  <div
+                  <button
                     key={issue.id || issue.number}
-                    className={`group relative rounded-xl border p-4 transition-all duration-200 cursor-pointer ${
+                    onClick={() => solveIssue(issue)}
+                    disabled={isSolvingThis}
+                    className={`group w-full rounded-lg border p-3.5 text-left transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-indigo-500 ${
                       isSelected
-                        ? "border-indigo-500/80 bg-indigo-500/10 shadow-lg shadow-indigo-500/5 ring-1 ring-indigo-500/50"
-                        : "border-slate-800/80 hover:border-slate-700 bg-[#0D1117]/50 hover:bg-[#0D1117]"
+                        ? "border-indigo-500/50 bg-indigo-500/[0.08]"
+                        : "border-transparent bg-white/[0.015] hover:border-white/[0.08] hover:bg-white/[0.03]"
                     }`}
                   >
                     <div className="flex items-start justify-between gap-3">
-                      <div className="space-y-1.5 flex-1 min-w-0">
+                      <div className="min-w-0 flex-1 space-y-1">
                         <div className="flex items-center gap-2">
-                          <span className="font-mono text-xs font-bold text-emerald-400">
+                          <span className="text-[11.5px] font-medium text-slate-500" style={{ fontFamily: MONO }}>
                             #{issue.number}
                           </span>
-                          <span
-                            className={`text-[10px] font-semibold px-2 py-0.5 rounded-md capitalize ${
-                              issue.state === "open"
-                                ? "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20"
-                                : "bg-rose-500/10 text-rose-400 border border-rose-500/20"
-                            }`}
-                          >
-                            {issue.state}
-                          </span>
+                          {timeAgo(issue.createdAt || issue.created_at) && (
+                            <span className="text-[11px] text-slate-600">{timeAgo(issue.createdAt || issue.created_at)}</span>
+                          )}
                         </div>
-
-                        <h3 className="font-semibold text-sm text-slate-200 line-clamp-1 group-hover:text-indigo-300 transition-colors">
-                          {issue.title}
-                        </h3>
-
-                        <p className="text-xs text-slate-400 line-clamp-2 leading-relaxed">
-                          {issue.body || "No detailed description provided."}
+                        <h3 className="line-clamp-1 text-[13px] font-medium text-slate-200">{issue.title}</h3>
+                        <p className="line-clamp-1 text-[12px] leading-relaxed text-slate-500">
+                          {issue.body || "No description provided."}
                         </p>
+                        <div className="flex flex-wrap items-center gap-1.5 pt-1">
+                          {(issue.labels || []).slice(0, 3).map((label, idx) => (
+                            <span
+                              key={idx}
+                              className="rounded border border-white/[0.08] bg-white/[0.03] px-1.5 py-[1px] text-[10.5px] text-slate-400"
+                            >
+                              {typeof label === "object" ? label.name : label}
+                            </span>
+                          ))}
+                          <span className="ml-auto text-[10.5px] text-slate-600">{issue.author || "unknown"}</span>
+                        </div>
                       </div>
-
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          solveIssue(issue);
-                        }}
-                        disabled={solving && selectedIssue?.id === issue.id}
-                        className="shrink-0 bg-indigo-600 hover:bg-indigo-500 active:scale-95 text-white text-xs font-semibold px-3 py-2 rounded-lg flex items-center gap-1.5 shadow-md shadow-indigo-600/20 disabled:opacity-50 transition-all"
+                      <div
+                        className={`mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-md transition-colors sm:h-7 sm:w-7 ${
+                          isSelected ? "bg-indigo-500 text-white" : "bg-white/[0.04] text-slate-500 group-hover:text-slate-300"
+                        }`}
                       >
-                        {solving && selectedIssue?.id === issue.id ? (
-                          <Loader2 className="animate-spin w-3.5 h-3.5" />
+                        {isSolvingThis ? (
+                          <Loader2 className="h-3.5 w-3.5 animate-spin" />
                         ) : (
-                          <Sparkles className="w-3.5 h-3.5 text-indigo-200" />
+                          <Sparkles className="h-3.5 w-3.5" />
                         )}
-                        <span>{solving && selectedIssue?.id === issue.id ? "Solving" : "Solve"}</span>
-                      </button>
+                      </div>
                     </div>
-
-                    {/* Labels */}
-                    <div className="flex flex-wrap items-center gap-1.5 mt-3 pt-3 border-t border-slate-800/60">
-                      {(issue.labels || []).slice(0, 3).map((label, idx) => (
-                        <span
-                          key={idx}
-                          className="bg-slate-800/80 text-[10px] font-medium px-2 py-0.5 rounded text-slate-300 border border-slate-700/50"
-                        >
-                          {typeof label === "object" ? label.name : label}
-                        </span>
-                      ))}
-                      <span className="ml-auto text-[10px] text-slate-500">
-                        by <span className="text-slate-400">{issue.author || "Unknown"}</span>
-                      </span>
-                    </div>
-                  </div>
+                  </button>
                 );
               })}
             </div>
           </section>
 
-          {/* Right Column: AI Solution Panel */}
-          <section className="lg:col-span-7 bg-[#161B22]/60 border border-slate-800/80 rounded-2xl p-6 backdrop-blur-xl shadow-lg min-h-[780px] flex flex-col">
-            <div className="flex items-center justify-between pb-4 border-b border-slate-800/80">
-              <div className="flex items-center gap-2.5">
-                <div className="p-2 bg-amber-500/10 rounded-lg border border-amber-500/20">
-                  <Sparkles className="w-5 h-5 text-amber-400" />
-                </div>
-                <div>
-                  <h2 className="text-base font-semibold text-slate-100">AI Generated Solution</h2>
-                  <p className="text-xs text-slate-400">Contextual root-cause analysis & patches</p>
-                </div>
+          {/* Solution panel */}
+          <section className="flex min-h-[70vh] flex-col rounded-xl border border-white/[0.07] bg-white/[0.015] lg:min-h-[760px] lg:col-span-7">
+            <div className="flex items-center justify-between border-b border-white/[0.06] p-4">
+              <div className="min-w-0">
+                <h2 className="text-[13px] font-semibold text-slate-300">
+                  {selectedIssue ? (
+                    <span className="flex items-center gap-1.5 text-slate-400">
+                      <span className="text-slate-600">Issue</span>
+                      <ChevronRight className="h-3 w-3 text-slate-700" />
+                      <span className="truncate text-slate-200" style={{ fontFamily: MONO }}>
+                        #{selectedIssue.number}
+                      </span>
+                    </span>
+                  ) : (
+                    "AI solution"
+                  )}
+                </h2>
+                {selectedIssue && (
+                  <p className="mt-0.5 line-clamp-1 text-[12.5px] text-slate-500">{selectedIssue.title}</p>
+                )}
               </div>
 
               {solution && (
                 <button
                   onClick={downloadPDF}
-                  className="bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 text-xs font-semibold px-3 py-2 rounded-xl flex items-center gap-1.5 transition-colors shadow-sm"
+                  className="flex shrink-0 items-center gap-1.5 rounded-md border border-white/[0.1] bg-white/[0.04] px-2.5 py-1.5 text-[12px] font-medium text-slate-300 transition-colors hover:border-white/20 hover:bg-white/[0.07]"
                 >
-                  <Download className="w-3.5 h-3.5" />
-                  <span>Export PDF</span>
+                  <Download className="h-3.5 w-3.5" />
+                  Export PDF
                 </button>
               )}
             </div>
 
-            {/* Empty State */}
-            {!selectedIssue && !solution && !solving && (
-              <div className="flex flex-col items-center justify-center flex-1 text-center p-8 space-y-4">
-                <div className="p-4 bg-slate-800/30 rounded-2xl border border-slate-800">
-                  <Sparkles className="w-10 h-10 text-slate-600" />
+            {!selectedIssue && !solving && (
+              <div className="flex flex-1 flex-col items-center justify-center gap-3 p-8 text-center">
+                <div className="rounded-xl border border-white/[0.06] bg-white/[0.02] p-3.5">
+                  <Sparkles className="h-6 w-6 text-slate-600" />
                 </div>
                 <div className="space-y-1">
-                  <h3 className="text-base font-semibold text-slate-200">No Solution Active</h3>
-                  <p className="text-xs text-slate-400 max-w-sm leading-relaxed">
-                    Select an issue from the list and click <span className="text-indigo-400 font-semibold">Solve</span> to let Gemini analyze repository context and propose fixes.
+                  <h3 className="text-[13.5px] font-medium text-slate-300">Nothing selected yet</h3>
+                  <p className="max-w-sm text-[12.5px] leading-relaxed text-slate-500">
+                    Pick an issue on the left to generate a root-cause analysis and a proposed patch.
                   </p>
                 </div>
               </div>
             )}
 
-            {/* Solving Loading Indicator */}
             {solving && (
-              <div className="my-auto bg-indigo-500/10 border border-indigo-500/20 rounded-2xl p-6 text-indigo-300 flex items-center gap-4">
-                <Loader2 className="animate-spin w-6 h-6 text-indigo-400 shrink-0" />
+              <div className="flex flex-1 flex-col items-center justify-center gap-3 p-8 text-center">
+                <Loader2 className="h-6 w-6 animate-spin text-indigo-400" />
                 <div className="space-y-1">
-                  <h4 className="text-sm font-semibold text-indigo-200">Analyzing Repository Context</h4>
-                  <p className="text-xs text-indigo-300/80 leading-relaxed">
-                    Reading code AST, cross-referencing commit logs, and formulating optimal solution...
+                  <h4 className="text-[13.5px] font-medium text-slate-200">Analyzing repository context</h4>
+                  <p className="max-w-sm text-[12.5px] leading-relaxed text-slate-500">
+                    Reading source, cross-referencing commit history, and drafting a fix…
                   </p>
                 </div>
               </div>
             )}
 
-            {/* Solution Error Message */}
-            {solveError && (
-              <div className="my-auto bg-rose-500/10 border border-rose-500/20 rounded-2xl p-4 text-rose-300 flex items-center gap-3">
-                <AlertCircle className="w-5 h-5 text-rose-400 shrink-0" />
-                <p className="text-sm">{solveError}</p>
+            {solveError && !solving && (
+              <div className="flex flex-1 items-start justify-center p-8">
+                <div className="flex w-full max-w-md items-start gap-3 rounded-lg border border-rose-500/20 bg-rose-500/[0.06] p-4 text-rose-300">
+                  <AlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-rose-400" />
+                  <p className="text-[13px] leading-relaxed">{solveError}</p>
+                </div>
               </div>
             )}
 
-            {/* Render Solution Payload */}
             {solution && !solving && (
-              <div className="mt-6 space-y-6 overflow-y-auto pr-1 flex-1 custom-scrollbar">
-                {/* Metrics Cards */}
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="bg-[#0D1117] p-4 rounded-xl border border-slate-800/80 space-y-2">
-                    <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Confidence Score</span>
-                    <div className="flex items-center justify-between">
-                      <span className="text-xl font-bold text-emerald-400">{solution.confidence}%</span>
-                      <span className="text-[10px] text-slate-500 font-mono">Precision Match</span>
-                    </div>
-                    <div className="w-full bg-slate-800 rounded-full h-1.5 overflow-hidden">
-                      <div
-                        className="bg-emerald-500 h-full rounded-full transition-all duration-500"
-                        style={{ width: `${solution.confidence}%` }}
-                      />
-                    </div>
-                  </div>
-
-                  <div className="bg-[#0D1117] p-4 rounded-xl border border-slate-800/80 space-y-2">
-                    <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Estimated Complexity</span>
+              <div className="flex flex-1 flex-col overflow-hidden">
+                {/* Metrics */}
+                <div className="flex flex-wrap items-center gap-4 border-b border-white/[0.06] px-4 py-3.5 sm:gap-6">
+                  <div className="flex items-center gap-3">
+                    <ScoreRing value={solution.confidence ?? 0} />
                     <div>
-                      <span className="inline-flex items-center text-xs font-semibold px-2.5 py-1 rounded-md bg-indigo-500/10 text-indigo-400 border border-indigo-500/20">
-                        {solution.complexity || "Medium"}
-                      </span>
+                      <div className="text-[17px] font-semibold text-slate-100">{solution.confidence}%</div>
+                      <div className="text-[11px] text-slate-500">confidence</div>
                     </div>
                   </div>
-                </div>
-
-                {/* Executive Summary */}
-                <div className="space-y-2">
-                  <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider">Executive Summary</h3>
-                  <p className="text-sm text-slate-300 leading-relaxed bg-[#0D1117] p-4 rounded-xl border border-slate-800/80">
-                    {solution.summary}
-                  </p>
-                </div>
-
-                {/* Root Cause */}
-                <div className="space-y-2">
-                  <h3 className="text-xs font-bold text-rose-400 uppercase tracking-wider">Root Cause Analysis</h3>
-                  <div className="text-sm text-slate-300 leading-relaxed bg-[#0D1117] p-4 rounded-xl border border-slate-800/80 font-mono text-xs">
-                    {solution.rootCause}
+                  <div className="h-8 w-px bg-white/[0.06]" />
+                  <div>
+                    <span className="inline-flex items-center rounded-md border border-indigo-500/25 bg-indigo-500/10 px-2 py-1 text-[11.5px] font-medium text-indigo-300">
+                      {solution.complexity || "Medium"} complexity
+                    </span>
                   </div>
                 </div>
 
-                {/* Recommended Solution */}
-                <div className="space-y-2">
-                  <h3 className="text-xs font-bold text-amber-400 uppercase tracking-wider">Recommended Strategy</h3>
-                  <div className="text-sm text-slate-300 leading-relaxed bg-[#0D1117] p-4 rounded-xl border border-slate-800/80 whitespace-pre-wrap">
-                    {solution.solution}
-                  </div>
+                {/* Tabs */}
+                <div className="flex items-center gap-1 overflow-x-auto border-b border-white/[0.06] px-4">
+                  {tabs.map((tab) => (
+                    <button
+                      key={tab.id}
+                      onClick={() => setActiveTab(tab.id)}
+                      className={`relative shrink-0 px-3 py-2.5 text-[12.5px] font-medium transition-colors ${
+                        activeTab === tab.id ? "text-slate-100" : "text-slate-500 hover:text-slate-300"
+                      }`}
+                    >
+                      {tab.label}
+                      {activeTab === tab.id && (
+                        <span className="absolute inset-x-3 -bottom-px h-[2px] rounded-full bg-indigo-500" />
+                      )}
+                    </button>
+                  ))}
                 </div>
 
-                {/* Affected Files */}
-                {solution.affectedFiles?.length > 0 && (
-                  <div className="space-y-2">
-                    <h3 className="text-xs font-bold text-cyan-400 uppercase tracking-wider flex items-center gap-1.5">
-                      <FileCode className="w-4 h-4" /> Affected Files
-                    </h3>
-                    <div className="flex flex-wrap gap-2">
-                      {solution.affectedFiles.map((file, idx) => (
+                <div className="custom-scrollbar flex-1 overflow-y-auto p-4">
+                  {activeTab === "overview" && (
+                    <div className="space-y-5">
+                      <div className="space-y-1.5">
+                        <h3 className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">Summary</h3>
+                        <p className="rounded-lg border border-white/[0.06] bg-white/[0.02] p-3.5 text-[13px] leading-relaxed text-slate-300">
+                          {solution.summary}
+                        </p>
+                      </div>
+
+                      <div className="space-y-1.5">
+                        <h3 className="text-[11px] font-semibold uppercase tracking-wide text-rose-400/80">Root cause</h3>
+                        <div className="rounded-lg border border-white/[0.06] bg-black/30 p-3.5 text-[13px] leading-relaxed text-slate-300" style={{ fontFamily: MONO, fontSize: 12.5 }}>
+                          {solution.rootCause}
+                        </div>
+                      </div>
+
+                      <div className="space-y-1.5">
+                        <h3 className="text-[11px] font-semibold uppercase tracking-wide text-amber-400/80">Strategy</h3>
+                        <div className="whitespace-pre-wrap rounded-lg border border-white/[0.06] bg-white/[0.02] p-3.5 text-[13px] leading-relaxed text-slate-300">
+                          {solution.solution}
+                        </div>
+                      </div>
+
+                      {solution.implementationSteps?.length > 0 && (
+                        <div className="space-y-1.5">
+                          <h3 className="text-[11px] font-semibold uppercase tracking-wide text-emerald-400/80">
+                            Implementation steps
+                          </h3>
+                          <ol className="space-y-1.5">
+                            {solution.implementationSteps.map((step, i) => (
+                              <li
+                                key={i}
+                                className="flex gap-3 rounded-lg border border-white/[0.06] bg-white/[0.02] p-3 text-[12.5px] text-slate-300"
+                              >
+                                <span
+                                  className="shrink-0 font-semibold text-emerald-400"
+                                  style={{ fontFamily: MONO }}
+                                >
+                                  {String(i + 1).padStart(2, "0")}
+                                </span>
+                                <span className="leading-relaxed">{step}</span>
+                              </li>
+                            ))}
+                          </ol>
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {activeTab === "patch" && solution.patch?.file && (
+                    <div className="space-y-3">
+                      <div className="flex items-center justify-between">
                         <span
-                          key={idx}
-                          className="bg-[#0D1117] text-slate-300 font-mono text-xs px-3 py-1.5 rounded-lg border border-slate-800 flex items-center gap-1.5"
+                          className="rounded-md border border-white/[0.08] bg-white/[0.03] px-2.5 py-1 text-[12px] text-slate-300"
+                          style={{ fontFamily: MONO }}
                         >
-                          <FileCode className="w-3.5 h-3.5 text-cyan-400" />
-                          {file}
+                          {solution.patch.file}
                         </span>
+                        <CopyButton text={solution.patch.newCode} />
+                      </div>
+                      <div className="overflow-hidden rounded-lg border border-white/[0.08]">
+                        <div className="border-b border-white/[0.06] bg-rose-500/[0.04] px-3 py-1.5 text-[10.5px] font-semibold uppercase tracking-wide text-rose-400/80">
+                          Before
+                        </div>
+                        <CodeBlock code={solution.patch.oldCode} tone="remove" />
+                        <div className="border-y border-white/[0.06] bg-emerald-500/[0.04] px-3 py-1.5 text-[10.5px] font-semibold uppercase tracking-wide text-emerald-400/80">
+                          After
+                        </div>
+                        <CodeBlock code={solution.patch.newCode} tone="add" />
+                      </div>
+                    </div>
+                  )}
+
+                  {activeTab === "files" && (
+                    <div className="space-y-2">
+                      {(solution.affectedFiles || []).map((file, idx) => (
+                        <div
+                          key={idx}
+                          className="flex items-center gap-2.5 rounded-lg border border-white/[0.06] bg-white/[0.02] px-3.5 py-2.5"
+                        >
+                          <FileCode className="h-4 w-4 shrink-0 text-cyan-400" />
+                          <span className="truncate text-[12.5px] text-slate-300" style={{ fontFamily: MONO }}>
+                            {file}
+                          </span>
+                        </div>
                       ))}
                     </div>
-                  </div>
-                )}
+                  )}
 
-                {/* Step-by-Step Implementation */}
-                {solution.implementationSteps?.length > 0 && (
-                  <div className="space-y-2">
-                    <h3 className="text-xs font-bold text-emerald-400 uppercase tracking-wider flex items-center gap-1.5">
-                      <CheckCircle2 className="w-4 h-4" /> Implementation Workflow
-                    </h3>
-                    <ol className="space-y-2">
-                      {solution.implementationSteps.map((step, i) => (
-                        <li key={i} className="flex gap-3 bg-[#0D1117] p-3 rounded-xl border border-slate-800/80 text-xs text-slate-300">
-                          <span className="font-mono text-emerald-400 font-bold shrink-0">{i + 1}.</span>
-                          <span className="leading-relaxed">{step}</span>
-                        </li>
-                      ))}
-                    </ol>
-                  </div>
-                )}
-
-                {/* Related Commits */}
-                {solution.relatedCommits?.length > 0 && (
-                  <div className="space-y-2">
-                    <h3 className="text-xs font-bold text-purple-400 uppercase tracking-wider flex items-center gap-1.5">
-                      <GitCommit className="w-4 h-4" /> Contextual Commits
-                    </h3>
+                  {activeTab === "commits" && (
                     <div className="space-y-2">
-                      {solution.relatedCommits.map((commit, index) => (
-                        <div key={commit.hash || index} className="bg-[#0D1117] border border-slate-800/80 rounded-xl p-3 text-xs space-y-1">
+                      {(solution.relatedCommits || []).map((commit, index) => (
+                        <div
+                          key={commit.hash || index}
+                          className="space-y-1 rounded-lg border border-white/[0.06] bg-white/[0.02] p-3.5"
+                        >
                           <div className="flex items-center justify-between">
-                            <span className="font-mono text-purple-400 font-semibold">
-                              {commit.hash ? commit.hash.substring(0, 7) : "Commit"}
+                            <span className="flex items-center gap-1.5 text-[12px] font-medium text-purple-300" style={{ fontFamily: MONO }}>
+                              <GitCommit className="h-3.5 w-3.5" />
+                              {commit.hash ? commit.hash.substring(0, 7) : "commit"}
                             </span>
-                            <span className="text-[10px] text-slate-500">
+                            <span className="text-[11px] text-slate-600">
                               {commit.date ? new Date(commit.date).toLocaleDateString() : ""}
                             </span>
                           </div>
-                          <p className="text-slate-200 font-medium">{commit.message}</p>
-                          <p className="text-[10px] text-slate-400">By {commit.author}</p>
+                          <p className="text-[13px] text-slate-200">{commit.message}</p>
+                          <p className="text-[11px] text-slate-500">by {commit.author}</p>
                         </div>
                       ))}
                     </div>
-                  </div>
-                )}
-
-                {/* Code Patch Differential */}
-                {solution.patch?.file && (
-                  <div className="space-y-3 pt-4 border-t border-slate-800/80">
-                    <div className="flex items-center justify-between">
-                      <h3 className="text-xs font-bold text-amber-400 uppercase tracking-wider">Proposed Patch</h3>
-                      <span className="font-mono text-xs text-slate-400 bg-[#0D1117] px-2.5 py-1 rounded-md border border-slate-800">
-                        {solution.patch.file}
-                      </span>
-                    </div>
-
-                    {/* Diff Viewer Card */}
-                    <div className="bg-black/80 rounded-xl border border-slate-800 overflow-hidden font-mono text-xs">
-                      {/* Old Code Block */}
-                      <div className="p-3 bg-rose-500/5 border-b border-slate-800/80">
-                        <div className="text-[10px] font-bold text-rose-400 mb-1 uppercase tracking-wider">- Original Code</div>
-                        <pre className="text-rose-300/90 overflow-x-auto whitespace-pre-wrap leading-relaxed">
-                          {solution.patch.oldCode}
-                        </pre>
-                      </div>
-
-                      {/* New Code Block */}
-                      <div className="p-3 bg-emerald-500/5 relative group">
-                        <div className="flex justify-between items-center mb-1">
-                          <span className="text-[10px] font-bold text-emerald-400 uppercase tracking-wider">+ Proposed Fix</span>
-                          <button
-                            onClick={() => handleCopyCode(solution.patch.newCode)}
-                            className="bg-slate-800 hover:bg-slate-700 text-slate-300 p-1.5 rounded-md transition-colors"
-                            title="Copy Fix"
-                          >
-                            {copiedCode ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
-                          </button>
-                        </div>
-                        <pre className="text-emerald-300/90 overflow-x-auto whitespace-pre-wrap leading-relaxed">
-                          {solution.patch.newCode}
-                        </pre>
-                      </div>
-                    </div>
-                  </div>
-                )}
+                  )}
+                </div>
               </div>
             )}
           </section>

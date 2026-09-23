@@ -12,6 +12,8 @@ import {
   RotateCcw,
 } from "lucide-react";
 import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
+import rehypeRaw from "rehype-raw";
 import API from "../services/api";
 
 const MAX_QUESTION_LENGTH = 300;
@@ -28,60 +30,62 @@ const SUGGESTIONS = [
 ];
 
 // Markdown renderers kept outside the component so they aren't recreated
-// on every render, and so styling stays in one place.
+// on every render, and so styling stays in one place. Tuned for a premium,
+// readable analysis report rather than default markdown output.
 const markdownComponents = {
   h1: ({ children }) => (
-    <h1 className="text-sm font-semibold text-slate-100 mt-4 mb-2 first:mt-0 pb-1.5 border-b border-slate-800">
+    <h1 className="text-[13.5px] font-semibold text-white mt-5 mb-2.5 first:mt-0 pb-2 border-b border-white/[0.08]">
       {children}
     </h1>
   ),
   h2: ({ children }) => (
-    <h2 className="text-[13px] font-semibold text-slate-100 mt-4 mb-2 first:mt-0">
+    <h2 className="text-[13px] font-semibold text-white mt-5 mb-2 first:mt-0 flex items-center gap-2">
+      <span className="w-1 h-3.5 rounded-full bg-sky-400/70" aria-hidden="true" />
       {children}
     </h2>
   ),
   h3: ({ children }) => (
-    <h3 className="text-xs font-semibold text-slate-200 mt-3 mb-1.5 first:mt-0">
+    <h3 className="text-[12px] font-semibold text-[#C7CCD6] mt-4 mb-1.5 first:mt-0">
       {children}
     </h3>
   ),
   p: ({ children }) => (
-    <p className="text-xs text-slate-300 leading-relaxed mb-2.5 last:mb-0 break-words">
+    <p className="text-[12.5px] text-[#B7BFCC] leading-relaxed mb-3 last:mb-0 break-words">
       {children}
     </p>
   ),
   ul: ({ children }) => (
-    <ul className="text-xs text-slate-300 mb-2.5 pl-4 space-y-1 list-disc marker:text-slate-600">
+    <ul className="text-[12.5px] text-[#B7BFCC] mb-3 pl-4 space-y-1.5 list-disc marker:text-[#4C5666]">
       {children}
     </ul>
   ),
   ol: ({ children }) => (
-    <ol className="text-xs text-slate-300 mb-2.5 pl-4 space-y-1 list-decimal marker:text-slate-600">
+    <ol className="text-[12.5px] text-[#B7BFCC] mb-3 pl-4 space-y-1.5 list-decimal marker:text-[#4C5666]">
       {children}
     </ol>
   ),
   li: ({ children }) => <li className="leading-relaxed break-words">{children}</li>,
-  strong: ({ children }) => <strong className="font-semibold text-slate-100">{children}</strong>,
-  em: ({ children }) => <em className="text-slate-200">{children}</em>,
+  strong: ({ children }) => <strong className="font-semibold text-white">{children}</strong>,
+  em: ({ children }) => <em className="text-[#C7CCD6]">{children}</em>,
   a: ({ href, children }) => (
     <a
       href={href}
       target="_blank"
       rel="noopener noreferrer"
-      className="text-indigo-400 hover:text-indigo-300 underline underline-offset-2 decoration-indigo-700 break-all"
+      className="text-sky-400 hover:text-sky-300 underline underline-offset-2 decoration-sky-700/60 break-all"
     >
       {children}
     </a>
   ),
   blockquote: ({ children }) => (
-    <blockquote className="border-l-2 border-indigo-500/40 pl-3 py-0.5 mb-2.5 text-xs text-slate-400 italic">
+    <blockquote className="border-l-2 border-sky-400/40 pl-3 py-0.5 mb-3 text-[12.5px] text-[#8B94A5] italic">
       {children}
     </blockquote>
   ),
   code: ({ inline, className, children }) => {
     if (inline) {
       return (
-        <code className="px-1 py-0.5 rounded bg-slate-800 text-indigo-300 text-[11px] font-mono break-words">
+        <code className="px-1 py-0.5 rounded-[4px] bg-white/[0.06] border border-white/[0.06] text-sky-300 text-[11px] font-mono break-words">
           {children}
         </code>
       );
@@ -93,27 +97,27 @@ const markdownComponents = {
     );
   },
   pre: ({ children }) => (
-    <pre className="mb-2.5 rounded-lg border border-slate-800 bg-slate-950 p-3 overflow-x-auto max-w-full">
+    <pre className="mb-3 rounded-[10px] border border-white/[0.08] bg-[#0A0D12] p-3 overflow-x-auto max-w-full">
       {children}
     </pre>
   ),
   table: ({ children }) => (
-    <div className="mb-2.5 overflow-x-auto rounded-lg border border-slate-800 max-w-full">
-      <table className="text-[11px] w-full border-collapse min-w-[380px]">{children}</table>
+    <div className="mb-3 overflow-x-auto rounded-[10px] border border-white/[0.08] max-w-full">
+      <table className="text-[11px] w-full border-collapse min-w-[380px] tabular-nums">{children}</table>
     </div>
   ),
-  thead: ({ children }) => <thead className="bg-slate-900">{children}</thead>,
+  thead: ({ children }) => <thead className="bg-white/[0.04]">{children}</thead>,
   th: ({ children }) => (
-    <th className="text-left font-medium text-slate-300 px-2.5 py-1.5 border-b border-slate-800 whitespace-nowrap">
+    <th className="text-left font-medium text-[#C7CCD6] px-2.5 py-1.5 border-b border-white/[0.08] whitespace-nowrap">
       {children}
     </th>
   ),
   td: ({ children }) => (
-    <td className="text-slate-300 px-2.5 py-1.5 border-b border-slate-800/60 align-top">
+    <td className="text-[#B7BFCC] px-2.5 py-2 border-b border-white/[0.05] align-top leading-relaxed">
       {children}
     </td>
   ),
-  hr: () => <hr className="border-slate-800 my-3" />,
+  hr: () => <hr className="border-white/[0.08] my-4" />,
 };
 
 export default function ContributorAI({ contributorName, allCommits }) {
@@ -217,31 +221,26 @@ export default function ContributorAI({ contributorName, allCommits }) {
   const isLoading = status === "loading";
 
   return (
-    <div className="bg-slate-900/70 border border-slate-800 rounded-xl shadow-sm p-3 sm:p-4 h-full min-h-0 flex flex-col overflow-hidden text-slate-100">
+    <div className="bg-white/[0.02] border border-white/[0.08] rounded-[12px] p-3 sm:p-4 h-full min-h-0 flex flex-col overflow-hidden text-[#E7EAEF]">
       {/* Header */}
-      <div className="mb-3 shrink-0 flex items-center justify-between gap-2 border-b border-slate-800 pb-3">
+      <div className="mb-3 shrink-0 flex items-center justify-between gap-2 border-b border-white/[0.08] pb-3">
         <div className="flex items-center gap-2.5 min-w-0">
-          <div className="p-1.5 rounded-lg bg-indigo-500/10 border border-indigo-500/20 text-indigo-400 shrink-0">
-            <Sparkles size={16} aria-hidden="true" />
+          <div className="p-1.5 rounded-[8px] bg-sky-400/10 border border-sky-400/20 text-sky-400 shrink-0">
+            <Sparkles size={15} strokeWidth={1.75} aria-hidden="true" />
           </div>
           <div className="min-w-0">
-            <div className="flex items-center gap-2 min-w-0">
-              <h2 className="text-sm font-semibold text-slate-100 truncate">
-                Contributor Intelligence
-              </h2>
-              <span className="shrink-0 text-[10px] font-medium bg-indigo-500/10 border border-indigo-500/25 text-indigo-300 px-1.5 py-0.5 rounded">
-                Gemini
-              </span>
-            </div>
-            <p className="text-[11px] text-slate-400 truncate">
-              Insights for <span className="text-slate-300 font-medium">{contributorName || "Contributor"}</span>
+            <h2 className="text-[13.5px] font-semibold text-white truncate">
+              Contributor Intelligence
+            </h2>
+            <p className="text-[11px] text-[#7C8698] truncate">
+              Insights for <span className="text-[#C7CCD6] font-medium">{contributorName || "Contributor"}</span>
             </p>
           </div>
         </div>
       </div>
 
       {/* Input Box */}
-      <div className="relative shrink-0 rounded-lg border border-slate-800 bg-slate-950/70 transition-colors focus-within:border-indigo-500/60 focus-within:ring-1 focus-within:ring-indigo-500/30">
+      <div className="relative shrink-0 rounded-[10px] border border-white/[0.08] bg-[#0A0D12] transition-colors focus-within:border-sky-400/50 focus-within:ring-1 focus-within:ring-sky-400/25">
         <label htmlFor="contributor-ai-question" className="sr-only">
           Ask a question about {contributorName || "this contributor"}
         </label>
@@ -255,19 +254,19 @@ export default function ContributorAI({ contributorName, allCommits }) {
           placeholder={`Ask about ${contributorName || "this contributor"}...`}
           disabled={isLoading}
           aria-describedby="contributor-ai-char-count"
-          className="w-full bg-transparent p-2.5 text-xs text-slate-200 placeholder-slate-500 outline-none resize-none disabled:opacity-50"
+          className="w-full bg-transparent p-2.5 text-[12.5px] text-[#E7EAEF] placeholder-[#5C6779] outline-none resize-none disabled:opacity-50"
         />
 
-        <div className="flex flex-wrap items-center justify-between gap-2 px-2.5 pb-2 pt-1.5 border-t border-slate-800/70">
+        <div className="flex flex-wrap items-center justify-between gap-2 px-2.5 pb-2 pt-1.5 border-t border-white/[0.06]">
           <span
             id="contributor-ai-char-count"
-            className={`text-[10px] tabular-nums ${remaining < 20 ? "text-rose-400 font-medium" : "text-slate-500"}`}
+            className={`text-[10px] tabular-nums ${remaining < 20 ? "text-rose-400 font-medium" : "text-[#5C6779]"}`}
           >
             {remaining} left
           </span>
 
           <div className="flex items-center gap-2 ml-auto">
-            <span className="hidden md:flex items-center gap-1 text-[10px] text-slate-500">
+            <span className="hidden md:flex items-center gap-1 text-[10px] text-[#5C6779]">
               <CornerDownLeft size={10} aria-hidden="true" /> to send
             </span>
             <button
@@ -275,7 +274,7 @@ export default function ContributorAI({ contributorName, allCommits }) {
               onClick={() => askAI()}
               disabled={isLoading || !question.trim()}
               aria-label="Ask AI"
-              className="flex items-center gap-1.5 bg-indigo-600 hover:bg-indigo-500 active:bg-indigo-700 text-white px-3 py-1.5 rounded-md text-xs font-medium transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+              className="flex items-center gap-1.5 bg-sky-500 hover:bg-sky-400 active:bg-sky-600 text-[#04121D] px-3 py-1.5 rounded-[8px] text-xs font-semibold transition-colors duration-150 disabled:opacity-40 disabled:cursor-not-allowed min-h-[34px]"
             >
               {isLoading ? (
                 <Loader2 size={13} className="animate-spin" aria-hidden="true" />
@@ -293,12 +292,12 @@ export default function ContributorAI({ contributorName, allCommits }) {
         {/* Empty state + suggestions */}
         {!answer && !isLoading && status !== "error" && (
           <div className="space-y-3">
-            <p className="text-xs text-slate-400 leading-relaxed">
+            <p className="text-[12.5px] text-[#7C8698] leading-relaxed">
               Ask a question about this contributor's commits, ownership, technical strengths, or
               development patterns.
             </p>
             <div>
-              <p className="text-[10px] font-medium text-slate-500 mb-1.5">Suggested prompts</p>
+              <p className="text-[10px] font-medium text-[#5C6779] mb-1.5">Suggested prompts</p>
               <div className="flex flex-wrap gap-1.5">
                 {SUGGESTIONS.map((suggestion) => (
                   <button
@@ -309,9 +308,9 @@ export default function ContributorAI({ contributorName, allCommits }) {
                       askAI(suggestion);
                     }}
                     disabled={isLoading}
-                    className="flex items-center gap-1.5 text-[11px] text-slate-300 bg-slate-800/60 hover:bg-slate-800 hover:text-indigo-300 border border-slate-700/60 hover:border-indigo-500/40 px-2.5 py-1.5 rounded-md transition-colors disabled:opacity-50"
+                    className="flex items-center gap-1.5 text-[11px] text-[#C7CCD6] bg-white/[0.03] hover:bg-white/[0.06] hover:text-sky-300 border border-white/[0.08] hover:border-sky-400/30 px-2.5 py-2 sm:py-1.5 rounded-[8px] transition-colors duration-150 disabled:opacity-50"
                   >
-                    <MessageSquareText size={11} className="text-slate-500 shrink-0" aria-hidden="true" />
+                    <MessageSquareText size={11} className="text-[#5C6779] shrink-0" aria-hidden="true" />
                     <span className="truncate max-w-[220px]">{suggestion}</span>
                   </button>
                 ))}
@@ -325,12 +324,12 @@ export default function ContributorAI({ contributorName, allCommits }) {
           <div
             role="status"
             aria-live="polite"
-            className="flex items-start gap-3 rounded-lg border border-slate-800 bg-slate-950/50 p-3.5"
+            className="flex items-start gap-3 rounded-[10px] border border-white/[0.08] bg-white/[0.02] p-3.5"
           >
-            <Loader2 size={15} className="animate-spin text-indigo-400 mt-0.5 shrink-0" aria-hidden="true" />
+            <Loader2 size={15} className="animate-spin text-sky-400 mt-0.5 shrink-0" aria-hidden="true" />
             <div className="min-w-0">
-              <p className="text-xs font-medium text-slate-200">Analyzing contributor...</p>
-              <p className="text-[11px] text-slate-500 mt-0.5">
+              <p className="text-[12.5px] font-medium text-[#E7EAEF]">Analyzing contributor...</p>
+              <p className="text-[11px] text-[#7C8698] mt-0.5">
                 Reviewing commits and contribution patterns
               </p>
             </div>
@@ -341,7 +340,7 @@ export default function ContributorAI({ contributorName, allCommits }) {
         {status === "error" && (
           <div
             role="alert"
-            className="flex items-start gap-2.5 bg-rose-500/10 border border-rose-500/25 text-rose-300 rounded-lg p-3 text-xs"
+            className="flex items-start gap-2.5 bg-rose-500/10 border border-rose-500/25 text-rose-300 rounded-[10px] p-3 text-[12.5px]"
           >
             <AlertCircle size={15} className="mt-0.5 shrink-0 text-rose-400" aria-hidden="true" />
             <div className="min-w-0 flex-1">
@@ -350,7 +349,7 @@ export default function ContributorAI({ contributorName, allCommits }) {
                 <button
                   type="button"
                   onClick={() => askAI(lastQuestion)}
-                  className="mt-2 inline-flex items-center gap-1.5 text-[11px] font-medium text-rose-200 hover:text-white bg-rose-500/10 hover:bg-rose-500/20 border border-rose-500/30 px-2 py-1 rounded-md transition-colors"
+                  className="mt-2 inline-flex items-center gap-1.5 text-[11px] font-medium text-rose-200 hover:text-white bg-rose-500/10 hover:bg-rose-500/20 border border-rose-500/30 px-2 py-1.5 rounded-[8px] transition-colors duration-150"
                 >
                   <RotateCcw size={11} aria-hidden="true" />
                   Retry
@@ -362,13 +361,13 @@ export default function ContributorAI({ contributorName, allCommits }) {
 
         {/* Output Answer Block */}
         {answer && status !== "error" && (
-          <div aria-live="polite" className="rounded-lg border border-slate-800 bg-slate-950/50">
-            <div className="flex flex-wrap items-center justify-between gap-2 px-3.5 py-2.5 border-b border-slate-800">
+          <div aria-live="polite" className="rounded-[10px] border border-white/[0.08] bg-white/[0.02]">
+            <div className="flex flex-wrap items-center justify-between gap-2 px-3.5 py-2.5 border-b border-white/[0.08]">
               <div className="flex items-center gap-1.5 min-w-0">
-                <Sparkles size={13} className="text-indigo-400 shrink-0" aria-hidden="true" />
-                <h3 className="text-xs font-semibold text-slate-200 truncate">Analysis Summary</h3>
+                <Sparkles size={13} className="text-sky-400 shrink-0" aria-hidden="true" />
+                <h3 className="text-[12.5px] font-semibold text-[#E7EAEF] truncate">Analysis Summary</h3>
                 {duration > 0 && (
-                  <span className="text-[10px] text-slate-500 shrink-0">
+                  <span className="text-[10px] text-[#5C6779] shrink-0 tabular-nums">
                     {(duration / 1000).toFixed(2)}s
                   </span>
                 )}
@@ -379,7 +378,7 @@ export default function ContributorAI({ contributorName, allCommits }) {
                   type="button"
                   onClick={copyAnswer}
                   aria-label="Copy analysis to clipboard"
-                  className="flex items-center gap-1 text-[11px] bg-slate-800/80 hover:bg-slate-700 text-slate-300 px-2 py-1 rounded-md transition-colors border border-slate-700/60"
+                  className="flex items-center gap-1 text-[11px] bg-white/[0.04] hover:bg-white/[0.08] text-[#C7CCD6] px-2 py-1.5 rounded-[8px] transition-colors duration-150 border border-white/[0.08]"
                 >
                   {copied ? (
                     <Check size={12} className="text-emerald-400" aria-hidden="true" />
@@ -392,7 +391,7 @@ export default function ContributorAI({ contributorName, allCommits }) {
                   type="button"
                   onClick={downloadReview}
                   aria-label="Download analysis as markdown file"
-                  className="flex items-center gap-1 text-[11px] bg-slate-800/80 hover:bg-slate-700 text-slate-300 px-2 py-1 rounded-md transition-colors border border-slate-700/60"
+                  className="flex items-center gap-1 text-[11px] bg-white/[0.04] hover:bg-white/[0.08] text-[#C7CCD6] px-2 py-1.5 rounded-[8px] transition-colors duration-150 border border-white/[0.08]"
                 >
                   <Download size={12} aria-hidden="true" />
                   <span>Download</span>
@@ -400,8 +399,14 @@ export default function ContributorAI({ contributorName, allCommits }) {
               </div>
             </div>
 
-            <div className="px-3.5 py-3 max-w-none min-w-0">
-              <ReactMarkdown components={markdownComponents}>{answer}</ReactMarkdown>
+            <div className="px-3.5 py-3.5 max-w-none min-w-0">
+              <ReactMarkdown
+                remarkPlugins={[remarkGfm]}
+                rehypePlugins={[rehypeRaw]}
+                components={markdownComponents}
+              >
+                {answer}
+              </ReactMarkdown>
             </div>
           </div>
         )}

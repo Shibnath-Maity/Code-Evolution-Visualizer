@@ -47,22 +47,17 @@ function summarize(list = []) {
 // ---------------------------------------------------------------------------
 // Trend badge: compact, quiet, never louder than the metric it describes.
 // Direction is conveyed through icon + text, not color alone.
+// Renders nothing when there's no previous-period data to compare against.
 // ---------------------------------------------------------------------------
 
 const TREND_STYLES = {
-  up: { Icon: ArrowUp, className: "text-emerald-600 dark:text-emerald-400" },
-  down: { Icon: ArrowDown, className: "text-rose-600 dark:text-rose-400" },
-  flat: { Icon: Minus, className: "text-slate-500 dark:text-slate-400" },
+  up: { Icon: ArrowUp, className: "text-emerald-400" },
+  down: { Icon: ArrowDown, className: "text-rose-400" },
+  flat: { Icon: Minus, className: "text-[#7C8698]" },
 };
 
 function TrendBadge({ trend }) {
-  if (!trend) {
-    return (
-      <span className="text-xs font-medium text-slate-400 dark:text-slate-500">
-        No prior period
-      </span>
-    );
-  }
+  if (!trend) return null;
 
   const { Icon, className } = TREND_STYLES[trend.direction];
   const label =
@@ -73,8 +68,8 @@ function TrendBadge({ trend }) {
         )}% vs previous period`;
 
   return (
-    <span className={`inline-flex items-center gap-1 text-xs font-medium ${className}`}>
-      <Icon size={12} strokeWidth={2.5} aria-hidden="true" />
+    <span className={`inline-flex items-center gap-1 text-[11px] font-medium tabular-nums ${className}`}>
+      <Icon size={11} strokeWidth={2.5} aria-hidden="true" />
       <span aria-hidden="true">
         {trend.direction === "flat" ? "0%" : `${trend.pct.toFixed(1)}%`}
       </span>
@@ -97,7 +92,7 @@ function CommitActivity({ contributors }) {
 
   if (topCommitters.length === 0) {
     return (
-      <p className="text-xs text-slate-400 dark:text-slate-500 py-2">
+      <p className="text-[11px] text-[#7C8698] py-2">
         No commit activity yet
       </p>
     );
@@ -106,7 +101,7 @@ function CommitActivity({ contributors }) {
   return (
     <div>
       <div
-        className="flex items-end gap-1 h-8"
+        className="flex items-end gap-1 h-7 sm:h-8"
         role="img"
         aria-label={`Top committer ${topCommitters[0]?.name || "unknown"} with ${
           topCommitters[0]?.commits || 0
@@ -117,16 +112,14 @@ function CommitActivity({ contributors }) {
           return (
             <div
               key={contributor.email || contributor.name || index}
-              className="flex-1 h-full flex items-end"
+              className="flex-1 h-full flex items-end min-w-0"
               title={`${contributor.name || "Unknown"}: ${formatNumber(
                 contributor.commits || 0
               )} commits`}
             >
               <div
-                className={`w-full rounded-sm ${
-                  index === 0
-                    ? "bg-blue-600 dark:bg-blue-500"
-                    : "bg-slate-200 dark:bg-slate-700"
+                className={`w-full rounded-[2px] ${
+                  index === 0 ? "bg-sky-400" : "bg-white/[0.08]"
                 }`}
                 style={{ height: `${heightPct}%` }}
               />
@@ -135,9 +128,9 @@ function CommitActivity({ contributors }) {
         })}
       </div>
 
-      <div className="mt-2 flex items-center justify-between text-xs">
-        <span className="text-slate-500 dark:text-slate-400">Top contributor</span>
-        <span className="font-medium text-slate-700 dark:text-slate-200 truncate max-w-[9rem] text-right">
+      <div className="mt-2 flex items-center justify-between gap-2 text-[11px]">
+        <span className="text-[#7C8698] shrink-0">Top contributor</span>
+        <span className="font-medium text-[#C7CCD6] truncate max-w-[8rem] text-right">
           {topCommitters[0]?.name || "—"}
         </span>
       </div>
@@ -154,15 +147,15 @@ function EngagementRate({ active, total }) {
 
   return (
     <div>
-      <div className="flex items-center justify-between text-xs mb-1.5">
-        <span className="text-slate-500 dark:text-slate-400">Engagement rate</span>
-        <span className="font-medium text-slate-700 dark:text-slate-200">
+      <div className="flex items-center justify-between text-[11px] mb-1.5">
+        <span className="text-[#7C8698]">Engagement rate</span>
+        <span className="font-medium text-[#C7CCD6] tabular-nums">
           {share.toFixed(0)}%
         </span>
       </div>
 
       <div
-        className="h-1.5 rounded-full bg-slate-200 dark:bg-slate-800 overflow-hidden"
+        className="h-1 rounded-full bg-white/[0.08] overflow-hidden"
         role="progressbar"
         aria-valuenow={Math.round(share)}
         aria-valuemin={0}
@@ -170,12 +163,12 @@ function EngagementRate({ active, total }) {
         aria-label="Contributor engagement rate"
       >
         <div
-          className="h-full rounded-full bg-emerald-500"
+          className="h-full rounded-full bg-emerald-400"
           style={{ width: `${Math.min(100, share)}%` }}
         />
       </div>
 
-      <p className="mt-2 text-xs text-slate-500 dark:text-slate-400">
+      <p className="mt-2 text-[11px] text-[#7C8698] tabular-nums">
         {formatNumber(active)} of {formatNumber(total)} contributors active
       </p>
     </div>
@@ -192,22 +185,22 @@ function StatCard({ statKey, title, value, trend, footer }) {
   const Icon = ICONS[statKey];
 
   return (
-    <div className="rounded-lg border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-5 transition-colors hover:border-slate-300 dark:hover:border-slate-700 focus-within:ring-2 focus-within:ring-blue-500/50">
+    <div className="h-full flex flex-col rounded-[12px] border border-white/[0.08] bg-[#10151C] p-4 sm:p-5 transition-colors duration-150 hover:border-white/[0.14] focus-within:ring-2 focus-within:ring-sky-400/40">
       <div className="flex items-center justify-between">
-        <span className="inline-flex items-center justify-center w-8 h-8 rounded-md bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400">
-          <Icon size={16} strokeWidth={2} aria-hidden="true" />
+        <span className="inline-flex items-center justify-center w-8 h-8 rounded-[8px] bg-white/[0.05] text-[#8B94A5]">
+          <Icon size={15} strokeWidth={2} aria-hidden="true" />
         </span>
         <TrendBadge trend={trend} />
       </div>
 
       <div className="mt-4">
-        <p className="text-xs font-medium text-slate-500 dark:text-slate-400">{title}</p>
-        <p className="mt-1 text-2xl font-semibold tracking-tight text-slate-900 dark:text-slate-50">
+        <p className="text-[11.5px] font-medium text-[#7C8698]">{title}</p>
+        <p className="mt-1 text-[26px] sm:text-2xl font-semibold tracking-[-0.01em] text-white tabular-nums">
           {value}
         </p>
       </div>
 
-      <div className="mt-4 pt-4 border-t border-slate-100 dark:border-slate-800">{footer}</div>
+      <div className="mt-4 pt-4 border-t border-white/[0.06] mt-auto">{footer}</div>
     </div>
   );
 }
@@ -240,7 +233,7 @@ const ContributorStats = ({ contributors = [], previousContributors = null }) =>
       value: formatNumber(current.activeContributors),
       trend: computeTrend(current.activeContributors, previous?.activeContributors),
       footer: (
-        <p className="text-xs text-slate-500 dark:text-slate-400">
+        <p className="text-[11px] text-[#7C8698]">
           Contributed within the last 30 days
         </p>
       ),
@@ -261,13 +254,13 @@ const ContributorStats = ({ contributors = [], previousContributors = null }) =>
         previous ? Number(previous.averageCommits) : undefined
       ),
       footer: (
-        <p className="text-xs text-slate-500 dark:text-slate-400">Per contributor, all time</p>
+        <p className="text-[11px] text-[#7C8698]">Per contributor, all time</p>
       ),
     },
   ];
 
   return (
-    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
       {stats.map((stat) => (
         <StatCard
           key={stat.key}
