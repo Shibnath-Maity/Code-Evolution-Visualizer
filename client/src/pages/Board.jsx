@@ -25,11 +25,34 @@ import DownloadRepositoryReport from "../components/DownloadRepositoryReport";
 import RepositoryStructure from "../components/RepositoryStructure";
 import ArchitectureDiagram from "../components/ArchitectureDiagram";
 import { useAnalysis } from "../context/AnalysisContext";
+import ConstellationField from "../components/ui/constellation-field";
 
 // ---- helpers -------------------------------------------------------------
 
 const emptyFileAnalysis = { totalFiles: 0, mostChangedFiles: [], allFiles: [] };
 const emptyLanguageAnalysis = { totalFiles: 0, languages: [] };
+
+// Shared constellation background — fixed behind every state of this page
+// (loading, empty, and the populated dashboard) so it stays visible while
+// scrolling and never competes with the foreground content, which is
+// rendered in its own "relative z-10" stacking context above it.
+function DashboardBackdrop() {
+  return (
+    <ConstellationField
+      mode="dark"
+      speed={0.45}
+      size={0.75}
+      length={0.75}
+      density={0.65}
+      strokeWidth={0.7}
+      opacity={0.32}
+      hue={-10}
+      saturation={0.8}
+      brightness={0.7}
+      className="fixed inset-0 z-0 h-full w-full pointer-events-none"
+    />
+  );
+}
 
 function DiffLine({ line, index }) {
   let color = "text-slate-400";
@@ -251,8 +274,9 @@ function Board() {
 
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-slate-950 text-slate-100 font-sans px-4">
-        <div className="text-center space-y-4">
+      <div className="relative min-h-screen flex items-center justify-center bg-slate-950 text-slate-100 font-sans px-4">
+        <DashboardBackdrop />
+        <div className="relative z-10 text-center space-y-4">
           <div className="mx-auto h-8 w-8 animate-spin rounded-full border-2 border-slate-800 border-t-indigo-400" />
           <div>
             <h2 className="text-sm font-semibold text-slate-200">Analyzing repository</h2>
@@ -265,8 +289,9 @@ function Board() {
 
   if (!analysis) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-slate-950 text-slate-100 font-sans px-4">
-        <div className="text-center max-w-sm space-y-3">
+      <div className="relative min-h-screen flex items-center justify-center bg-slate-950 text-slate-100 font-sans px-4">
+        <DashboardBackdrop />
+        <div className="relative z-10 text-center max-w-sm space-y-3">
           <div className="inline-flex p-2.5 rounded-lg bg-slate-900 border border-slate-800 text-slate-500 mb-1">
             <Code2 size={20} />
           </div>
@@ -280,8 +305,10 @@ function Board() {
   }
 
   return (
-    <div className="bg-slate-950 text-slate-100 min-h-screen font-sans">
-      <div className="max-w-[1400px] mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8">
+    <div className="relative bg-slate-950 text-slate-100 min-h-screen font-sans">
+      <DashboardBackdrop />
+
+      <div className="relative z-10 max-w-[1400px] mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8">
 
         {/* Repository Header */}
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 pb-6 border-b border-slate-800/70">
