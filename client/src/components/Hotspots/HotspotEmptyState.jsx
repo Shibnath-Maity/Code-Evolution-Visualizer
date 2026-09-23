@@ -3,13 +3,16 @@ import { SearchX, Flame, CircleAlert } from "lucide-react";
 export default function HotspotEmptyState({ searchTerm }) {
   if (searchTerm) {
     return (
-      <div className="flex flex-col items-center justify-center p-8 py-12 text-center rounded-2xl border border-dashed border-slate-200 bg-slate-50/50">
-        <div className="p-3 bg-white rounded-2xl shadow-xs border border-slate-100 mb-3 text-slate-400">
-          <SearchX size={24} />
+      <div className="flex flex-col items-center justify-center rounded-lg border border-dashed border-slate-800 bg-slate-900/30 px-6 py-10 text-center">
+        <div className="mb-3 flex h-9 w-9 items-center justify-center rounded-lg border border-slate-800 bg-slate-900/60 text-slate-500">
+          <SearchX size={16} strokeWidth={2} />
         </div>
-        <p className="text-sm font-semibold text-slate-800">No matching hotspots found</p>
-        <p className="text-xs text-slate-400 mt-1 max-w-xs">
-          No files match your search query <span className="font-mono bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded text-[11px]">"{searchTerm}"</span>.
+        <p className="text-[13px] font-semibold text-slate-200">No matching hotspots</p>
+        <p className="mt-1 max-w-xs text-xs leading-relaxed text-slate-500">
+          No files match{" "}
+          <span className="rounded border border-slate-800 bg-slate-900/80 px-1.5 py-0.5 font-mono text-[11px] text-slate-400">
+            "{searchTerm}"
+          </span>
         </p>
       </div>
     );
@@ -23,27 +26,27 @@ export default function HotspotEmptyState({ searchTerm }) {
   ];
 
   return (
-    <div className="flex flex-col items-center justify-center p-8 py-12 text-center rounded-2xl border border-slate-100 bg-gradient-to-b from-slate-50/30 to-slate-50/80 shadow-xs">
-      <div className="p-3.5 bg-orange-50 text-orange-500 rounded-2xl border border-orange-100 shadow-xs mb-4">
-        <Flame size={24} />
+    <div className="flex flex-col items-center justify-center rounded-lg border border-slate-800 bg-slate-900/30 px-6 py-10 text-center">
+      <div className="mb-3 flex h-9 w-9 items-center justify-center rounded-lg border border-orange-500/20 bg-orange-500/10 text-orange-400">
+        <Flame size={16} strokeWidth={2} />
       </div>
 
-      <h3 className="text-sm font-bold text-slate-900 tracking-tight">
-        No Hotspot Data Available
+      <h3 className="text-[13px] font-semibold tracking-tight text-slate-200">
+        No hotspot data available
       </h3>
-      <p className="text-xs text-slate-500 mt-1 max-w-xs leading-relaxed">
-        We couldn't detect any high-churn or risk hotspots for this repository.
+      <p className="mt-1 max-w-xs text-xs leading-relaxed text-slate-500">
+        No high-churn or risk hotspots were detected for this repository.
       </p>
 
-      {/* Modern Checklist Card */}
-      <div className="mt-6 w-full max-w-sm bg-white border border-slate-100/80 rounded-xl p-4 shadow-2xs text-left">
-        <p className="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-2.5 flex items-center gap-1.5">
-          <CircleAlert size={12} className="text-slate-400" /> Possible Reasons
+      {/* Possible reasons */}
+      <div className="mt-5 w-full max-w-sm rounded-lg border border-slate-800 bg-slate-900/60 p-3.5 text-left">
+        <p className="mb-2.5 flex items-center gap-1.5 text-[10.5px] font-semibold uppercase tracking-wide text-slate-500">
+          <CircleAlert size={11} strokeWidth={2} /> Possible reasons
         </p>
-        <ul className="space-y-2">
+        <ul className="space-y-1.5">
           {reasons.map((reason, idx) => (
-            <li key={idx} className="flex items-start gap-2 text-xs text-slate-600 leading-snug">
-              <span className="w-1.5 h-1.5 rounded-full bg-slate-300 mt-1.5 shrink-0" />
+            <li key={idx} className="flex items-start gap-2 text-xs leading-snug text-slate-400">
+              <span className="mt-1.5 h-1 w-1 shrink-0 rounded-full bg-slate-600" />
               <span>{reason}</span>
             </li>
           ))}

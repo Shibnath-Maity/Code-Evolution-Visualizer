@@ -240,35 +240,35 @@ export default function Hotspots() {
   }, [filteredHotspots, handleSelectHotspot, selectedFile]);
 
   return (
-    <div className="min-h-dvh bg-slate-950 text-slate-100 flex flex-col lg:h-dvh lg:overflow-hidden">
-      <div className="mx-auto flex w-full max-w-[1700px] flex-1 flex-col gap-4 px-4 py-4 sm:px-6 sm:py-5 lg:min-h-0">
+    <div className="min-h-dvh bg-slate-950 font-sans text-slate-100 antialiased flex flex-col lg:h-dvh lg:overflow-hidden">
+      <div className="mx-auto flex w-full max-w-[1700px] flex-1 flex-col gap-3 px-3 py-3 sm:gap-4 sm:px-6 sm:py-4 lg:min-h-0">
         {/* Header Bar */}
-        <header className="shrink-0 border-b border-slate-800 pb-3 sm:pb-4">
-          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-            <div className="flex min-w-0 items-center gap-3">
-              <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-orange-500/25 bg-orange-500/10 text-orange-400">
-                <Flame size={18} strokeWidth={2} />
+        <header className="shrink-0 border-b border-slate-800 pb-3">
+          <div className="flex flex-col gap-2.5 sm:flex-row sm:items-center sm:justify-between sm:gap-3">
+            <div className="flex min-w-0 items-center gap-2.5">
+              <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md border border-orange-500/20 bg-orange-500/10 text-orange-400">
+                <Flame size={16} strokeWidth={2} />
               </div>
               <div className="min-w-0">
                 <div className="flex flex-wrap items-center gap-2">
-                  <h1 className="text-base font-semibold tracking-tight text-white sm:text-lg">
+                  <h1 className="text-[15px] font-semibold leading-tight tracking-tight text-white">
                     Code Hotspots
                   </h1>
-                  <span className="inline-flex items-center gap-1 rounded-md border border-orange-500/20 bg-orange-500/5 px-1.5 py-0.5 text-[10px] font-medium text-orange-400/90">
-                    <Sparkles size={10} />
+                  <span className="inline-flex items-center gap-1 rounded border border-sky-500/20 bg-sky-500/10 px-1.5 py-0.5 text-[10px] font-medium text-sky-400">
+                    <Sparkles size={10} strokeWidth={2} />
                     AI insights
                   </span>
                 </div>
-                <p className="mt-0.5 truncate text-xs text-slate-400">
+                <p className="mt-0.5 truncate text-xs text-slate-500">
                   High-churn files and architectural risk
                 </p>
               </div>
             </div>
 
             {repositoryId && (
-              <div className="flex items-center gap-1.5 rounded-md border border-slate-800 bg-slate-900/60 px-2.5 py-1.5 text-xs text-slate-400 sm:shrink-0">
-                <GitFork size={12} className="shrink-0 text-slate-500" />
-                <span className="truncate font-mono text-slate-300">
+              <div className="flex min-w-0 items-center gap-1.5 self-start rounded-md border border-slate-800 bg-slate-900/60 px-2 py-1 text-xs text-slate-400 sm:shrink-0 sm:self-auto">
+                <GitFork size={12} strokeWidth={2} className="shrink-0 text-slate-500" />
+                <span className="max-w-[220px] truncate font-mono text-[11px] text-slate-300 sm:max-w-[280px]">
                   {repositoryId}
                 </span>
               </div>
@@ -292,7 +292,7 @@ export default function Hotspots() {
             </div>
           </div>
         ) : (
-          <div className="flex flex-1 flex-col gap-4 lg:min-h-0">
+          <div className="flex flex-1 flex-col gap-3 sm:gap-4 lg:min-h-0">
             {/* Stats Overview */}
             {scoredHotspots.length > 0 && (
               <div className="shrink-0">
@@ -301,7 +301,7 @@ export default function Hotspots() {
             )}
 
             {/* Split Master-Detail Panel */}
-            <div className="grid flex-1 grid-cols-1 gap-4 lg:min-h-0 lg:grid-cols-12">
+            <div className="grid flex-1 grid-cols-1 gap-3 sm:gap-4 lg:min-h-0 lg:grid-cols-12">
               {/* Left Column: Explorer Panel */}
               <div className="flex min-h-0 flex-col overflow-hidden rounded-xl border border-slate-800 bg-slate-900/40 lg:col-span-7">
                 <HotspotToolbar
@@ -321,7 +321,7 @@ export default function Hotspots() {
                   </span>
                 </div>
 
-                <div className="divide-y divide-slate-800/70 lg:flex-1 lg:overflow-y-auto lg:min-h-0">
+                <div className="divide-y divide-slate-800/70 lg:min-h-0 lg:flex-1 lg:overflow-y-auto">
                   {filteredHotspots.length === 0 ? (
                     <HotspotEmptyState searchTerm={searchTerm} />
                   ) : (
@@ -367,7 +367,7 @@ export default function Hotspots() {
               >
                 {selectedFile ? (
                   <>
-                    <div className="flex shrink-0 items-center justify-between border-b border-slate-800 px-4 py-2 lg:hidden">
+                    <div className="flex shrink-0 items-center justify-between border-b border-slate-800 px-4 py-2.5 lg:hidden">
                       <span className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
                         Hotspot details
                       </span>
@@ -375,7 +375,7 @@ export default function Hotspots() {
                         type="button"
                         aria-label="Close details"
                         onClick={() => setMobileDetailsOpen(false)}
-                        className="rounded-md px-2 py-1 text-xs text-slate-400 transition-colors hover:bg-slate-800 hover:text-slate-200"
+                        className="rounded-md px-2.5 py-1.5 text-xs font-medium text-slate-400 transition-colors hover:bg-slate-800 hover:text-slate-200 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-orange-500/60"
                       >
                         Close
                       </button>
@@ -395,7 +395,7 @@ export default function Hotspots() {
                 ) : (
                   <div className="flex flex-1 flex-col items-center justify-center px-8 py-12 text-center">
                     <div className="mb-3 flex h-9 w-9 items-center justify-center rounded-lg border border-slate-700/60 bg-slate-800/60 text-slate-400">
-                      <Sparkles size={16} />
+                      <Sparkles size={16} strokeWidth={2} />
                     </div>
                     <p className="text-sm font-medium text-slate-300">
                       No hotspot selected

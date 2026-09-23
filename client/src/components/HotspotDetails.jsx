@@ -28,29 +28,29 @@ import {
 
 const RISK_STYLES = {
   Critical: {
-    badge: "bg-rose-50 text-rose-700 ring-1 ring-inset ring-rose-600/20",
-    dot: "#e11d48",
+    badge: "bg-rose-500/10 text-rose-400 border border-rose-500/20",
+    dot: "#fb7185",
     bar: "bg-rose-500",
   },
   High: {
-    badge: "bg-amber-50 text-amber-700 ring-1 ring-inset ring-amber-600/20",
-    dot: "#d97706",
-    bar: "bg-amber-500",
+    badge: "bg-orange-500/10 text-orange-400 border border-orange-500/20",
+    dot: "#fb923c",
+    bar: "bg-orange-500",
   },
   Medium: {
-    badge: "bg-yellow-50 text-yellow-800 ring-1 ring-inset ring-yellow-600/20",
-    dot: "#ca8a04",
-    bar: "bg-yellow-500",
+    badge: "bg-amber-500/10 text-amber-400 border border-amber-500/20",
+    dot: "#fbbf24",
+    bar: "bg-amber-500",
   },
   Low: {
-    badge: "bg-emerald-50 text-emerald-700 ring-1 ring-inset ring-emerald-600/20",
-    dot: "#059669",
+    badge: "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20",
+    dot: "#34d399",
     bar: "bg-emerald-500",
   },
   Unknown: {
-    badge: "bg-zinc-50 text-zinc-600 ring-1 ring-inset ring-zinc-500/20",
-    dot: "#71717a",
-    bar: "bg-zinc-400",
+    badge: "bg-slate-500/10 text-slate-400 border border-slate-500/20",
+    dot: "#94a3b8",
+    bar: "bg-slate-500",
   },
 };
 
@@ -100,9 +100,9 @@ function ScoreGauge({ score, ringColor }) {
   const offset = c - (pct / 100) * c;
 
   return (
-    <div className="relative w-16 h-16 shrink-0 flex items-center justify-center group">
-      <svg viewBox="0 0 80 80" className="w-16 h-16 -rotate-90 transform drop-shadow-sm">
-        <circle cx="40" cy="40" r={r} fill="none" stroke="#f4f4f5" strokeWidth="6" />
+    <div className="relative flex h-14 w-14 shrink-0 items-center justify-center sm:h-16 sm:w-16">
+      <svg viewBox="0 0 80 80" className="h-14 w-14 -rotate-90 transform sm:h-16 sm:w-16">
+        <circle cx="40" cy="40" r={r} fill="none" stroke="#1e2733" strokeWidth="6" />
         <circle
           cx="40"
           cy="40"
@@ -113,11 +113,11 @@ function ScoreGauge({ score, ringColor }) {
           strokeLinecap="round"
           strokeDasharray={c}
           strokeDashoffset={offset}
-          className="transition-all duration-1000 ease-out"
+          className="transition-all duration-700 ease-out motion-reduce:transition-none"
         />
       </svg>
       <div className="absolute inset-0 flex flex-col items-center justify-center">
-        <span className="text-[17px] font-bold text-zinc-900 font-mono tracking-tighter tabular-nums leading-none">
+        <span className="font-mono text-[15px] font-bold leading-none tracking-tighter tabular-nums text-[#f1f5f9] sm:text-[17px]">
           {pct}
         </span>
       </div>
@@ -127,40 +127,42 @@ function ScoreGauge({ score, ringColor }) {
 
 function EmptyTab({ icon: Icon, title, hint }) {
   return (
-    <div className="flex flex-col items-center justify-center text-center py-20 px-6 animate-in fade-in duration-500">
-      <div className="w-12 h-12 rounded-2xl bg-zinc-50 border border-zinc-100 flex items-center justify-center mb-4 text-zinc-400 shadow-sm">
-        <Icon size={20} strokeWidth={1.5} />
+    <div className="flex flex-col items-center justify-center px-6 py-16 text-center">
+      <div className="mb-3 flex h-10 w-10 items-center justify-center rounded-lg border border-[#242b35] bg-[#151b23] text-[#64748b]">
+        <Icon size={17} strokeWidth={1.75} />
       </div>
-      <p className="text-sm font-semibold text-zinc-900 tracking-tight">{title}</p>
-      <p className="text-xs text-zinc-500 mt-1.5 max-w-[240px] leading-relaxed">{hint}</p>
+      <p className="text-[13px] font-semibold tracking-tight text-[#f1f5f9]">{title}</p>
+      <p className="mt-1 max-w-[240px] text-xs leading-relaxed text-[#64748b]">{hint}</p>
     </div>
   );
 }
 
 function TabSkeleton() {
   return (
-    <div className="p-6 space-y-4 animate-pulse">
-      <div className="h-24 bg-zinc-100/80 rounded-xl w-full" />
-      <div className="grid grid-cols-2 gap-4">
-        <div className="h-16 bg-zinc-100/80 rounded-xl w-full" />
-        <div className="h-16 bg-zinc-100/80 rounded-xl w-full" />
+    <div className="space-y-3 p-4 sm:p-5">
+      <div className="h-20 w-full animate-pulse rounded-lg bg-slate-800/60 motion-reduce:animate-none" />
+      <div className="grid grid-cols-2 gap-3">
+        <div className="h-14 w-full animate-pulse rounded-lg bg-slate-800/60 motion-reduce:animate-none" />
+        <div className="h-14 w-full animate-pulse rounded-lg bg-slate-800/60 motion-reduce:animate-none" />
       </div>
-      <div className="h-32 bg-zinc-100/80 rounded-xl w-full" />
+      <div className="h-28 w-full animate-pulse rounded-lg bg-slate-800/60 motion-reduce:animate-none" />
     </div>
   );
 }
 
-function Bar({ label, value, color = "bg-zinc-900" }) {
+function Bar({ label, value, color = "bg-slate-400" }) {
   const safeVal = Math.min(100, Math.max(0, value));
   return (
-    <div className="space-y-1.5 group">
-      <div className="flex items-center justify-between text-xs">
-        <span className="text-zinc-600 font-medium group-hover:text-zinc-900 transition-colors">{label}</span>
-        <span className="font-mono text-zinc-800 font-medium tabular-nums">{Math.round(safeVal)}%</span>
+    <div className="space-y-1.5">
+      <div className="flex items-center justify-between text-[12px]">
+        <span className="font-medium text-[#94a3b8]">{label}</span>
+        <span className="font-mono font-medium tabular-nums text-[#f1f5f9]">
+          {Math.round(safeVal)}%
+        </span>
       </div>
-      <div className="h-1.5 w-full bg-zinc-100 rounded-full overflow-hidden">
+      <div className="h-1.5 w-full overflow-hidden rounded-full bg-slate-800">
         <div
-          className={`h-full rounded-full transition-all duration-700 ease-out ${color}`}
+          className={`h-full rounded-full transition-all duration-700 ease-out motion-reduce:transition-none ${color}`}
           style={{ width: `${safeVal}%` }}
         />
       </div>
@@ -292,151 +294,171 @@ function HotspotDetails({ selectedHotspot, onClose, maxScore = 0 }) {
   const filePath = file?.split("/").slice(0, -1).join("/") || "";
 
   return (
-    <div className="flex flex-col h-full bg-white text-zinc-900 border border-zinc-200/60 rounded-2xl shadow-2xl shadow-zinc-900/5 overflow-hidden font-sans">
-      
-      {/* Header Area */}
-      <div className="shrink-0 bg-white border-b border-zinc-100">
-        <div className="px-5 py-4 flex items-start justify-between gap-4">
-          <div className="flex items-start gap-3.5 min-w-0">
-            <div className="w-10 h-10 flex items-center justify-center rounded-xl border border-zinc-200/80 bg-zinc-50/50 shadow-sm text-zinc-600 shrink-0">
-              <FileCode2 size={18} strokeWidth={1.75} />
+    <div className="flex h-full min-h-0 flex-col overflow-hidden rounded-xl border border-[#242b35] bg-[#0d1117] font-sans text-[#f1f5f9]">
+
+      {/* File header — fixed */}
+      <div className="shrink-0 border-b border-[#242b35] bg-[#11161d] px-4 py-3 sm:px-5 sm:py-3.5">
+        <div className="flex items-start justify-between gap-3">
+          <div className="flex min-w-0 items-start gap-2.5">
+            <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-[#242b35] bg-[#151b23] text-[#94a3b8]">
+              <FileCode2 size={15} strokeWidth={1.75} />
             </div>
             <div className="min-w-0 pt-0.5">
-              <h2 className="text-[15px] font-semibold text-zinc-900 truncate tracking-tight" title={file}>
+              <h2
+                className="truncate text-[14px] font-semibold tracking-tight text-[#f1f5f9]"
+                title={file}
+              >
                 {fileName}
               </h2>
               {filePath && (
-                <p className="text-xs text-zinc-400 truncate font-mono mt-0.5">{filePath}/</p>
+                <p className="mt-0.5 truncate font-mono text-[11px] text-[#64748b]">
+                  {filePath}/
+                </p>
               )}
             </div>
           </div>
           <button
             onClick={onClose}
-            className="p-1.5 rounded-lg text-zinc-400 hover:text-zinc-900 hover:bg-zinc-100 transition-all shrink-0"
+            aria-label="Close hotspot details"
+            className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-[#64748b] transition-colors hover:bg-[#1a222c] hover:text-[#f1f5f9] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sky-500/60"
           >
-            <X size={18} />
+            <X size={16} />
           </button>
         </div>
+      </div>
 
-        {/* Unified Metrics Bar */}
-        <div className="px-5 pb-5 flex items-center gap-5 shrink-0 flex-wrap">
-          <ScoreGauge score={gaugePct} ringColor={risk.dot} />
-          
-          <div className="flex items-center flex-1 min-w-[240px] rounded-xl border border-zinc-100 bg-zinc-50/50 p-1.5 shadow-sm">
-            <div className="px-3 py-1.5 flex-1 text-center border-r border-zinc-200/60">
-              <p className="text-[10px] uppercase font-bold text-zinc-500 tracking-widest flex items-center justify-center gap-1">
-                <Plus size={10} className="text-emerald-500" /> Adds
-              </p>
-              <p className="text-sm font-mono font-medium text-emerald-600 mt-1 tabular-nums">
-                +{additions.toLocaleString()}
-              </p>
-            </div>
-            <div className="px-3 py-1.5 flex-1 text-center border-r border-zinc-200/60">
-              <p className="text-[10px] uppercase font-bold text-zinc-500 tracking-widest flex items-center justify-center gap-1">
-                <Minus size={10} className="text-rose-500" /> Dels
-              </p>
-              <p className="text-sm font-mono font-medium text-rose-600 mt-1 tabular-nums">
-                -{deletions.toLocaleString()}
-              </p>
-            </div>
-            <div className="px-3 py-1.5 flex-1 text-center relative group">
-              <p className="text-[10px] uppercase font-bold text-zinc-500 tracking-widest flex items-center justify-center gap-1">
-                <GitCommit size={10} className="text-zinc-400" /> Commits
-              </p>
-              <p className="text-sm font-mono font-medium text-zinc-800 mt-1 tabular-nums">
-                {changes.toLocaleString()}
-              </p>
-            </div>
+      {/* Metrics bar — fixed */}
+      <div className="flex shrink-0 flex-col items-center gap-3 border-b border-[#242b35] bg-[#11161d] px-4 py-3 sm:flex-row sm:gap-4 sm:px-5">
+        <ScoreGauge score={gaugePct} ringColor={risk.dot} />
+
+        <div className="grid w-full flex-1 grid-cols-3 gap-px overflow-hidden rounded-lg border border-[#242b35] bg-[#242b35] sm:w-auto">
+          <div className="bg-[#151b23] px-2.5 py-2 text-center sm:px-4">
+            <p className="flex items-center justify-center gap-1 text-[9.5px] font-bold uppercase tracking-widest text-[#64748b]">
+              <Plus size={9} className="text-emerald-400" /> Adds
+            </p>
+            <p className="mt-1 font-mono text-sm font-medium tabular-nums text-emerald-400">
+              +{additions.toLocaleString()}
+            </p>
+          </div>
+          <div className="bg-[#151b23] px-2.5 py-2 text-center sm:px-4">
+            <p className="flex items-center justify-center gap-1 text-[9.5px] font-bold uppercase tracking-widest text-[#64748b]">
+              <Minus size={9} className="text-rose-400" /> Dels
+            </p>
+            <p className="mt-1 font-mono text-sm font-medium tabular-nums text-rose-400">
+              -{deletions.toLocaleString()}
+            </p>
+          </div>
+          <div className="bg-[#151b23] px-2.5 py-2 text-center sm:px-4">
+            <p className="flex items-center justify-center gap-1 text-[9.5px] font-bold uppercase tracking-widest text-[#64748b]">
+              <GitCommit size={9} className="text-[#94a3b8]" /> Commits
+            </p>
+            <p className="mt-1 font-mono text-sm font-medium tabular-nums text-[#f1f5f9]">
+              {changes.toLocaleString()}
+            </p>
           </div>
         </div>
       </div>
 
-      {/* Pill Tabs */}
-      <div className="px-4 py-3 border-b border-zinc-100 bg-zinc-50/30 shrink-0">
-        <div className="flex items-center p-1 bg-zinc-100/80 rounded-xl overflow-x-auto no-scrollbar gap-1">
+      {/* Tabs — fixed, IDE style */}
+      <div className="shrink-0 border-b border-[#242b35] bg-[#11161d] px-2 sm:px-3">
+        <div className="flex items-center gap-1 overflow-x-auto no-scrollbar" role="tablist" aria-label="Hotspot detail sections">
           {TABS.map((tab) => {
             const isActive = activeTab === tab.key;
             return (
               <button
                 key={tab.key}
+                role="tab"
+                aria-selected={isActive}
                 onClick={() => setActiveTab(tab.key)}
-                className={`flex-1 min-w-fit px-3 py-1.5 text-xs font-semibold rounded-lg whitespace-nowrap transition-all duration-200 ${
-                  isActive 
-                    ? "bg-white text-zinc-900 shadow-sm ring-1 ring-black/5" 
-                    : "text-zinc-500 hover:text-zinc-700 hover:bg-zinc-200/50"
+                className={`relative shrink-0 whitespace-nowrap px-3 py-2.5 text-[12.5px] font-medium transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-sky-500/60 ${
+                  isActive ? "text-[#f1f5f9]" : "text-[#64748b] hover:text-[#94a3b8]"
                 }`}
               >
                 {tab.label}
+                <span
+                  className={`absolute inset-x-2 -bottom-px h-0.5 rounded-full transition-colors motion-reduce:transition-none ${
+                    isActive ? "bg-sky-400" : "bg-transparent"
+                  }`}
+                />
               </button>
             );
           })}
         </div>
       </div>
 
-      {/* Content Area */}
-      <div className="flex-1 overflow-y-auto custom-scrollbar bg-white">
-        
+      {/* Content — scrollable */}
+      <div className="min-h-0 flex-1 overflow-y-auto custom-scrollbar bg-[#0d1117]">
+
         {/* ANALYSIS TAB */}
         {activeTab === "ai" && (
-          <div className="p-5 space-y-6 animate-in fade-in slide-in-from-bottom-2 duration-300">
-            
-            {/* Top Status & Summary */}
-            <div className="space-y-3">
-              <div className="flex items-center justify-between">
-                <h3 className="text-[11px] font-bold text-zinc-400 uppercase tracking-widest">AI Summary</h3>
-                <span className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-semibold ${risk.badge}`}>
-                  <RiskIcon size={12} strokeWidth={2.5} />
-                  {aiInsight?.riskLevel || "Unknown"} Risk
+          <div className="space-y-5 p-4 sm:p-5">
+
+            {/* AI Summary */}
+            <div className="space-y-2">
+              <div className="flex items-center justify-between gap-2">
+                <h3 className="text-[10.5px] font-bold uppercase tracking-widest text-[#64748b]">
+                  AI Analysis
+                </h3>
+                <span
+                  className={`inline-flex shrink-0 items-center gap-1.5 rounded px-2 py-0.5 text-[10.5px] font-semibold uppercase tracking-wide ${risk.badge}`}
+                >
+                  <RiskIcon size={11} strokeWidth={2.5} />
+                  {aiInsight?.riskLevel || "Unknown"} risk
                 </span>
               </div>
-              <p className="text-[13px] text-zinc-700 leading-relaxed bg-zinc-50/80 border border-zinc-100 rounded-xl p-4 shadow-sm">
+              <p className="rounded-lg border border-[#242b35] bg-[#11161d] p-3.5 text-[13px] leading-relaxed text-[#94a3b8] sm:p-4">
                 {aiInsight?.summary || "AI analysis is not available for this hotspot."}
               </p>
             </div>
 
-            {/* Risk Factors */}
-            <div className="space-y-4 pt-2">
-              <h3 className="text-[11px] font-bold text-zinc-400 uppercase tracking-widest flex items-center gap-1.5">
-                <TriangleAlert size={14} className="text-amber-500" /> Risk Drivers
+            {/* Risk Drivers */}
+            <div className="space-y-3">
+              <h3 className="flex items-center gap-1.5 text-[10.5px] font-bold uppercase tracking-widest text-[#64748b]">
+                <TriangleAlert size={12} className="text-amber-400" /> Risk drivers
               </h3>
-              <div className="bg-white border border-zinc-100 rounded-xl p-4 shadow-sm space-y-4">
+              <div className="space-y-4 rounded-lg border border-[#242b35] bg-[#11161d] p-3.5 sm:p-4">
                 {riskFactors?.length ? (
                   riskFactors.map((f, i) => <Bar key={i} label={f.label} value={f.value} color={risk.bar} />)
                 ) : (
                   <>
                     <Bar label="Change frequency" value={derivedFrequency} color={risk.bar} />
-                    <Bar label="Code churn (adds + dels)" value={derivedChurn} color="bg-zinc-300" />
+                    <Bar label="Code churn (adds + dels)" value={derivedChurn} color="bg-slate-500" />
                   </>
                 )}
               </div>
             </div>
 
             {/* Recommendations */}
-            <div className="space-y-3 pt-2">
-              <h3 className="text-[11px] font-bold text-zinc-400 uppercase tracking-widest flex items-center gap-1.5">
-                <Lightbulb size={14} className="text-emerald-500" /> Recommendations
+            <div className="space-y-2.5">
+              <h3 className="flex items-center gap-1.5 text-[10.5px] font-bold uppercase tracking-widest text-[#64748b]">
+                <Lightbulb size={12} className="text-emerald-400" /> Recommendations
               </h3>
               {aiInsight?.recommendations?.length ? (
-                <ul className="grid gap-2">
+                <ul className="space-y-1.5">
                   {aiInsight.recommendations.map((r, i) => (
-                    <li key={i} className="group flex items-start gap-3 text-[13px] text-zinc-700 bg-white border border-zinc-100 hover:border-emerald-200/60 p-3.5 rounded-xl shadow-sm transition-colors">
-                      <CircleCheck size={16} className="text-emerald-500/70 group-hover:text-emerald-500 mt-0.5 shrink-0 transition-colors" strokeWidth={2} />
-                      <span className="leading-relaxed">{r}</span>
+                    <li
+                      key={i}
+                      className="flex items-start gap-2.5 rounded-lg border border-[#242b35] bg-[#11161d] p-3 text-[13px] leading-relaxed text-[#94a3b8] transition-colors hover:border-emerald-500/20"
+                    >
+                      <CircleCheck size={15} className="mt-0.5 shrink-0 text-emerald-400/80" strokeWidth={2} />
+                      <span>{r}</span>
                     </li>
                   ))}
                 </ul>
               ) : (
-                <p className="text-[13px] text-zinc-400 italic bg-zinc-50 rounded-xl p-4 text-center border border-zinc-100">No specific recommendations available.</p>
+                <p className="rounded-lg border border-[#242b35] bg-[#11161d] p-3.5 text-center text-[13px] italic text-[#64748b]">
+                  No specific recommendations available.
+                </p>
               )}
             </div>
 
-            {/* Impact / Confidence Footer */}
+            {/* Confidence */}
             {confidence != null && (
-              <div className="mt-4 pt-4 border-t border-zinc-100 flex items-center justify-between">
-                <div className="flex items-center gap-1.5 text-[11px] font-medium text-zinc-400 uppercase tracking-wider">
-                  <Sparkles size={12} className="text-indigo-400" /> AI Confidence
+              <div className="flex items-center justify-between border-t border-[#242b35] pt-4">
+                <div className="flex items-center gap-1.5 text-[10.5px] font-bold uppercase tracking-widest text-[#64748b]">
+                  <Sparkles size={12} className="text-sky-400" /> AI confidence
                 </div>
-                <span className="text-[11px] font-mono font-semibold text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded-full ring-1 ring-inset ring-indigo-500/20">
+                <span className="rounded border border-sky-500/20 bg-sky-500/10 px-2 py-0.5 font-mono text-[11px] font-semibold text-sky-400">
                   {confidence}%
                 </span>
               </div>
@@ -447,35 +469,55 @@ function HotspotDetails({ selectedHotspot, onClose, maxScore = 0 }) {
         {/* METRICS TAB */}
         {activeTab === "metrics" && (
           loadingHistory ? <TabSkeleton /> : fileMetrics ? (
-            <div className="p-5 animate-in fade-in slide-in-from-bottom-2 duration-300">
-              <div className="grid grid-cols-2 gap-3">
-                <div className="border border-zinc-100 bg-white shadow-sm rounded-xl p-4 hover:border-zinc-200 transition-colors">
-                  <p className="text-[10px] font-bold text-zinc-400 tracking-widest uppercase mb-1">Total Commits</p>
-                  <p className="text-2xl font-mono font-medium text-zinc-900 tabular-nums">{fileMetrics.totalCommits}</p>
-                </div>
-                <div className="border border-zinc-100 bg-white shadow-sm rounded-xl p-4 hover:border-zinc-200 transition-colors">
-                  <p className="text-[10px] font-bold text-zinc-400 tracking-widest uppercase mb-1">Contributors</p>
-                  <p className="text-2xl font-mono font-medium text-zinc-900 tabular-nums">{fileMetrics.contributors}</p>
-                </div>
-                <div className="border border-zinc-100 bg-emerald-50/30 shadow-sm rounded-xl p-4">
-                  <p className="text-[10px] font-bold text-zinc-400 tracking-widest uppercase mb-1">Avg Adds/Commit</p>
-                  <p className="text-xl font-mono font-medium text-emerald-600 tabular-nums">+{fileMetrics.avgAdditions}</p>
-                </div>
-                <div className="border border-zinc-100 bg-rose-50/30 shadow-sm rounded-xl p-4">
-                  <p className="text-[10px] font-bold text-zinc-400 tracking-widest uppercase mb-1">Avg Dels/Commit</p>
-                  <p className="text-xl font-mono font-medium text-rose-600 tabular-nums">-{fileMetrics.avgDeletions}</p>
-                </div>
-                
-                <div className="col-span-2 border border-zinc-100 bg-zinc-900 shadow-md rounded-xl p-4 mt-2 text-white">
-                  <p className="text-[10px] font-bold text-zinc-400 tracking-widest uppercase flex items-center gap-1.5 mb-2">
-                    <Calendar size={12} /> Active Period
+            <div className="p-4 sm:p-5">
+              <div className="grid grid-cols-2 gap-2.5">
+                <div className="rounded-lg border border-[#242b35] bg-[#11161d] p-3.5">
+                  <p className="mb-1 text-[9.5px] font-bold uppercase tracking-widest text-[#64748b]">
+                    Total commits
                   </p>
-                  <div className="flex items-center gap-3 text-sm font-mono font-medium tabular-nums">
-                    <span>{fileMetrics.firstModified?.toLocaleDateString() || "N/A"}</span>
-                    <div className="flex-1 h-[1px] bg-zinc-700 relative">
-                       <div className="absolute right-0 -top-1 w-2 h-2 rounded-full bg-zinc-500" />
+                  <p className="font-mono text-xl font-medium tabular-nums text-[#f1f5f9]">
+                    {fileMetrics.totalCommits}
+                  </p>
+                </div>
+                <div className="rounded-lg border border-[#242b35] bg-[#11161d] p-3.5">
+                  <p className="mb-1 text-[9.5px] font-bold uppercase tracking-widest text-[#64748b]">
+                    Contributors
+                  </p>
+                  <p className="font-mono text-xl font-medium tabular-nums text-[#f1f5f9]">
+                    {fileMetrics.contributors}
+                  </p>
+                </div>
+                <div className="rounded-lg border border-[#242b35] bg-[#11161d] p-3.5">
+                  <p className="mb-1 text-[9.5px] font-bold uppercase tracking-widest text-[#64748b]">
+                    Avg adds/commit
+                  </p>
+                  <p className="font-mono text-lg font-medium tabular-nums text-emerald-400">
+                    +{fileMetrics.avgAdditions}
+                  </p>
+                </div>
+                <div className="rounded-lg border border-[#242b35] bg-[#11161d] p-3.5">
+                  <p className="mb-1 text-[9.5px] font-bold uppercase tracking-widest text-[#64748b]">
+                    Avg dels/commit
+                  </p>
+                  <p className="font-mono text-lg font-medium tabular-nums text-rose-400">
+                    -{fileMetrics.avgDeletions}
+                  </p>
+                </div>
+
+                <div className="col-span-2 rounded-lg border border-[#242b35] bg-[#11161d] p-3.5">
+                  <p className="mb-3 flex items-center gap-1.5 text-[9.5px] font-bold uppercase tracking-widest text-[#64748b]">
+                    <Calendar size={11} /> Active period
+                  </p>
+                  <div className="flex items-center gap-3 font-mono text-[12px] font-medium tabular-nums text-[#94a3b8]">
+                    <span className="shrink-0">
+                      {fileMetrics.firstModified?.toLocaleDateString() || "N/A"}
+                    </span>
+                    <div className="relative h-px flex-1 bg-[#242b35]">
+                      <div className="absolute -top-1 right-0 h-2 w-2 rounded-full bg-slate-500" />
                     </div>
-                    <span>{fileMetrics.lastModified?.toLocaleDateString() || "N/A"}</span>
+                    <span className="shrink-0">
+                      {fileMetrics.lastModified?.toLocaleDateString() || "N/A"}
+                    </span>
                   </div>
                 </div>
               </div>
@@ -486,23 +528,23 @@ function HotspotDetails({ selectedHotspot, onClose, maxScore = 0 }) {
         {/* TIMELINE TAB */}
         {activeTab === "timeline" && (
           loadingHistory ? <TabSkeleton /> : monthlyBuckets.length > 0 ? (
-            <div className="p-6 animate-in fade-in slide-in-from-bottom-2 duration-300">
-              <div className="flex items-end gap-2 h-48 pt-4 border-b border-zinc-100 pb-2">
+            <div className="p-4 sm:p-5">
+              <div className="flex h-36 items-end gap-1.5 border-b border-[#242b35] pb-2 pt-3 sm:h-44 sm:gap-2">
                 {monthlyBuckets.map(([month, count]) => (
-                  <div key={month} className="flex-1 h-full flex flex-col items-center justify-end gap-2 group">
-                    <span className="text-[11px] font-mono font-medium text-zinc-400 opacity-0 group-hover:opacity-100 transition-opacity tabular-nums translate-y-2 group-hover:translate-y-0 duration-200">
+                  <div key={month} className="group flex h-full flex-1 flex-col items-center justify-end gap-1.5">
+                    <span className="translate-y-1 font-mono text-[10px] font-medium tabular-nums text-[#64748b] opacity-0 transition-all duration-200 group-hover:translate-y-0 group-hover:opacity-100 motion-reduce:transition-none">
                       {count}
                     </span>
                     <div
-                      className="w-full max-w-[40px] bg-zinc-800 rounded-t-md transition-all duration-300 group-hover:bg-zinc-600"
-                      style={{ height: `${(count / maxMonthlyCount) * 100}%`, minHeight: '8px' }}
+                      className="w-full max-w-[32px] rounded-t bg-slate-600 transition-all duration-300 group-hover:bg-sky-500/70 motion-reduce:transition-none"
+                      style={{ height: `${(count / maxMonthlyCount) * 100}%`, minHeight: "6px" }}
                     />
                   </div>
                 ))}
               </div>
-              <div className="flex items-start gap-2 pt-3">
+              <div className="flex items-start gap-1.5 pt-2 sm:gap-2">
                 {monthlyBuckets.map(([month]) => (
-                  <span key={month} className="flex-1 text-center text-[10px] font-mono text-zinc-500">
+                  <span key={month} className="flex-1 text-center font-mono text-[9.5px] text-[#64748b]">
                     {month.slice(2)}
                   </span>
                 ))}
@@ -514,15 +556,18 @@ function HotspotDetails({ selectedHotspot, onClose, maxScore = 0 }) {
         {/* DEPENDENCIES TAB */}
         {activeTab === "dependencies" && (
           loadingHistory ? <TabSkeleton /> : coupledFiles.length > 0 ? (
-            <div className="p-5 animate-in fade-in slide-in-from-bottom-2 duration-300">
-              <div className="divide-y divide-zinc-100/80 border border-zinc-100 rounded-xl overflow-hidden shadow-sm bg-white">
+            <div className="p-4 sm:p-5">
+              <div className="overflow-hidden rounded-lg border border-[#242b35] bg-[#11161d]">
                 {coupledFiles.slice(0, 10).map((d, i) => (
-                  <div key={i} className="flex items-center justify-between gap-4 px-4 py-3 hover:bg-zinc-50 transition-colors group">
-                    <span className="flex items-center gap-3 text-[13px] text-zinc-700 truncate min-w-0">
-                      <GitBranch size={14} className="text-zinc-300 group-hover:text-zinc-500 transition-colors shrink-0" />
+                  <div
+                    key={i}
+                    className="flex items-center justify-between gap-3 border-b border-[#242b35] px-3.5 py-2.5 transition-colors last:border-b-0 hover:bg-[#1a222c]"
+                  >
+                    <span className="flex min-w-0 items-center gap-2 text-[12.5px] text-[#94a3b8]">
+                      <GitBranch size={13} className="shrink-0 text-[#64748b]" />
                       <span className="truncate font-mono">{d.file}</span>
                     </span>
-                    <span className="text-[11px] font-mono font-medium text-zinc-600 shrink-0 tabular-nums bg-zinc-100 px-2 py-1 rounded-md">
+                    <span className="shrink-0 rounded bg-[#151b23] px-1.5 py-0.5 font-mono text-[10.5px] font-medium tabular-nums text-[#94a3b8]">
                       {d.count}×
                     </span>
                   </div>
@@ -535,27 +580,31 @@ function HotspotDetails({ selectedHotspot, onClose, maxScore = 0 }) {
         {/* COMMITS TAB */}
         {activeTab === "commits" && (
           loadingHistory ? <TabSkeleton /> : fileCommits?.length > 0 ? (
-            <div className="divide-y divide-zinc-100 border-t border-zinc-50 bg-white animate-in fade-in duration-300">
+            <div className="divide-y divide-[#242b35]">
               {fileCommits.map((c, i) => (
-                <div key={c.hash || i} className="p-4 hover:bg-zinc-50/80 transition-colors space-y-2.5 group">
-                  <p className="text-[13px] font-medium text-zinc-900 leading-snug group-hover:text-zinc-700 transition-colors">
+                <div key={c.hash || i} className="space-y-2 p-3.5 transition-colors hover:bg-[#1a222c] sm:p-4">
+                  <p className="text-[13px] font-medium leading-snug text-[#f1f5f9]">
                     {c.message || "No commit message"}
                   </p>
-                  <div className="flex items-center gap-x-4 gap-y-2 flex-wrap text-[11px] text-zinc-500">
-                    <span className="flex items-center gap-1.5 font-medium">
-                      <span className="w-5 h-5 rounded-full flex items-center justify-center bg-zinc-200/80 text-zinc-700 text-[9px] font-bold ring-1 ring-inset ring-black/5">
+                  <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5 text-[11px] text-[#64748b]">
+                    <span className="flex items-center gap-1.5 font-medium text-[#94a3b8]">
+                      <span className="flex h-5 w-5 items-center justify-center rounded-full bg-[#1a222c] text-[9px] font-bold text-[#94a3b8]">
                         {initials(c.author_name)}
                       </span>
                       {c.author_name || "Unknown"}
                     </span>
                     <span className="flex items-center gap-1.5">
-                      <Clock size={12} className="text-zinc-400" /> {relativeTime(c.date)}
+                      <Clock size={11} /> {relativeTime(c.date)}
                     </span>
-                    <div className="flex items-center gap-2 font-mono tabular-nums">
-                      <span className="text-emerald-600 bg-emerald-50 px-1.5 py-0.5 rounded">+{c.additions || 0}</span>
-                      <span className="text-rose-600 bg-rose-50 px-1.5 py-0.5 rounded">-{c.deletions || 0}</span>
+                    <div className="flex items-center gap-1.5 font-mono tabular-nums">
+                      <span className="rounded bg-emerald-500/10 px-1.5 py-0.5 text-emerald-400">
+                        +{c.additions || 0}
+                      </span>
+                      <span className="rounded bg-rose-500/10 px-1.5 py-0.5 text-rose-400">
+                        -{c.deletions || 0}
+                      </span>
                     </div>
-                    <span className="font-mono text-zinc-400 ml-auto group-hover:text-zinc-600 transition-colors">
+                    <span className="ml-auto font-mono text-[#64748b]">
                       {(c.hash || "").substring(0, 7)}
                     </span>
                   </div>
@@ -566,27 +615,27 @@ function HotspotDetails({ selectedHotspot, onClose, maxScore = 0 }) {
         )}
       </div>
 
-      {/* Action Footer */}
-      <div className="px-5 py-4 border-t border-zinc-100 flex items-center justify-between gap-3 flex-wrap shrink-0 bg-white">
-        <div className="flex items-center gap-2.5">
-          <button className="flex items-center gap-1.5 bg-gradient-to-b from-zinc-800 to-zinc-900 hover:from-zinc-700 hover:to-zinc-800 active:from-zinc-900 active:to-zinc-950 text-white text-[13px] font-medium px-4 py-2 rounded-lg transition-all shadow-sm ring-1 ring-inset ring-zinc-900/10">
-            <Wand2 size={14} className="text-zinc-300" /> Generate Refactor
+      {/* Footer actions — fixed */}
+      <div className="flex shrink-0 flex-col gap-2 border-t border-[#242b35] bg-[#11161d] p-3 sm:flex-row sm:items-center sm:justify-between sm:gap-3 sm:p-4">
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-2.5">
+          <button className="flex h-10 items-center justify-center gap-1.5 rounded-lg border border-sky-500/20 bg-sky-500/10 px-4 text-[13px] font-medium text-sky-400 transition-colors hover:bg-sky-500/15 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sky-500/60 sm:h-9">
+            <Wand2 size={14} /> Generate Refactor
           </button>
           <button
             onClick={handleCopyReport}
-            className="flex items-center gap-1.5 text-[13px] font-medium text-zinc-700 hover:text-zinc-900 bg-white border border-zinc-200 hover:border-zinc-300 hover:bg-zinc-50 px-4 py-2 rounded-lg transition-all shadow-sm"
+            className="flex h-10 items-center justify-center gap-1.5 rounded-lg border border-[#242b35] bg-[#151b23] px-4 text-[13px] font-medium text-[#94a3b8] transition-colors hover:bg-[#1a222c] hover:text-[#f1f5f9] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sky-500/60 sm:h-9"
           >
             {copied ? (
-              <><Check size={14} className="text-emerald-600" /> Copied</>
+              <><Check size={14} className="text-emerald-400" /> Copied</>
             ) : (
-              <><Copy size={14} className="text-zinc-400" /> Copy Report</>
+              <><Copy size={14} /> Copy Report</>
             )}
           </button>
         </div>
 
         {fileMetrics && (
-          <span className="flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-widest text-zinc-400">
-            <Users size={14} /> {fileMetrics.contributors} Contributors
+          <span className="flex items-center gap-1.5 text-[10.5px] font-bold uppercase tracking-widest text-[#64748b]">
+            <Users size={13} /> {fileMetrics.contributors} contributors
           </span>
         )}
       </div>

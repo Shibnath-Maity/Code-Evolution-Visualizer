@@ -19,6 +19,7 @@ import {
 import { useAnalysis } from "../context/AnalysisContext";
 import API from "../services/api";
 import logo from "../assets/logo.png";
+import ConstellationField from "../components/ui/constellation-field";
 
 const FEATURES = [
   {
@@ -335,13 +336,44 @@ function Home() {
           from { opacity: 0; transform: translateY(-6px); }
           to { opacity: 1; transform: translateY(0); }
         }
+        @keyframes rqFloat {
+          0%, 100% { transform: translateY(0); }
+          50% { transform: translateY(-6px); }
+        }
+        .rq-float {
+          animation: rqFloat 6s ease-in-out infinite;
+        }
+        .rq-float:hover {
+          animation-play-state: paused;
+          transform: translateY(-3px);
+          transition: transform 0.3s ease;
+        }
         @media (prefers-reduced-motion: reduce) {
           .rq-bar { animation: none !important; transform: none !important; }
+          .rq-float { animation: none !important; }
         }
       `}</style>
 
-      {/* Background: faint grid + a single restrained radial highlight behind the hero */}
-      <div className="fixed inset-0 pointer-events-none overflow-hidden z-0">
+      {/*
+        Background layer stack (z-0), fixed so it stays put while scrolling.
+        Constellation Field sits behind the faint grid; both are
+        pointer-events-none decorative layers, well under the z-10 content
+        and z-50 navbar.
+      */}
+      <div className="fixed inset-0 z-0 pointer-events-none overflow-hidden">
+        <ConstellationField
+          mode="dark"
+          speed={0.45}
+          size={0.75}
+          length={0.75}
+          density={0.65}
+          strokeWidth={0.7}
+          opacity={0.32}
+          hue={-10}
+          saturation={0.8}
+          brightness={0.7}
+          className="absolute inset-0 h-full w-full"
+        />
         <div className="absolute inset-0 bg-[linear-gradient(to_right,#1C2838_1px,transparent_1px),linear-gradient(to_bottom,#1C2838_1px,transparent_1px)] bg-[size:40px_40px] [mask-image:radial-gradient(ellipse_55%_45%_at_50%_0%,#000_60%,transparent_100%)] opacity-[0.1]" />
       </div>
 
@@ -453,45 +485,52 @@ function Home() {
       </header>
 
       {/* Hero */}
-      <section className="relative z-10 pt-12 sm:pt-14 md:pt-16 pb-16 sm:pb-20 md:pb-20">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6">
-          <div className="grid grid-cols-1 lg:grid-cols-[46%_54%] gap-12 lg:gap-14 items-center">
+      <section className="relative z-10 pt-12 sm:pt-16 md:pt-20 lg:pt-24 pb-16 sm:pb-20 md:pb-24 lg:pb-28">
+        {/* hero-only radial glow, sits above the global constellation/grid, below content */}
+        <div className="absolute inset-x-0 top-0 h-[560px] -z-0 pointer-events-none bg-[radial-gradient(ellipse_60%_50%_at_50%_0%,rgba(59,130,246,0.10),transparent_70%)]" />
+
+        <div className="relative max-w-7xl mx-auto px-4 sm:px-6">
+          <div className="grid grid-cols-1 lg:grid-cols-[52%_48%] gap-12 lg:gap-10 items-center">
 
             {/* Left: copy + input */}
             <div>
               <div
-                className="flex items-center gap-2 text-xs text-[#94A3B8] mb-5"
+                className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full border border-[#3B82F6]/30 bg-[#3B82F6]/[0.06] backdrop-blur-sm transition-shadow hover:shadow-[0_0_28px_-8px_rgba(59,130,246,0.55)]"
                 style={fadeUp(0)}
               >
-                <FaGithub className="h-3.5 w-3.5" />
-                <span>GitHub repository intelligence</span>
+                <Sparkles className="h-3 w-3 text-[#60A5FA]" />
+                <span className="text-[11px] font-medium tracking-[0.14em] uppercase text-[#93C5FD]">
+                  AI-powered repository intelligence
+                </span>
               </div>
 
               <h1
-                className="text-[2rem] leading-[1.22] sm:text-4xl md:text-[3.25rem] md:leading-[1.18] font-bold tracking-tight text-[#F8FAFC]"
-                style={fadeUp(80)}
+                className="mt-6 text-4xl sm:text-5xl md:text-6xl lg:text-[4.5rem] xl:text-[5rem] font-bold leading-[1.05] tracking-tight"
+                style={fadeUp(100)}
               >
-                Understand Your Codebase.
+                <span className="text-[#F8FAFC]">Understand Your Codebase.</span>
                 <br />
-                From Git History to <span className="text-[#60A5FA]">AI Insights.</span>
+                <span className="bg-gradient-to-r from-[#60A5FA] to-[#3B82F6] bg-clip-text text-transparent">
+                  Analyze It With AI.
+                </span>
               </h1>
 
               <p
-                className="mt-5 text-base text-[#94A3B8] max-w-md leading-[1.6]"
-                style={fadeUp(140)}
+                className="mt-5 text-base sm:text-lg text-[#94A3B8] max-w-xl leading-relaxed"
+                style={fadeUp(180)}
               >
-                Analyze GitHub repositories, explore code evolution, identify
-                hotspots, and turn repository history into actionable insights.
+                Turn Git history, code changes, contributors, and repository
+                activity into clear engineering insights — powered by AI.
               </p>
 
-              {/* Repository input */}
-              <div className="mt-8 max-w-md" style={fadeUp(200)}>
+              {/* Repository analyzer */}
+              <div className="mt-8 max-w-xl" style={fadeUp(260)}>
                 <form
                   onSubmit={handleAnalyze}
-                  className="flex flex-col sm:flex-row gap-2 rounded-[10px] bg-[#0E1624] border border-[#1C2838] p-1.5 focus-within:border-[#3B82F6]/60 transition-colors"
+                  className="flex flex-col sm:flex-row items-stretch gap-2 rounded-2xl bg-[#0B1220]/80 border border-white/[0.10] backdrop-blur-xl p-2 transition-colors focus-within:border-[#3B82F6]/50 focus-within:ring-1 focus-within:ring-[#3B82F6]/20"
                 >
-                  <div className="flex items-center gap-2.5 flex-1 px-3 py-2 min-w-0">
-                    <FaGithub className="h-4 w-4 text-[#94A3B8] shrink-0" />
+                  <div className="flex items-center gap-3 flex-1 px-4 py-3 min-w-0">
+                    <FaGithub className="h-4 w-4 text-[#5B6B80] shrink-0" />
                     <input
                       type="text"
                       value={repoUrl}
@@ -505,39 +544,104 @@ function Home() {
                   <button
                     type="submit"
                     disabled={loading}
-                    className="flex items-center justify-center gap-2 px-4 py-2.5 sm:py-2 min-h-[40px] rounded-[8px] bg-[#3B82F6] hover:bg-[#2f6fe0] text-white font-medium text-sm transition-colors disabled:opacity-60 disabled:cursor-not-allowed shrink-0"
+                    className="group/btn flex items-center justify-center gap-2 px-5 py-3 min-h-[44px] rounded-xl bg-gradient-to-r from-[#3B82F6] to-[#2563EB] hover:brightness-110 text-white font-medium text-sm transition-all disabled:opacity-60 disabled:cursor-not-allowed shrink-0"
                   >
                     {loading ? (
                       <>
                         <Loader2 className="h-4 w-4 animate-spin" />
-                        <span>Analyzing...</span>
+                        <span>Analyzing repository...</span>
                       </>
                     ) : (
                       <>
                         <span>Analyze</span>
-                        <ArrowRight className="h-4 w-4" />
+                        <ArrowRight className="h-4 w-4 transition-transform duration-200 group-hover/btn:translate-x-0.5" />
                       </>
                     )}
                   </button>
                 </form>
+                <p className="mt-2.5 pl-1 text-[11px] text-[#5B6B80]">
+                  <span className="font-mono">⌘ Enter</span> to analyze
+                </p>
               </div>
 
-              {/* Quiet trust line */}
-              <p
-                className="mt-5 text-xs text-[#5B6B80] max-w-md"
-                style={fadeUp(260)}
+              {/* Trust indicators */}
+              <div
+                className="mt-5 flex flex-wrap items-center gap-x-5 gap-y-1.5 text-xs text-[#94A3B8]"
+                style={fadeUp(340)}
               >
-                <span className="text-[#94A3B8]">✓ Public repositories</span>
-                <span className="mx-2">·</span>
-                <span>No installation</span>
-                <span className="mx-2">·</span>
-                <span>Fast repository analysis</span>
-              </p>
+                <span className="inline-flex items-center gap-1.5">
+                  <span className="text-[#60A5FA]">✓</span> Public repositories
+                </span>
+                <span className="inline-flex items-center gap-1.5">
+                  <span className="text-[#60A5FA]">✓</span> No installation
+                </span>
+                <span className="inline-flex items-center gap-1.5">
+                  <span className="text-[#60A5FA]">✓</span> AI-powered insights
+                </span>
+              </div>
             </div>
 
             {/* Right: product preview */}
-            <div style={fadeUp(160)}>
-              <ProductPreview />
+            <div className="relative lg:mt-6 lg:px-6" style={fadeUp(180)}>
+              {/* ambient glow behind the floating dashboard */}
+              <div className="absolute -inset-16 -z-10 pointer-events-none bg-[radial-gradient(closest-side,rgba(59,130,246,0.10),transparent)]" />
+
+              {/* connector lines from the floating capability badges into the dashboard — xl+ only */}
+              <svg
+                className="absolute inset-0 w-full h-full hidden xl:block pointer-events-none opacity-40"
+                viewBox="0 0 100 100"
+                preserveAspectRatio="none"
+              >
+                <defs>
+                  <linearGradient id="rqLine" x1="0" y1="0" x2="1" y2="0">
+                    <stop offset="0%" stopColor="#60A5FA" stopOpacity="0.7" />
+                    <stop offset="100%" stopColor="#60A5FA" stopOpacity="0" />
+                  </linearGradient>
+                  <linearGradient id="rqLineR" x1="1" y1="0" x2="0" y2="0">
+                    <stop offset="0%" stopColor="#60A5FA" stopOpacity="0.7" />
+                    <stop offset="100%" stopColor="#60A5FA" stopOpacity="0" />
+                  </linearGradient>
+                </defs>
+                <path d="M4,24 Q18,26 34,30" stroke="url(#rqLine)" strokeWidth="0.35" fill="none" />
+                <path d="M96,38 Q80,40 66,43" stroke="url(#rqLineR)" strokeWidth="0.35" fill="none" />
+                <path d="M4,62 Q18,62 32,59" stroke="url(#rqLine)" strokeWidth="0.35" fill="none" />
+                <path d="M96,76 Q80,75 68,73" stroke="url(#rqLineR)" strokeWidth="0.35" fill="none" />
+              </svg>
+
+              {/* floating capability badges — xl+ only, purely decorative */}
+              <div className="hidden xl:flex items-center gap-2 absolute left-0 top-[20%] -translate-x-2 px-3 py-2 rounded-xl bg-[#0B1220]/85 border border-white/[0.08] backdrop-blur-md shadow-[0_8px_24px_-8px_rgba(0,0,0,0.6)]">
+                <span className="flex items-center justify-center h-6 w-6 rounded-md bg-[#3B82F6]/15 text-[#60A5FA] shrink-0">
+                  <GitBranch className="h-3.5 w-3.5" />
+                </span>
+                <span className="text-xs font-medium text-[#E2E8F0] leading-tight w-16">
+                  Repository Analysis
+                </span>
+              </div>
+
+              <div className="hidden xl:flex items-center gap-2 absolute right-0 top-[32%] translate-x-2 px-3 py-2 rounded-xl bg-[#0B1220]/85 border border-white/[0.08] backdrop-blur-md shadow-[0_8px_24px_-8px_rgba(0,0,0,0.6)]">
+                <span className="flex items-center justify-center h-6 w-6 rounded-md bg-[#3B82F6]/15 text-[#60A5FA] shrink-0">
+                  <Sparkles className="h-3.5 w-3.5" />
+                </span>
+                <span className="text-xs font-medium text-[#E2E8F0]">AI Insights</span>
+              </div>
+
+              <div className="hidden xl:flex items-center gap-2 absolute left-0 top-[56%] -translate-x-2 px-3 py-2 rounded-xl bg-[#0B1220]/85 border border-white/[0.08] backdrop-blur-md shadow-[0_8px_24px_-8px_rgba(0,0,0,0.6)]">
+                <span className="flex items-center justify-center h-6 w-6 rounded-md bg-[#3B82F6]/15 text-[#60A5FA] shrink-0">
+                  <Users className="h-3.5 w-3.5" />
+                </span>
+                <span className="text-xs font-medium text-[#E2E8F0]">Contributors</span>
+              </div>
+
+              <div className="hidden xl:flex items-center gap-2 absolute right-0 top-[70%] translate-x-2 px-3 py-2 rounded-xl bg-[#0B1220]/85 border border-white/[0.08] backdrop-blur-md shadow-[0_8px_24px_-8px_rgba(0,0,0,0.6)]">
+                <span className="flex items-center justify-center h-6 w-6 rounded-md bg-[#3B82F6]/15 text-[#60A5FA] shrink-0">
+                  <Flame className="h-3.5 w-3.5" />
+                </span>
+                <span className="text-xs font-medium text-[#E2E8F0]">Code Hotspots</span>
+              </div>
+
+              <div className="rq-float relative z-10">
+                <ProductPreview />
+              </div>
             </div>
           </div>
         </div>

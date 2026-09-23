@@ -6,12 +6,13 @@ export default function HotspotStats({ totals }) {
       label: "Total changes",
       value: totals?.changes ?? 0,
       icon: GitCommit,
-      textColor: "text-white",
+      textColor: "text-slate-100",
       iconColor: "text-slate-400",
-      iconBg: "bg-slate-800/80 border-slate-700/50",
+      iconBg: "bg-slate-800/70 border-slate-700/60",
+      span: true,
     },
     {
-      label: "Total additions",
+      label: "Additions",
       value: totals?.additions ?? 0,
       prefix: "+",
       icon: Plus,
@@ -20,7 +21,7 @@ export default function HotspotStats({ totals }) {
       iconBg: "bg-emerald-500/10 border-emerald-500/20",
     },
     {
-      label: "Total deletions",
+      label: "Deletions",
       value: totals?.deletions ?? 0,
       prefix: "-",
       icon: Minus,
@@ -31,30 +32,31 @@ export default function HotspotStats({ totals }) {
   ];
 
   return (
-    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-5 shrink-0">
+    <div className="grid shrink-0 grid-cols-2 gap-2 sm:grid-cols-3">
       {stats.map((stat, idx) => {
         const Icon = stat.icon;
         return (
           <div
             key={idx}
-            className="group relative overflow-hidden bg-slate-900/60 backdrop-blur-md rounded-2xl border border-slate-800/80 p-4 transition-all duration-200 hover:border-slate-700/80 hover:bg-slate-900/80 shadow-sm"
+            className={`flex items-center gap-3 rounded-lg border border-slate-800 bg-slate-900/60 px-3 py-2.5 transition-colors hover:border-slate-700 hover:bg-slate-900 sm:px-4 ${
+              stat.span ? "col-span-2 sm:col-span-1" : ""
+            }`}
           >
-            <div className="flex items-center justify-between gap-3">
-              <span className="text-xs font-medium text-slate-400 tracking-wide">
-                {stat.label}
-              </span>
-              <div
-                className={`w-7 h-7 rounded-lg border flex items-center justify-center shrink-0 transition-transform duration-200 group-hover:scale-105 ${stat.iconBg}`}
-              >
-                <Icon size={14} className={stat.iconColor} />
-              </div>
+            <div
+              className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-md border ${stat.iconBg}`}
+            >
+              <Icon size={14} strokeWidth={2} className={stat.iconColor} />
             </div>
-
-            <div className="mt-2 flex items-baseline gap-1">
-              <span className={`text-xl font-extrabold tracking-tight ${stat.textColor}`}>
+            <div className="min-w-0">
+              <div
+                className={`font-mono text-base font-semibold leading-none tabular-nums sm:text-lg ${stat.textColor}`}
+              >
                 {stat.prefix}
                 {Number(stat.value).toLocaleString()}
-              </span>
+              </div>
+              <div className="mt-1 truncate text-[10.5px] font-medium uppercase tracking-wide text-slate-500">
+                {stat.label}
+              </div>
             </div>
           </div>
         );

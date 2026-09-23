@@ -1,4 +1,4 @@
-import { FileCode2, Plus, Minus, GitCommit, ChevronRight } from "lucide-react";
+import { Plus, Minus, GitCommit } from "lucide-react";
 
 const HIGH_THRESHOLD = 0.66;
 const MEDIUM_THRESHOLD = 0.33;
@@ -25,99 +25,81 @@ export default function HotspotListItem({ item, globalIndex, maxScore, isSelecte
 
   return (
     <div
+      role="button"
+      tabIndex={0}
+      aria-current={isSelected ? "true" : undefined}
+      title={item.file}
       onClick={() => onSelect(item)}
-      className={`group relative px-5 py-4 transition-all duration-200 cursor-pointer border-b border-slate-800/60 last:border-0 select-none ${
+      onKeyDown={(e) => {
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          onSelect(item);
+        }
+      }}
+      className={`group relative flex cursor-pointer select-none items-center gap-3 border-l-2 px-3 py-2.5 transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-orange-500/50 sm:px-4 ${
         isSelected
-          ? "bg-orange-500/10 border-l-4 border-l-orange-500 pl-4"
-          : "hover:bg-slate-800/40 border-l-4 border-l-transparent"
+          ? "border-l-orange-500 bg-orange-500/[0.06]"
+          : "border-l-transparent hover:bg-slate-800/40"
       }`}
     >
-      <div className="flex items-center justify-between gap-4">
-        {/* File & Details */}
-        <div className="flex items-start gap-3.5 min-w-0 flex-1">
-          <div
-            className={`w-10 h-10 rounded-2xl flex items-center justify-center shrink-0 border transition-all duration-200 ${
-              isSelected
-                ? "bg-orange-500 text-white border-orange-400 shadow-md scale-105"
-                : "bg-slate-800 text-slate-300 border-slate-700/60 group-hover:bg-orange-500/20 group-hover:text-orange-400 group-hover:border-orange-500/30"
-            }`}
+      <span className="hidden w-6 shrink-0 text-right font-mono text-[11px] text-slate-600 sm:block">
+        {globalIndex + 1}
+      </span>
+
+      <div className="min-w-0 flex-1">
+        <div className="flex items-center gap-2">
+          <div className="flex min-w-0 items-baseline gap-1 truncate font-mono text-[13px] leading-tight">
+            {filePath && <span className="truncate text-slate-500">{filePath}/</span>}
+            <span
+              className={`truncate font-medium transition-colors ${
+                isSelected ? "text-orange-300" : "text-slate-200 group-hover:text-orange-300"
+              }`}
+            >
+              {fileName}
+            </span>
+          </div>
+          <span
+            className={`shrink-0 rounded-full border px-1.5 py-0.5 text-[9.5px] font-semibold leading-none ${risk.badge}`}
           >
-            <FileCode2 size={18} />
-          </div>
-
-          <div className="min-w-0 flex-1">
-            <div className="flex items-center gap-2 flex-wrap">
-              <span className="text-[10px] font-mono font-bold text-slate-400 bg-slate-800 px-1.5 py-0.5 rounded border border-slate-700/60">
-                #{globalIndex + 1}
-              </span>
-
-              {/* HIGH CONTRAST FILE NAME */}
-              <h3
-                className="font-extrabold text-white text-sm truncate tracking-tight group-hover:text-orange-400 transition-colors"
-                title={item.file}
-              >
-                {fileName}
-              </h3>
-
-              <span
-                className={`text-[10px] font-semibold px-2 py-0.5 rounded-full border shrink-0 ${risk.badge}`}
-              >
-                {risk.label}
-              </span>
-            </div>
-
-            {/* CLEAR FILE PATH */}
-            {filePath && (
-              <p className="text-[11px] text-slate-400 truncate mt-0.5 font-medium">
-                {filePath}/
-              </p>
-            )}
-
-            {/* Heat level bar */}
-            <div className="mt-2.5 flex items-center gap-2">
-              <div className="h-1.5 w-full max-w-[180px] bg-slate-800 rounded-full overflow-hidden p-0.5 border border-slate-700/30">
-                <div
-                  className={`h-full rounded-full transition-all duration-500 ease-out ${risk.bar}`}
-                  style={{ width: `${heatPct}%` }}
-                />
-              </div>
-              <span className="text-[10px] font-bold text-slate-400">{heatPct}%</span>
-            </div>
-          </div>
+            {risk.label}
+          </span>
         </div>
 
-        {/* Change Count & Quick Stats */}
-        <div className="text-right shrink-0 flex items-center gap-3">
-          <div>
-            <p className="text-base font-extrabold text-slate-100 tracking-tight">
-              {(item.score || item.changes || 0).toLocaleString()}
-            </p>
-            <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
-              changes
-            </p>
+        <div className="mt-1.5 flex items-center gap-2">
+          <div className="h-1 w-full max-w-[140px] overflow-hidden rounded-full bg-slate-800/80">
+            <div
+              className={`h-full rounded-full transition-[width] duration-300 ${risk.bar}`}
+              style={{ width: `${heatPct}%` }}
+            />
           </div>
-          <ChevronRight
-            size={16}
-            className={`text-slate-500 transition-transform duration-200 ${
-              isSelected ? "translate-x-0.5 text-orange-400" : "group-hover:text-slate-300 group-hover:translate-x-0.5"
-            }`}
-          />
+          <span className="font-mono text-[10px] text-slate-500">{heatPct}%</span>
         </div>
       </div>
 
-      {/* Code Churn Metrics */}
-      <div className="flex items-center gap-4 mt-3 pt-2.5 border-t border-dashed border-slate-800/80 text-xs font-semibold">
-        <span className="flex items-center gap-1 text-emerald-400">
-          <Plus size={11} className="stroke-[3]" />
-          {(item.additions || 0).toLocaleString()}
-        </span>
-        <span className="flex items-center gap-1 text-rose-400">
-          <Minus size={11} className="stroke-[3]" />
-          {(item.deletions || 0).toLocaleString()}
-        </span>
-        <span className="flex items-center gap-1 text-slate-400 font-medium ml-auto">
-          <GitCommit size={12} className="text-slate-400" />
-          {(item.changes || 0).toLocaleString()} commits
+      <div className="flex shrink-0 items-center gap-3 font-mono text-[11px] tabular-nums">
+        <div className="hidden items-center gap-2 sm:flex">
+          <span className="flex items-center gap-0.5 text-emerald-400/90">
+            <Plus size={10} strokeWidth={2.5} />
+            {(item.additions || 0).toLocaleString()}
+          </span>
+          <span className="flex items-center gap-0.5 text-rose-400/90">
+            <Minus size={10} strokeWidth={2.5} />
+            {(item.deletions || 0).toLocaleString()}
+          </span>
+          <span className="flex items-center gap-0.5 text-slate-500">
+            <GitCommit size={10} />
+            {(item.changes || 0).toLocaleString()}
+          </span>
+        </div>
+
+        <span
+          className={`min-w-[2.75rem] rounded-md border px-1.5 py-0.5 text-center font-semibold ${
+            isSelected
+              ? "border-orange-500/30 bg-orange-500/10 text-orange-400"
+              : "border-slate-700/60 bg-slate-800/50 text-slate-400"
+          }`}
+        >
+          {(item.score || item.changes || 0).toLocaleString()}
         </span>
       </div>
     </div>
